@@ -1,0 +1,1 @@
+./sonarqube/sonar-scanner-6.2.1.4610-linux-x64/bin/sonar-scanner -Dsonar.token=sqp_54e2c8daad3431692f875114df06323422c0eb1a -Dsonar.coverage.skip
