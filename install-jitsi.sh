@@ -1,0 +1,1 @@
+sudo hostnamectl set-hostname moph-meetingroom.moph.go.th
