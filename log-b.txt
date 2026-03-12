@@ -1,0 +1,30 @@
+Feb 25 02:45:20 c2s5c4fbab4b0f0	info	Client connected
+Feb 25 02:45:20 c2s5c4fbab4b0f0	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:21 c2s5c4fbaac8360	info	Client connected
+Feb 25 02:45:21 c2s5c4fbaac8360	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:21 c2s5c4fbab4cb40	info	Client connected
+Feb 25 02:45:21 c2s5c4fbab4cb40	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:22 c2s5c4fbaad5c10	info	Client connected
+Feb 25 02:45:22 c2s5c4fbaad5c10	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:23 c2s5c4fbab5ce10	info	Client connected
+Feb 25 02:45:23 c2s5c4fbab5ce10	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:24 c2s5c4fbaa42850	info	Client connected
+Feb 25 02:45:24 c2s5c4fbaa42850	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:25 c2s5c4fbaae4ad0	info	Client connected
+Feb 25 02:45:25 c2s5c4fbaae4ad0	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:26 c2s5c4fbab0e520	info	Client connected
+Feb 25 02:45:26 c2s5c4fbab0e520	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:26 c2s5c4fba483330	info	Client connected
+Feb 25 02:45:26 c2s5c4fba483330	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:27 c2s5c4fbaaba7f0	info	Client connected
+Feb 25 02:45:27 c2s5c4fbaaba7f0	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:28 c2s5c4fbab50240	info	Client connected
+Feb 25 02:45:28 c2s5c4fbab50240	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:29 c2s5c4fbab7fd50	info	Client connected
+Feb 25 02:45:29 c2s5c4fbab7fd50	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:30 c2s5c4fbab70ce0	info	Client connected
+Feb 25 02:45:30 c2s5c4fbab70ce0	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:31 c2s5c4fba9ed210	info	Client connected
+Feb 25 02:45:31 c2s5c4fba9ed210	info	Client disconnected: sslv3 alert certificate unknown
+Feb 25 02:45:31 c2s5c4fbaa9b200	info	Client connected
+Feb 25 02:45:32 c2s5c4fbaa9b200	info	Client disconnected: sslv3 alert certificate unknown

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PoC — MophMeet AI Summary</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://meet.jit.si/external_api.js"></script>
+</head>
+<body>
+  <main>
+    <h1>PoC: Jitsi Meeting Controls</h1>
+
+    <section class="card">
+      <h2>1) Quick create</h2>
+      <p>Generate a random room name and open it here.</p>
+      <button id="btn-random">Create random Jitsi room</button>
+    </section>
+
+    <section class="card">
+      <h2>2) Create room (form)</h2>
+      <form id="create-form">
+        <label>Room name
+          <input id="room-name" placeholder="room-name-or-id" />
+        </label>
+        <label>Display name
+          <input id="display-name" placeholder="Alice" />
+        </label>
+        <label>Subject (optional)
+          <input id="subject" placeholder="Consultation" />
+        </label>
+        <button type="submit">Create / Join</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>3) End meeting</h2>
+      <p>Ends the embedded meeting (hangup).</p>
+      <button id="btn-end" class="danger" disabled>End meeting</button>
+    </section>
+
+    <section class="card">
+      <h2>Embedded meeting</h2>
+      <div id="meeting-info">No active meeting</div>
+      <div id="jitsi-container"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

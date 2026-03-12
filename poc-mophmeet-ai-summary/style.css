@@ -1,0 +1,11 @@
+body{font-family:system-ui,Arial,Helvetica,sans-serif;margin:18px;background:#f7fafc;color:#0f172a}
+main{max-width:900px;margin:0 auto}
+h1{font-size:20px;margin-bottom:12px}
+.card{background:#fff;border-radius:8px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(2,6,23,0.06)}
+label{display:block;margin:6px 0}
+input{padding:8px;border:1px solid #cbd5e1;border-radius:6px;width:100%;box-sizing:border-box}
+button{padding:8px 12px;border-radius:6px;border:0;background:#0369a1;color:#fff;cursor:pointer}
+button.danger{background:#dc2626}
+button:disabled{opacity:0.5;cursor:not-allowed}
+#jitsi-container{margin-top:12px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden}
+#meeting-info{font-size:13px;color:#475569;margin-bottom:8px}
