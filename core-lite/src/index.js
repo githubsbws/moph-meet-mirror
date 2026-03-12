@@ -66,7 +66,10 @@ app.post('/api/auth/providerID', async (req, res, next) => {
 
         const healthIDToken = oauthJson?.data?.access_token;
         if (!healthIDToken) {
-            return res.status(401).json({ error: 401, message: 'invalidProviderIDToken' });
+            // Pass through the exact error from moph.id.th for easier diagnosis
+            const providerError = oauthJson?.error || oauthJson?.message || 'invalidProviderIDToken';
+            console.error('[ProviderID] moph.id.th refused code – error:', providerError);
+            return res.status(401).json({ error: 401, message: providerError, detail: oauthJson });
         }
 
         // Step 2 – exchange HealthID token → Provider ID service token
