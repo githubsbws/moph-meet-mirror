@@ -5,8 +5,11 @@ const express = require('express');
 const cors = require('cors');
 const { createHash, randomInt } = require('crypto');
 const NodeCache = require('node-cache');
+const jwt = require('jsonwebtoken');
 const { tokenStorage } = require('./cache');
 const { auth } = require('./middlewares/auth');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'change_me_jwt_secret';
 
 // Short-lived cache for ProviderID code exchange (handles slow-network retries)
 const codeCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
@@ -167,12 +170,252 @@ app.post('/api/logout', (req, res) => {
     res.json({ token: req.body.token });
 });
 
+// ── Room storage (disk-backed SQLite via roomStore) ───────────────────────────
+// roomStore: roomId → { id, type, name, starttime, endtime, ownerId, ownerDisplay,
+//                        createdAt, queue: [], currentPatientToken: null }
+// ── Disk-backed room store (same SQLite db as tokenStorage) ──────────────────
+const { Database: _DB } = (() => { try { return { Database: require('better-sqlite3') }; } catch { return {}; } })();
+const _path = require('path');
+const _roomDb = new (require('better-sqlite3'))(_path.join(process.env.DATA_DIR || _path.join(__dirname, '../../data'), 'rooms.db'));
+_roomDb.exec(`
+  CREATE TABLE IF NOT EXISTS rooms (
+    id TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
+`);
+const _purgeRooms = _roomDb.prepare('DELETE FROM rooms WHERE expires_at < ?');
+_purgeRooms.run(Date.now());
+setInterval(() => _purgeRooms.run(Date.now()), 10 * 60 * 1000).unref();
+
+const _roomGet  = _roomDb.prepare('SELECT value, expires_at FROM rooms WHERE id = ?');
+const _roomSet  = _roomDb.prepare('INSERT OR REPLACE INTO rooms (id, value, expires_at) VALUES (?, ?, ?)');
+const _roomDel  = _roomDb.prepare('DELETE FROM rooms WHERE id = ?');
+const _roomKeys = _roomDb.prepare('SELECT id FROM rooms WHERE expires_at > ?');
+
+const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
+
+const roomStore = {
+    get(id) {
+        const row = _roomGet.get(id);
+        if (!row) return undefined;
+        if (row.expires_at < Date.now()) { _roomDel.run(id); return undefined; }
+        return JSON.parse(row.value);
+    },
+    set(id, value, ttlSeconds) {
+        const exp = Date.now() + (ttlSeconds ? ttlSeconds * 1000 : ROOM_TTL_MS);
+        _roomSet.run(id, JSON.stringify(value), exp);
+    },
+    del(id) { _roomDel.run(id); },
+    keys() { return _roomKeys.all(Date.now()).map(r => r.id); },
+};
+
+// ── Helper: generate a short room ID ──────────────────────────────────────────
+function makeRoomId() {
+    return createHash('sha256')
+        .update(Date.now().toString() + randomInt(999999))
+        .digest('hex')
+        .slice(0, 12);
+}
+
+// ── Helper: generate Thai-style auto room name ────────────────────────────────
+function autoRoomName(type, ownerDisplay) {
+    const d = new Date();
+    const dateStr = d.toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const timeStr = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    if (type === 'exam') return `ตรวจ-${ownerDisplay || 'แพทย์'}-${dateStr}-${timeStr}`;
+    return `ประชุม-${ownerDisplay || 'ผู้นัด'}-${dateStr}-${timeStr}`;
+}
+
 // ── Meets – proxied from token cache (no DB) ─────────────────────────────────
-// Meets are managed by the main core; core-lite only handles auth + guest tokens.
-// Return empty list so user-app-lite doesn't break on GET /api/meets.
-app.get('/api/meets', auth(), (req, res) => res.json([]));
+app.get('/api/meets', auth(), (req, res) => {
+    // Return all rooms owned by this user
+    const userId = res.locals.user?.username;
+    const rooms = [];
+    roomStore.keys().forEach(k => {
+        const r = roomStore.get(k);
+        if (r && r.ownerId === userId) rooms.push(r);
+    });
+    rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(rooms);
+});
+
+// ── POST /api/rooms – create meet or exam room ────────────────────────────────
+app.post('/api/rooms', auth(), (req, res) => {
+    const { type, starttime, endtime } = req.body;
+    if (!['meet', 'exam'].includes(type)) {
+        return res.status(400).json({ error: 400, message: 'type must be meet or exam' });
+    }
+
+    const user = res.locals.user;
+    const id   = makeRoomId();
+    const name = autoRoomName(type, user.display);
+
+    const room = {
+        id,
+        type,
+        name,
+        starttime: starttime || new Date().toISOString(),
+        endtime:   endtime   || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        ownerId:      user.username,
+        ownerDisplay: user.display,
+        createdAt:    new Date().toISOString(),
+        // exam-specific
+        queue:               [],   // [{ token, patientName, joinedAt, status:'waiting'|'admitted'|'done' }]
+        currentPatientToken: null,
+        recording:           type === 'exam',
+    };
+
+    roomStore.set(id, room);
+    console.log(`[rooms] created ${type} room ${id} for ${user.display}`);
+
+    // Build patient join URL for exam rooms (JWT, 8h TTL)
+    let patientJoinUrl = null;
+    if (type === 'exam') {
+        const jwt_token = jwt.sign(
+            { roomId: id, role: 'patient', ownerId: user.username },
+            JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+        patientJoinUrl = `/queue/${id}?jwt=${jwt_token}`;
+    }
+
+    // Meet rooms: join URL uses provider token (already authenticated)
+    const meetJoinUrl = type === 'meet' ? `/room/${id}` : null;
+
+    res.json({ room, patientJoinUrl, meetJoinUrl });
+});
+
+// ── GET /api/rooms/:id ────────────────────────────────────────────────────────
+app.get('/api/rooms/:id', auth(), (req, res) => {
+    const room = roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    // Only owner can view full room details
+    if (room.ownerId !== res.locals.user?.username) {
+        return res.status(403).json({ error: 403, message: 'forbidden' });
+    }
+    res.json(room);
+});
+
+// ── GET /api/exam/:id/queue – patient polls this ──────────────────────────────
+// Auth via JWT query param (no session required for patients)
+app.get('/api/exam/:id/queue', (req, res) => {
+    const { jwt: jwtToken } = req.query;
+    if (!jwtToken) return res.status(401).json({ error: 401, message: 'jwt required' });
+
+    let payload;
+    try { payload = jwt.verify(jwtToken, JWT_SECRET); }
+    catch (e) { return res.status(401).json({ error: 401, message: 'invalid jwt' }); }
+
+    const room = roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+
+    // Register patient in queue if not already there
+    if (!room.queue.find(q => q.token === jwtToken)) {
+        const patientName = payload.patientName || 'ผู้ป่วย';
+        room.queue.push({ token: jwtToken, patientName, joinedAt: new Date().toISOString(), status: 'waiting' });
+        roomStore.set(req.params.id, room);
+        console.log(`[exam] patient "${patientName}" joined queue for room ${req.params.id}`);
+    }
+
+    const myEntry = room.queue.find(q => q.token === jwtToken);
+    const position = room.queue.filter(q => q.status === 'waiting').findIndex(q => q.token === jwtToken) + 1;
+
+    res.json({
+        status:   myEntry.status,
+        position: myEntry.status === 'waiting' ? position : 0,
+        total:    room.queue.filter(q => q.status === 'waiting').length,
+        roomName: room.name,
+    });
+});
+
+// ── POST /api/exam/:id/next – doctor calls next patient ───────────────────────
+app.post('/api/exam/:id/next', auth(), (req, res) => {
+    const room = roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
+
+    // Mark previous current as done
+    if (room.currentPatientToken) {
+        const prev = room.queue.find(q => q.token === room.currentPatientToken);
+        if (prev) prev.status = 'done';
+    }
+
+    // Admit next waiting patient
+    const next = room.queue.find(q => q.status === 'waiting');
+    if (!next) {
+        room.currentPatientToken = null;
+        roomStore.set(req.params.id, room);
+        return res.json({ admitted: null, queueLength: 0 });
+    }
+
+    next.status = 'admitted';
+    room.currentPatientToken = next.token;
+    roomStore.set(req.params.id, room);
+
+    console.log(`[exam] admitted patient "${next.patientName}" for room ${req.params.id}`);
+    res.json({
+        admitted:    next.patientName,
+        queueLength: room.queue.filter(q => q.status === 'waiting').length,
+    });
+});
+
+// ── GET /api/exam/:id/doctor – room info for doctor ───────────────────────────
+app.get('/api/exam/:id/doctor', auth(), (req, res) => {
+    const room = roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
+    res.json(room);
+});
+
+// ── POST /api/exam/:id/invite – doctor generates a patient invite ─────────────
+// Body: { patientName?, cid?, displayName? }
+// Returns: queue link (for queue.ejs flow) + direct Jitsi JWT link (compat)
+app.post('/api/exam/:id/invite', auth(), (req, res) => {
+    const room = roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
+
+    const patientName = (req.body.displayName || req.body.patientName || '').trim() || 'ผู้ป่วย';
+    const cid         = (req.body.cid || '').trim();
+
+    const queue_token = jwt.sign(
+        { roomId: req.params.id, role: 'patient', ownerId: room.ownerId, patientName, cid },
+        JWT_SECRET,
+        { expiresIn: '8h' }
+    );
+    const patientJoinUrl = `/queue/${req.params.id}?jwt=${queue_token}`;
+
+    console.log(`[exam] invite generated for "${patientName}"${cid ? ` (${cid})` : ''} in room ${req.params.id}`);
+    res.json({ patientJoinUrl, patientName, cid });
+});
+
+// Legacy stubs kept for compatibility
 app.get('/api/meets/:id', auth(), (req, res) => res.status(404).json({ error: 404, message: 'notFound' }));
-app.get('/api/exam/:id', auth(), (req, res) => res.status(404).json({ error: 404, message: 'notFound' }));
+
+// ── POST /api/meet/reserved/token – returns queue link only (no direct Jitsi) ─
+// Backward-compat: accepts { sessionID, displayName, cid, patientName }
+// Returns patientJoinUrl (queue flow) instead of raw Jitsi JWT
+app.post('/api/meet/reserved/token', auth(), (req, res) => {
+    const { sessionID, displayName, patientName, cid } = req.body;
+    if (!sessionID) return res.status(400).json({ error: 400, message: 'sessionID required' });
+
+    const room = roomStore.get(sessionID);
+    if (!room) return res.status(400).json({ error: 400, message: 'invalidSessionID' });
+
+    const name = (displayName || patientName || '').trim() || 'ผู้ป่วย';
+
+    const queue_token = jwt.sign(
+        { roomId: sessionID, role: 'patient', ownerId: room.ownerId, patientName: name, cid: cid || '' },
+        JWT_SECRET,
+        { expiresIn: '8h' }
+    );
+    const patientJoinUrl = `/queue/${sessionID}?jwt=${queue_token}`;
+
+    console.log(`[reserved/token] queue link issued for "${name}" in room ${sessionID}`);
+    // Return same shape as original for compat, but meet = queue URL not Jitsi
+    res.json({ sessionID, meet: patientJoinUrl, patientJoinUrl });
+});
 
 // ── Guest token generator (called by staff to create patient invite links) ─────
 app.post('/api/guest/token', auth(), async (req, res, next) => {
@@ -189,10 +432,22 @@ app.post('/api/guest/token', auth(), async (req, res, next) => {
             user: { display: patientName || 'Guest', roles: ['guest'] },
         };
 
-        tokenStorage.set(guestToken, guestSession, ttlSeconds || 24 * 60 * 60); // default 24 h
+        tokenStorage.set(guestToken, guestSession, ttlSeconds || 24 * 60 * 60);
         res.json({ token: guestToken, meetId });
     } catch (err) {
         next(err);
+    }
+});
+
+// ── JWT verify endpoint – used by user-app-lite to validate patient JWT ────────
+app.post('/api/jwt/verify', (req, res) => {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 400, message: 'token required' });
+    try {
+        const payload = jwt.verify(token, JWT_SECRET);
+        res.json({ valid: true, payload });
+    } catch (e) {
+        res.status(401).json({ valid: false, message: e.message });
     }
 });
 

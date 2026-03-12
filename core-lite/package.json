@@ -8,10 +8,13 @@
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
+    "@keyv/sqlite": "^4.0.8",
+    "better-sqlite3": "^12.6.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "jsonwebtoken": "^9.0.3",
+    "keyv": "^5.6.0",
     "node-cache": "^5.1.2"
   },
   "devDependencies": {
