@@ -8,4 +8,12 @@ const tokenStorage = new NodeCache({
   useClones: false,
 });
 
+tokenStorage.on('set', (key, user) => {
+  console.log(`[auth] session created for "${user?.username}"`);
+});
+
+tokenStorage.on('del', (key, user) => {
+  console.log(`[auth] session removed for "${user?.username}"`);
+});
+
 module.exports = { tokenStorage };
