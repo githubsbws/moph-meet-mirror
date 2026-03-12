@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>core vs core-lite – API Comparison Report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%);
+    border-bottom: 1px solid #2d4a6e;
+    padding: 2rem 3rem;
+  }
+  header h1 { font-size: 1.8rem; font-weight: 700; color: #60a5fa; }
+  header p  { color: #94a3b8; margin-top: .4rem; font-size: .95rem; }
+  .meta { display: flex; gap: 1.5rem; margin-top: 1rem; flex-wrap: wrap; }
+  .meta span { background: #1e3a5f; border: 1px solid #2d4a6e; border-radius: 6px; padding: .25rem .75rem; font-size: .8rem; color: #93c5fd; }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 2rem 3rem; }
+
+  /* Legend */
+  .legend { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+  .badge { display: inline-flex; align-items: center; gap: .4rem; padding: .3rem .8rem; border-radius: 20px; font-size: .78rem; font-weight: 600; }
+  .badge::before { content: '●'; }
+  .badge.same     { background: #1a3326; color: #4ade80; border: 1px solid #166534; }
+  .badge.changed  { background: #2d2007; color: #fbbf24; border: 1px solid #92400e; }
+  .badge.removed  { background: #2d0f0f; color: #f87171; border: 1px solid #991b1b; }
+  .badge.added    { background: #0f2d2d; color: #22d3ee; border: 1px solid #155e75; }
+
+  /* Summary boxes */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+  .summary-card { background: #161b27; border: 1px solid #2a3548; border-radius: 10px; padding: 1.2rem; text-align: center; }
+  .summary-card .num { font-size: 2.2rem; font-weight: 800; }
+  .summary-card .lbl { font-size: .78rem; color: #64748b; margin-top: .2rem; }
+  .num.same    { color: #4ade80; }
+  .num.changed { color: #fbbf24; }
+  .num.removed { color: #f87171; }
+  .num.added   { color: #22d3ee; }
+
+  /* Section */
+  h2 { font-size: 1.15rem; color: #93c5fd; margin: 2rem 0 1rem; border-left: 3px solid #3b82f6; padding-left: .75rem; }
+
+  /* Table */
+  .tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #2a3548; margin-bottom: 2rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  thead tr { background: #1a2236; }
+  thead th { padding: .85rem 1rem; text-align: left; color: #64748b; font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #2a3548; }
+  tbody tr { border-bottom: 1px solid #1e2840; transition: background .15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #1a2236; }
+  tbody td { padding: .8rem 1rem; vertical-align: top; }
+
+  .method { display: inline-block; padding: .2rem .55rem; border-radius: 4px; font-size: .72rem; font-weight: 700; font-family: monospace; }
+  .GET    { background: #0d3321; color: #4ade80; }
+  .POST   { background: #1a2d0f; color: #86efac; }
+  .PUT    { background: #2d1f00; color: #fbbf24; }
+  .DELETE { background: #2d0f0f; color: #f87171; }
+
+  .path { font-family: monospace; color: #e2e8f0; font-size: .85rem; }
+  .auth-tag { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .7rem; font-weight: 600; }
+  .auth-session { background: #1e1a3b; color: #a78bfa; border: 1px solid #4c1d95; }
+  .auth-apikey  { background: #1a2d1a; color: #6ee7b7; border: 1px solid #065f46; }
+  .auth-jwt     { background: #1a2840; color: #60a5fa; border: 1px solid #1d4ed8; }
+  .auth-none    { background: #1e1e1e; color: #6b7280; border: 1px solid #374151; }
+
+  .status-badge { display: inline-block; padding: .2rem .6rem; border-radius: 12px; font-size: .72rem; font-weight: 600; }
+  .s-same    { background: #1a3326; color: #4ade80; }
+  .s-changed { background: #2d2007; color: #fbbf24; }
+  .s-removed { background: #2d0f0f; color: #f87171; }
+  .s-added   { background: #0f2d2d; color: #22d3ee; }
+
+  .diff-list { list-style: none; padding: 0; margin: 0; }
+  .diff-list li { font-size: .8rem; color: #94a3b8; margin-top: .3rem; padding-left: .75rem; border-left: 2px solid #2a3548; }
+  .diff-list li.plus  { color: #86efac; border-color: #166534; }
+  .diff-list li.minus { color: #f87171; border-color: #991b1b; }
+  .diff-list li.warn  { color: #fbbf24; border-color: #92400e; }
+
+  /* Notes box */
+  .notes { background: #161b27; border: 1px solid #2a3548; border-radius: 10px; padding: 1.5rem; }
+  .notes h3 { color: #93c5fd; margin-bottom: 1rem; font-size: 1rem; }
+  .notes ul { list-style: disc; padding-left: 1.5rem; }
+  .notes ul li { color: #94a3b8; font-size: .875rem; margin-bottom: .6rem; line-height: 1.6; }
+  .notes ul li strong { color: #e2e8f0; }
+
+  footer { text-align: center; padding: 2rem; color: #374151; font-size: .8rem; border-top: 1px solid #1e2840; margin-top: 3rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>core vs core-lite — API Comparison Report</h1>
+  <p>Compatibility audit between the original <strong>core</strong> service (TypeScript + PostgreSQL + Sequelize) and the replacement <strong>core-lite</strong> service (JavaScript + SQLite in-memory).</p>
+  <div class="meta">
+    <span>Generated: 2026-03-12</span>
+    <span>core: TypeScript / Express / PostgreSQL</span>
+    <span>core-lite: JavaScript / Express / SQLite (better-sqlite3)</span>
+    <span>Host: moph-meet.moph.go.th</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Legend -->
+  <div class="legend" style="margin-top:1.5rem">
+    <span class="badge same">Compatible</span>
+    <span class="badge changed">Changed Behaviour</span>
+    <span class="badge removed">Removed in core-lite</span>
+    <span class="badge added">New in core-lite</span>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary-grid">
+    <div class="summary-card"><div class="num same">8</div><div class="lbl">Compatible</div></div>
+    <div class="summary-card"><div class="num changed">4</div><div class="lbl">Changed Behaviour</div></div>
+    <div class="summary-card"><div class="num removed">7</div><div class="lbl">Removed</div></div>
+    <div class="summary-card"><div class="num added">6</div><div class="lbl">New in core-lite</div></div>
+    <div class="summary-card"><div class="num" style="color:#e2e8f0">25</div><div class="lbl">Total Endpoints</div></div>
+  </div>
+
+  <!-- Auth & Session -->
+  <h2>Authentication &amp; Session</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th><th>Path</th><th>Auth</th><th>Status</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/health</td>
+        <td><span class="auth-tag auth-none">None</span></td>
+        <td><span class="status-badge s-same">Compatible</span></td>
+        <td><ul class="diff-list"><li>Identical response shape</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/auth/providerID</td>
+        <td><span class="auth-tag auth-none">None</span></td>
+        <td><span class="status-badge s-changed">Changed</span></td>
+        <td>
+          <ul class="diff-list">
+            <li class="warn">core: creates DB user (User + RoleMap) on first login</li>
+            <li class="warn">core-lite: stateless — user built from ProviderID profile, no DB write</li>
+            <li class="plus">Response shape identical: <code>{ data: { token, user, providerID, providerIDProfile } }</code></li>
+            <li class="minus">core: stores Sequelize Model in tokenStorage; core-lite: stores plain object</li>
+            <li class="plus">core-lite adds 10s dedup cache for same OAuth code (retry-safe)</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/auth</td>
+        <td><span class="auth-tag auth-none">None</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">Username/password login. Requires PostgreSQL User table — not available in core-lite</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/auth/check</td>
+        <td><span class="auth-tag auth-none">None</span></td>
+        <td><span class="status-badge s-same">Compatible</span></td>
+        <td><ul class="diff-list"><li>Same request/response shape</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/logout</td>
+        <td><span class="auth-tag auth-none">None</span></td>
+        <td><span class="status-badge s-changed">Changed</span></td>
+        <td>
+          <ul class="diff-list">
+            <li class="warn">core: updates <code>User.isOnline = false</code> in DB</li>
+            <li class="warn">core-lite: only removes token from cache (no DB)</li>
+            <li class="plus">Response shape compatible: <code>{ token }</code></li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/auth/guest</td>
+        <td><span class="auth-tag auth-none">None</span></td>
+        <td><span class="status-badge s-added">New</span></td>
+        <td><ul class="diff-list"><li class="plus">Not in core. Resolves a pre-stored guest token → user + meetId</li></ul></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- Rooms / Meets -->
+  <h2>Rooms &amp; Meets</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th><th>Path</th><th>Auth</th><th>Status</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/meets</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-changed">Changed</span></td>
+        <td>
+          <ul class="diff-list">
+            <li class="warn">core: queries PostgreSQL Meet table filtered by userUid + endtime ≥ now</li>
+            <li class="warn">core-lite: scans in-memory SQLite roomStore filtered by ownerId (CID)</li>
+            <li class="warn">core: includes MeetInvite relations; core-lite: no relations</li>
+            <li class="warn">core: sorts by proximity to now; core-lite: sorts by createdAt desc</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/rooms</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-added">New</span></td>
+        <td><ul class="diff-list"><li class="plus">Not in core. Creates meet or exam room. Returns <code>{ room, patientJoinUrl, meetJoinUrl }</code></li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/rooms/:id</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-added">New</span></td>
+        <td><ul class="diff-list"><li class="plus">Not in core. Returns room details for owner only</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/meets/:id</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-changed">Changed</span></td>
+        <td><ul class="diff-list"><li class="warn">core: returns Meet with MeetInvite + Patient; core-lite: always returns 404 (legacy stub)</li></ul></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- Exam / Queue -->
+  <h2>Exam &amp; Queue (Telemedicine Flow)</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th><th>Path</th><th>Auth</th><th>Status</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/exam/:id</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">core: returns Meet with MeetInvite + User + Patient from DB (defined twice, second overrides)</li><li class="minus">core-lite: not implemented — use <code>/api/exam/:id/doctor</code> instead</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/exam/:id/doctor</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-added">New</span></td>
+        <td><ul class="diff-list"><li class="plus">Not in core. Returns full room object including live queue for the owning doctor</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/exam/:id/invite</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-added">New</span></td>
+        <td><ul class="diff-list"><li class="plus">Not in core. Generates patient queue JWT link. Returns <code>{ patientJoinUrl, patientName, cid }</code></li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/exam/:id/queue</td>
+        <td><span class="auth-tag auth-jwt">JWT (query)</span></td>
+        <td><span class="status-badge s-added">New</span></td>
+        <td><ul class="diff-list"><li class="plus">Not in core. Patient polling endpoint — auto-registers patient in queue on first call</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/exam/:id/next</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-added">New</span></td>
+        <td><ul class="diff-list"><li class="plus">Not in core. Doctor admits next patient from queue</li></ul></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- Legacy Meet Reserved -->
+  <h2>Meet Reserved (Legacy / Appointment System)</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th><th>Path</th><th>Auth</th><th>Status</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/meet/reserved</td>
+        <td><span class="auth-tag auth-apikey">API Key</span></td>
+        <td><span class="status-badge s-changed">Changed</span></td>
+        <td>
+          <ul class="diff-list">
+            <li class="plus">Request body: compatible — <code>{ sessionName, startTime, endTime, cid, displayName, account_id }</code></li>
+            <li class="warn">core: <code>meet</code> = Jitsi URL with HS256 JWT (<code>https://moph-meetingroom.moph.go.th/…?jwt=…</code>) — doctor is room owner in Jitsi</li>
+            <li class="warn">core-lite: <code>meet</code> = <code>https://moph-meet.moph.go.th/exam/:id</code> — doctor opens via ProviderID session</li>
+            <li class="plus">core-lite adds <code>patientJoinUrl</code> field (full URL) in response</li>
+            <li class="plus">core-lite binds <code>ownerId</code> to doctor's CID — room is accessible only to matching ProviderID login</li>
+            <li class="minus">core: endtime = endTime + 3h; core-lite: endtime = endTime as-is (no auto-add)</li>
+          </ul>
+        </td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/meet/reserved/token</td>
+        <td><span class="auth-tag auth-apikey">API Key</span></td>
+        <td><span class="status-badge s-changed">Changed</span></td>
+        <td>
+          <ul class="diff-list">
+            <li class="plus">Request body: compatible — <code>{ sessionID, displayName, cid }</code></li>
+            <li class="warn">core: <code>meet</code> = Jitsi JWT URL for patient (affiliation: member)</li>
+            <li class="warn">core-lite: <code>meet</code> = <code>https://moph-meet.moph.go.th/queue/:id?jwt=…</code> (queue flow)</li>
+            <li class="plus">core-lite adds <code>patientJoinUrl</code> field (same as <code>meet</code>)</li>
+            <li class="warn">core: generates a NEW sessionID for the patient token; core-lite: reuses the same sessionID</li>
+          </ul>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- User / Patient / IOT (removed) -->
+  <h2>User, Patient &amp; IOT (Removed in core-lite)</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th><th>Path</th><th>Auth</th><th>Status</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/user/:keyword</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">User search by display name. Requires PostgreSQL User table.</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/patient/:id/iot/:deviceID/realtime</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">Real-time IOT device data from NodeCache. Requires IOT data pipeline.</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/patient/:id/iot</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">Historical IOT records from PostgreSQL IOTRecord table.</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/patient/:id/iot</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">Write IOT record + push to external AI endpoint at 45.154.24.212.</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method GET">GET</span></td>
+        <td class="path">/api/patient/:id/med</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">Medical records from PostgreSQL MedRecord table.</li></ul></td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/patient/:id/med</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td><span class="status-badge s-removed">Removed</span></td>
+        <td><ul class="diff-list"><li class="minus">Write medical record + notify external AI service. Requires PostgreSQL.</li></ul></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- New in core-lite -->
+  <h2>New in core-lite (No equivalent in core)</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th><th>Path</th><th>Auth</th><th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/guest/token</td>
+        <td><span class="auth-tag auth-session">Session</span></td>
+        <td>Generate short-lived guest token for patient links (used with <code>/api/auth/guest</code>)</td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="path">/api/jwt/verify</td>
+        <td><span class="auth-tag auth-none">None</span></td>
+        <td>Verify patient queue JWT. Used internally by user-app-lite before rendering queue page.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <!-- Key differences notes -->
+  <h2>Key Architectural Differences</h2>
+  <div class="notes">
+    <h3>Storage &amp; Persistence</h3>
+    <ul>
+      <li><strong>core:</strong> PostgreSQL via Sequelize ORM. Full relational schema: User, RoleMap, Meet, MeetInvite, Patient, MedRecord, IOTRecord. Data persists indefinitely.</li>
+      <li><strong>core-lite:</strong> In-memory NodeCache for session tokens (lost on restart) + SQLite (better-sqlite3) for rooms (24h TTL, survives restart). No relational schema.</li>
+    </ul>
+    <h3 style="margin-top:1rem">Authentication Model</h3>
+    <ul>
+      <li><strong>core:</strong> <code>apiKeyAuth()</code> for appointment endpoints reads API key from <code>x-api-key</code> header or env config.</li>
+      <li><strong>core-lite:</strong> <code>auth()</code> middleware handles both session tokens AND the static API key whitelist in a single middleware. API key passed as <code>Authorization: Bearer &lt;key&gt;</code>.</li>
+    </ul>
+    <h3 style="margin-top:1rem">Meet URL Format</h3>
+    <ul>
+      <li><strong>core</strong> <code>/api/meet/reserved</code>: returns a direct Jitsi URL with embedded HS256 JWT. Anyone with the URL can join.</li>
+      <li><strong>core-lite</strong> <code>/api/meet/reserved</code>: returns <code>/exam/:id</code> (doctor) + <code>/queue/:id?jwt=…</code> (patient). Doctor must authenticate via ProviderID — room is locked to their CID.</li>
+    </ul>
+    <h3 style="margin-top:1rem">Removed Capabilities (not in scope for moph-meet)</h3>
+    <ul>
+      <li>Username/password login (<code>/api/auth</code>)</li>
+      <li>User search (<code>/api/user/:keyword</code>)</li>
+      <li>Patient records: IOT realtime, IOT history, Medical records (<code>/api/patient/*</code>)</li>
+      <li>External AI medical record notification (hardcoded to 45.154.24.212:3501)</li>
+    </ul>
+  </div>
+
+</main>
+
+<footer>
+  Generated 2026-03-12 · core-lite v1.0 · moph-meet.moph.go.th
+</footer>
+
+</body>
+</html>

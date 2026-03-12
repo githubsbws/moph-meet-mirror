@@ -403,7 +403,8 @@ app.get('/api/meets/:id', auth(), (req, res) => res.status(404).json({ error: 40
 //   cid / account_id  — doctor's CID; becomes the room owner so only that doctor
 //                       can open the exam room with their ProviderID session.
 // Returns: { sessionID, meet: <full doctor URL>, patientJoinUrl: <full patient URL> }
-app.post('/api/meet/reserved', auth(), (req, res) => {
+// Auth: open temporarily (no key required) for 3rd-party onboarding
+app.post('/api/meet/reserved', (req, res) => {
     const { sessionName, startTime, endTime, cid, displayName, account_id } = req.body;
 
     // Doctor identity MUST come from the request body (CID from appointment),
@@ -466,7 +467,7 @@ app.post('/api/meet/reserved/token', auth(), (req, res) => {
         JWT_SECRET,
         { expiresIn: '8h' }
     );
-    const patientJoinUrl = `/queue/${sessionID}?jwt=${queue_token}`;
+    const patientJoinUrl = `${APP_BASE_URL}/queue/${sessionID}?jwt=${queue_token}`;
 
     console.log(`[reserved/token] queue link issued for "${name}" in room ${sessionID}`);
     res.json({ sessionID, meet: patientJoinUrl, patientJoinUrl });

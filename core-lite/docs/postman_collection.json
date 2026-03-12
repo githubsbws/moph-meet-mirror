@@ -1,0 +1,292 @@
+{
+  "info": {
+    "name": "core-lite API",
+    "description": "Lightweight stateless backend for moph-meet. Replaces core (PostgreSQL+Sequelize) with in-memory token storage and SQLite-backed room store.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "core-lite-v1"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://moph-meet.moph.go.th", "type": "string" },
+    { "key": "token",   "value": "", "type": "string" },
+    { "key": "roomId",  "value": "", "type": "string" },
+    { "key": "apiKey",  "value": "765237ce-afd7-470b-907e-d21e17e07c0d", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/health", "host": ["{{baseUrl}}"], "path": ["api","health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /api/auth/providerID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data && j.data.token) {",
+                  "  pm.collectionVariables.set('token', j.data.token);",
+                  "  console.log('token saved:', j.data.token.slice(0,16)+'...');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/providerID", "host": ["{{baseUrl}}"], "path": ["api","auth","providerID"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"<oauth_code_from_moph_id_th>\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/guest",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/guest", "host": ["{{baseUrl}}"], "path": ["api","auth","guest"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"<guest_token>\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/check", "host": ["{{baseUrl}}"], "path": ["api","auth","check"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{token}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/logout", "host": ["{{baseUrl}}"], "path": ["api","logout"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{token}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/guest/token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/guest/token", "host": ["{{baseUrl}}"], "path": ["api","guest","token"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"meetId\": \"{{roomId}}\",\n  \"patientName\": \"สมชาย ใจดี\",\n  \"ttlSeconds\": 28800\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rooms",
+      "item": [
+        {
+          "name": "GET /api/meets",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/meets", "host": ["{{baseUrl}}"], "path": ["api","meets"] }
+          }
+        },
+        {
+          "name": "POST /api/rooms (meet)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.room && j.room.id) pm.collectionVariables.set('roomId', j.room.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/rooms", "host": ["{{baseUrl}}"], "path": ["api","rooms"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"meet\",\n  \"starttime\": \"2026-03-12T13:00:00\",\n  \"endtime\": \"2026-03-12T16:00:00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/rooms (exam)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.room && j.room.id) pm.collectionVariables.set('roomId', j.room.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/rooms", "host": ["{{baseUrl}}"], "path": ["api","rooms"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"exam\",\n  \"starttime\": \"2026-03-12T13:00:00\",\n  \"endtime\": \"2026-03-12T16:00:00\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/rooms/:id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/rooms/{{roomId}}", "host": ["{{baseUrl}}"], "path": ["api","rooms","{{roomId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Exam",
+      "item": [
+        {
+          "name": "GET /api/exam/:id/doctor",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/exam/{{roomId}}/doctor", "host": ["{{baseUrl}}"], "path": ["api","exam","{{roomId}}","doctor"] }
+          }
+        },
+        {
+          "name": "POST /api/exam/:id/invite",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/exam/{{roomId}}/invite", "host": ["{{baseUrl}}"], "path": ["api","exam","{{roomId}}","invite"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientName\": \"สมชาย ใจดี\",\n  \"cid\": \"1234567890123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/exam/:id/queue (patient poll)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/exam/{{roomId}}/queue?jwt=<patient_jwt>",
+              "host": ["{{baseUrl}}"],
+              "path": ["api","exam","{{roomId}}","queue"],
+              "query": [{ "key": "jwt", "value": "<patient_jwt>" }]
+            }
+          }
+        },
+        {
+          "name": "POST /api/exam/:id/next",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/exam/{{roomId}}/next", "host": ["{{baseUrl}}"], "path": ["api","exam","{{roomId}}","next"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meet (Legacy / Appointment System)",
+      "item": [
+        {
+          "name": "POST /api/meet/reserved",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.sessionID) pm.collectionVariables.set('roomId', j.sessionID);",
+                  "console.log('doctor URL:', j.meet);",
+                  "console.log('patient URL:', j.patientJoinUrl);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/meet/reserved", "host": ["{{baseUrl}}"], "path": ["api","meet","reserved"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionName\": \"ตรวจ-นพ.สมชาย-12/03/69\",\n  \"startTime\": \"2026-03-12T13:00:00\",\n  \"endTime\": \"2026-03-12T16:00:00\",\n  \"cid\": \"1234567890123\",\n  \"displayName\": \"นพ.สมชาย ใจดี\",\n  \"account_id\": \"1234567890123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/meet/reserved/token",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/meet/reserved/token", "host": ["{{baseUrl}}"], "path": ["api","meet","reserved","token"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionID\": \"{{roomId}}\",\n  \"displayName\": \"สมชาย ใจดี\",\n  \"cid\": \"9876543210123\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "JWT",
+      "item": [
+        {
+          "name": "POST /api/jwt/verify",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/jwt/verify", "host": ["{{baseUrl}}"], "path": ["api","jwt","verify"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"<patient_jwt>\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

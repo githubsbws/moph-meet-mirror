@@ -1,0 +1,722 @@
+openapi: 3.0.3
+info:
+  title: core-lite API
+  description: |
+    Lightweight stateless backend for moph-meet telemedicine platform.
+    Replaces **core** (PostgreSQL + Sequelize) with in-memory token storage
+    and SQLite-backed room store.
+
+    ## Authentication
+    Most endpoints require `Authorization: Bearer <token>` where `<token>` is
+    either:
+    - A **session token** issued by `/api/auth/providerID` or `/api/auth`
+    - A **static API key** from the server whitelist (for appointment system integrations)
+  version: "1.0.0"
+  contact:
+    name: MOPH Meet Team
+
+servers:
+  - url: https://moph-meet.moph.go.th
+    description: Production
+  - url: http://localhost:3500
+    description: Local core-lite direct
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Rooms
+  - name: Exam
+  - name: Meet (Legacy)
+  - name: JWT
+
+paths:
+
+  # ── Health ──────────────────────────────────────────────────────────────────
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  # ── Auth ────────────────────────────────────────────────────────────────────
+  /api/auth/providerID:
+    post:
+      tags: [Auth]
+      summary: Login via ProviderID (moph.id.th OAuth)
+      description: |
+        Exchanges an OAuth authorization `code` from moph.id.th → HealthID token
+        → Provider.id.th service token → profile, then issues a session token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: OAuth authorization code from moph.id.th
+      responses:
+        "200":
+          description: Success — session token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+                      user:
+                        $ref: "#/components/schemas/User"
+                      providerID:
+                        type: object
+                      providerIDProfile:
+                        type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/guest:
+    post:
+      tags: [Auth]
+      summary: Resolve a guest token (patient link)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Guest session resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/GuestUser"
+                  meetId:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/check:
+    post:
+      tags: [Auth]
+      summary: Check if a session token is still valid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/logout:
+    post:
+      tags: [Auth]
+      summary: Invalidate a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Token removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+
+  # ── Rooms ───────────────────────────────────────────────────────────────────
+  /api/meets:
+    get:
+      tags: [Rooms]
+      summary: List all rooms owned by the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Array of rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Room"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/rooms:
+    post:
+      tags: [Rooms]
+      summary: Create a meet or exam room
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum: [meet, exam]
+                starttime:
+                  type: string
+                  format: date-time
+                endtime:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: Room created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  room:
+                    $ref: "#/components/schemas/Room"
+                  patientJoinUrl:
+                    type: string
+                    nullable: true
+                    description: Queue URL for patients (exam rooms only)
+                  meetJoinUrl:
+                    type: string
+                    nullable: true
+                    description: Doctor join URL (meet rooms only)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/rooms/{id}:
+    get:
+      tags: [Rooms]
+      summary: Get room details (owner only)
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RoomId"
+      responses:
+        "200":
+          description: Room details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Room"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Exam ────────────────────────────────────────────────────────────────────
+  /api/exam/{id}/queue:
+    get:
+      tags: [Exam]
+      summary: Patient queue status poll (JWT auth via query param)
+      description: |
+        Called by patients from the waiting room. Registers them in the queue
+        on first call. No session cookie required — authenticated via JWT query param.
+      parameters:
+        - $ref: "#/components/parameters/RoomId"
+        - name: jwt
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Patient JWT issued by `/api/exam/:id/invite` or `/api/meet/reserved/token`
+      responses:
+        "200":
+          description: Queue status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [waiting, admitted, done]
+                  position:
+                    type: integer
+                    description: Position in waiting queue (0 when admitted/done)
+                  total:
+                    type: integer
+                    description: Total patients waiting
+                  roomName:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/exam/{id}/next:
+    post:
+      tags: [Exam]
+      summary: Doctor admits the next patient in queue
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RoomId"
+      responses:
+        "200":
+          description: Next patient admitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  admitted:
+                    type: string
+                    nullable: true
+                    description: Admitted patient name, null if queue empty
+                  queueLength:
+                    type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/exam/{id}/doctor:
+    get:
+      tags: [Exam]
+      summary: Get full exam room info for the owning doctor
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RoomId"
+      responses:
+        "200":
+          description: Full room object including queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Room"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/exam/{id}/invite:
+    post:
+      tags: [Exam]
+      summary: Generate a patient invite link for an exam room
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RoomId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patientName:
+                  type: string
+                  example: สมชาย ใจดี
+                displayName:
+                  type: string
+                  description: Alias for patientName
+                cid:
+                  type: string
+                  example: "1234567890123"
+      responses:
+        "200":
+          description: Invite link generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patientJoinUrl:
+                    type: string
+                    example: /queue/abc123?jwt=eyJ...
+                  patientName:
+                    type: string
+                  cid:
+                    type: string
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Meet Legacy ─────────────────────────────────────────────────────────────
+  /api/meet/reserved:
+    post:
+      tags: [Meet (Legacy)]
+      summary: Pre-create an exam room for a specific doctor (appointment system)
+      description: |
+        Called by the appointment/HIS system with an **API key** to pre-create a
+        room linked to a doctor's CID. The doctor's `cid` / `account_id` becomes
+        the room owner — it must match the CID used when the doctor logs in via
+        ProviderID.
+
+        **Difference from core:** `meet` URL returns the doctor's exam room URL
+        (`/exam/:id`) instead of a direct Jitsi JWT link.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: []
+              properties:
+                sessionName:
+                  type: string
+                  description: Custom room name (auto-generated if omitted)
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                cid:
+                  type: string
+                  description: Doctor's national ID (CID). Required if account_id not set.
+                  example: "1234567890123"
+                account_id:
+                  type: string
+                  description: Doctor's ProviderID account_id. Takes priority over cid.
+                displayName:
+                  type: string
+                  description: Doctor's display name
+      responses:
+        "200":
+          description: Exam room created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionID:
+                    type: string
+                    description: Room ID
+                  meet:
+                    type: string
+                    description: Full URL for the doctor to open the exam room
+                    example: https://moph-meet.moph.go.th/exam/abc123def456
+                  patientJoinUrl:
+                    type: string
+                    description: Full patient queue URL (send to patient via LINE/SMS)
+                    example: https://moph-meet.moph.go.th/queue/abc123def456?jwt=eyJ...
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/meet/reserved/token:
+    post:
+      tags: [Meet (Legacy)]
+      summary: Generate a patient queue link for an existing reserved session
+      description: |
+        Called by appointment system after `/api/meet/reserved` to generate
+        a named patient invite link for a specific session.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionID]
+              properties:
+                sessionID:
+                  type: string
+                  description: Room ID returned by `/api/meet/reserved`
+                displayName:
+                  type: string
+                  example: สมชาย ใจดี
+                patientName:
+                  type: string
+                  description: Alias for displayName
+                cid:
+                  type: string
+                  example: "1234567890123"
+      responses:
+        "200":
+          description: Patient queue link generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessionID:
+                    type: string
+                  meet:
+                    type: string
+                    description: Full patient queue URL
+                    example: https://moph-meet.moph.go.th/queue/abc123?jwt=eyJ...
+                  patientJoinUrl:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── Guest token ─────────────────────────────────────────────────────────────
+  /api/guest/token:
+    post:
+      tags: [Auth]
+      summary: Create a short-lived guest token for a patient
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [meetId]
+              properties:
+                meetId:
+                  type: string
+                patientName:
+                  type: string
+                ttlSeconds:
+                  type: integer
+                  default: 86400
+      responses:
+        "200":
+          description: Guest token created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  meetId:
+                    type: string
+
+  # ── JWT ─────────────────────────────────────────────────────────────────────
+  /api/jwt/verify:
+    post:
+      tags: [JWT]
+      summary: Verify a patient queue JWT
+      description: Used internally by user-app-lite to validate patient JWT before rendering the queue page.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: JWT verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  payload:
+                    type: object
+        "401":
+          description: Invalid JWT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+
+# ── Components ───────────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Session token from `/api/auth/providerID` OR static API key
+
+  parameters:
+    RoomId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 12-character hex room ID
+
+  responses:
+    Unauthorized:
+      description: Missing or expired token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: 401
+            message: tokenExpired
+    Forbidden:
+      description: Token valid but not the room owner
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: 403
+            message: forbidden
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: 404
+            message: notFound
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: integer
+        message:
+          type: string
+
+    User:
+      type: object
+      properties:
+        username:
+          type: string
+          description: ProviderID account_id (CID)
+        display:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        organization:
+          type: object
+          nullable: true
+        providerIDProfile:
+          type: object
+
+    GuestUser:
+      type: object
+      properties:
+        display:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            example: guest
+
+    QueueEntry:
+      type: object
+      properties:
+        token:
+          type: string
+        patientName:
+          type: string
+        joinedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [waiting, admitted, done]
+
+    Room:
+      type: object
+      properties:
+        id:
+          type: string
+          example: abc123def456
+        type:
+          type: string
+          enum: [meet, exam]
+        name:
+          type: string
+        starttime:
+          type: string
+          format: date-time
+        endtime:
+          type: string
+          format: date-time
+        ownerId:
+          type: string
+          description: Doctor's CID / account_id
+        ownerDisplay:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        recording:
+          type: boolean
+        queue:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueEntry"
+        currentPatientToken:
+          type: string
+          nullable: true

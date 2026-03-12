@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MOPH Meet Lite — Application Document</title>
+<style>
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #0b0f19;
+  --surface:   #111827;
+  --surface2:  #1a2236;
+  --border:    #1f2d45;
+  --accent:    #3b82f6;
+  --accent2:   #06b6d4;
+  --green:     #22c55e;
+  --yellow:    #f59e0b;
+  --red:       #ef4444;
+  --purple:    #a78bfa;
+  --text:      #e2e8f0;
+  --muted:     #64748b;
+  --subtle:    #94a3b8;
+}
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre { font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace; }
+code { background: #0d1829; padding: .15em .45em; border-radius: 4px; font-size: .85em; color: #7dd3fc; }
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+.page-wrap { display: flex; min-height: 100vh; }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+nav.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 2rem 0 3rem;
+  display: flex;
+  flex-direction: column;
+}
+.sidebar-logo {
+  padding: 0 1.5rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+}
+.sidebar-logo .logo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  background: linear-gradient(135deg, #1e3a8a, #0e7490);
+  padding: .5rem 1rem;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+}
+.sidebar-logo .version { font-size: .72rem; color: var(--muted); margin-top: .5rem; }
+nav.sidebar ul { list-style: none; padding: 0 .75rem; }
+nav.sidebar ul li a {
+  display: block;
+  padding: .45rem .75rem;
+  border-radius: 6px;
+  color: var(--subtle);
+  font-size: .875rem;
+  transition: all .15s;
+}
+nav.sidebar ul li a:hover,
+nav.sidebar ul li a.active {
+  background: var(--surface2);
+  color: var(--text);
+  text-decoration: none;
+}
+.nav-section {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  padding: 1.2rem 1.5rem .4rem;
+}
+
+/* ── Main ─────────────────────────────────────────────────────────────────── */
+main { flex: 1; padding: 3rem 4rem; max-width: 980px; }
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+section { margin-bottom: 4rem; scroll-margin-top: 2rem; }
+h1 { font-size: 2.2rem; font-weight: 800; color: #fff; line-height: 1.2; }
+h1 span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #fff;
+  padding-bottom: .6rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+h2 .icon { margin-right: .5rem; }
+h3 { font-size: 1.05rem; font-weight: 600; color: var(--accent2); margin: 1.5rem 0 .75rem; }
+p { color: var(--subtle); margin-bottom: 1rem; }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.hero {
+  background: linear-gradient(135deg, #0f2044 0%, #0c1a30 60%, #061020 100%);
+  border: 1px solid #1e3a6e;
+  border-radius: 16px;
+  padding: 2.5rem;
+  margin-bottom: 2.5rem;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 80% 20%, rgba(59,130,246,.12) 0%, transparent 60%);
+}
+.hero-tag { display: inline-block; background: #1e3a8a; color: #93c5fd; font-size: .75rem; font-weight: 700; padding: .25rem .75rem; border-radius: 20px; margin-bottom: 1rem; }
+.hero h1 { font-size: 2rem; margin-bottom: .75rem; position: relative; }
+.hero p { font-size: 1rem; color: var(--subtle); max-width: 600px; position: relative; }
+.hero-chips { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.5rem; position: relative; }
+.chip { background: var(--surface2); border: 1px solid var(--border); color: var(--subtle); padding: .3rem .8rem; border-radius: 20px; font-size: .78rem; }
+.chip.blue  { border-color: #1d4ed8; color: #93c5fd; }
+.chip.cyan  { border-color: #0e7490; color: #67e8f9; }
+.chip.green { border-color: #166534; color: #86efac; }
+
+/* ── Cards ────────────────────────────────────────────────────────────────── */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.4rem;
+  transition: border-color .2s;
+}
+.card:hover { border-color: var(--accent); }
+.card-icon { font-size: 1.6rem; margin-bottom: .75rem; }
+.card h4 { font-size: .95rem; font-weight: 600; color: #fff; margin-bottom: .4rem; }
+.card p { font-size: .82rem; color: var(--muted); margin: 0; }
+
+/* ── Feature list ─────────────────────────────────────────────────────────── */
+.feature-list { list-style: none; }
+.feature-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .9rem;
+  color: var(--subtle);
+}
+.feature-list li:last-child { border-bottom: none; }
+.feature-list li .dot { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .7rem; flex-shrink: 0; margin-top: .15rem; }
+.dot.g { background: #14532d; color: var(--green); }
+.dot.b { background: #1e3a8a; color: #93c5fd; }
+.dot.y { background: #451a03; color: var(--yellow); }
+
+/* ── API table ────────────────────────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 1.5rem; }
+table { width: 100%; border-collapse: collapse; font-size: .845rem; }
+thead tr { background: var(--surface2); }
+thead th { padding: .75rem 1rem; text-align: left; color: var(--muted); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #151f33; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: #121c2e; }
+tbody td { padding: .7rem 1rem; vertical-align: top; }
+
+.method { display: inline-block; padding: .18rem .5rem; border-radius: 4px; font-size: .7rem; font-weight: 800; font-family: monospace; }
+.GET    { background: #052e16; color: #4ade80; }
+.POST   { background: #0c2a3e; color: #38bdf8; }
+.m-path { font-family: monospace; color: #e2e8f0; font-size: .83rem; }
+.auth-tag { display: inline-block; padding: .12rem .45rem; border-radius: 4px; font-size: .68rem; font-weight: 600; white-space: nowrap; }
+.at-sess { background: #1e1a3b; color: #a78bfa; }
+.at-key  { background: #14532d; color: #86efac; }
+.at-jwt  { background: #0c2a3e; color: #38bdf8; }
+.at-open { background: #1a1a1a; color: #6b7280; }
+
+/* ── Flow diagram ─────────────────────────────────────────────────────────── */
+.flow {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+}
+.flow h4 { color: var(--accent2); font-size: .9rem; margin-bottom: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.flow-steps { display: flex; flex-direction: column; gap: 0; }
+.flow-step {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  position: relative;
+}
+.flow-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  top: 32px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--border);
+}
+.step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: .15rem;
+  position: relative;
+  z-index: 1;
+}
+.step-num.cyan  { background: #0e7490; }
+.step-num.green { background: #15803d; }
+.step-num.purple{ background: #6d28d9; }
+.step-body { padding-bottom: 1.5rem; }
+.step-body strong { display: block; color: var(--text); font-size: .9rem; margin-bottom: .2rem; }
+.step-body span { color: var(--muted); font-size: .82rem; }
+.step-body code { font-size: .78rem; }
+
+/* ── Arch diagram ─────────────────────────────────────────────────────────── */
+.arch {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  font-family: monospace;
+  font-size: .82rem;
+  color: var(--subtle);
+  line-height: 2;
+  white-space: pre;
+  overflow-x: auto;
+}
+.arch .hl  { color: #60a5fa; }
+.arch .hl2 { color: #34d399; }
+.arch .hl3 { color: #f59e0b; }
+.arch .hl4 { color: #a78bfa; }
+
+/* ── Cost table ───────────────────────────────────────────────────────────── */
+.cost-note { background: #0c2010; border: 1px solid #166534; border-radius: 8px; padding: .9rem 1.2rem; font-size: .82rem; color: #86efac; margin-bottom: 1.5rem; }
+.total-row { background: #0f2044 !important; font-weight: 700; }
+.total-row td { color: #93c5fd !important; }
+.tier-badge { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .7rem; font-weight: 700; }
+.t-free { background: #14532d; color: #4ade80; }
+.t-paid { background: #1e3a8a; color: #93c5fd; }
+.t-opt  { background: #1a1200; color: #fbbf24; }
+
+/* ── Callout ──────────────────────────────────────────────────────────────── */
+.callout { border-radius: 8px; padding: 1rem 1.25rem; font-size: .875rem; margin-bottom: 1.25rem; display: flex; gap: .75rem; align-items: flex-start; }
+.callout.info  { background: #0c2a3e; border: 1px solid #1d4ed8; color: #93c5fd; }
+.callout.warn  { background: #2d1a00; border: 1px solid #92400e; color: #fcd34d; }
+.callout.tip   { background: #052e16; border: 1px solid #166534; color: #86efac; }
+.callout-icon  { font-size: 1.1rem; flex-shrink: 0; margin-top: .05rem; }
+
+/* ── Stack pills ──────────────────────────────────────────────────────────── */
+.stack-pills { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.pill { padding: .3rem .9rem; border-radius: 20px; font-size: .78rem; font-weight: 600; border: 1px solid; }
+.pill.js   { background: #2d2500; border-color: #854d0e; color: #fcd34d; }
+.pill.node { background: #052e16; border-color: #166534; color: #86efac; }
+.pill.sql  { background: #1e1a3b; border-color: #4c1d95; color: #c4b5fd; }
+.pill.exp  { background: #0c2a3e; border-color: #1d4ed8; color: #93c5fd; }
+.pill.ejs  { background: #1a1200; border-color: #92400e; color: #fcd34d; }
+.pill.jit  { background: #0f1f2d; border-color: #0e7490; color: #67e8f9; }
+
+@media(max-width:768px){
+  nav.sidebar { display: none; }
+  main { padding: 2rem 1.5rem; }
+}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+<!-- ── Sidebar ──────────────────────────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-badge">🏥 MOPH Meet Lite</div>
+    <div class="version">v1.0 · March 2026</div>
+  </div>
+  <div class="nav-section">Overview</div>
+  <ul>
+    <li><a href="#intro">Introduction</a></li>
+    <li><a href="#architecture">Architecture</a></li>
+    <li><a href="#stack">Tech Stack</a></li>
+  </ul>
+  <div class="nav-section">Features</div>
+  <ul>
+    <li><a href="#functions">Core Functions</a></li>
+    <li><a href="#key-functions">Key Capabilities</a></li>
+    <li><a href="#theme">Design Theme</a></li>
+  </ul>
+  <div class="nav-section">Integration</div>
+  <ul>
+    <li><a href="#api">API Specification</a></li>
+    <li><a href="#userflow">User Flows</a></li>
+  </ul>
+  <div class="nav-section">Operations</div>
+  <ul>
+    <li><a href="#spec">Minimum Spec</a></li>
+    <li><a href="#cost">AWS Cost Estimate</a></li>
+    <li><a href="#env">Environment Variables</a></li>
+  </ul>
+</nav>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────────── -->
+<main>
+
+<!-- INTRO ─────────────────────────────────────────────────────────────────── -->
+<section id="intro">
+  <div class="hero">
+    <div class="hero-tag">Application Document · v1.0</div>
+    <h1>MOPH Meet <span>Lite</span></h1>
+    <p>A lightweight, stateless telemedicine platform for the Ministry of Public Health (MOPH), enabling video consultations between healthcare providers and patients — with zero database dependencies for the core user flow.</p>
+    <div class="hero-chips">
+      <span class="chip blue">Node.js 20 LTS</span>
+      <span class="chip cyan">Express 4</span>
+      <span class="chip green">No PostgreSQL required</span>
+      <span class="chip">ProviderID OAuth2</span>
+      <span class="chip">Jitsi Meet</span>
+      <span class="chip">SQLite (rooms only)</span>
+    </div>
+  </div>
+
+  <p>MOPH Meet Lite is a rewrite of the original <strong>core + user-app</strong> stack (TypeScript + PostgreSQL + Nuxt 3) into two lean Node.js services designed to run on a single low-cost server with minimal ops overhead:</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">⚙️</div>
+      <h4>core-lite</h4>
+      <p>REST API backend. Stateless authentication via ProviderID. Room management with SQLite. Port 3500.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🖥️</div>
+      <h4>user-app-lite</h4>
+      <p>Express + EJS server-side rendered UI. Session management. Proxies to core-lite for API calls. Port 3000.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎥</div>
+      <h4>Jitsi Meet</h4>
+      <p>Self-hosted video conferencing at moph-meetingroom.moph.go.th. No per-minute cost.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ARCHITECTURE ─────────────────────────────────────────────────────────── -->
+<section id="architecture">
+  <h2><span class="icon">🏗️</span>Architecture</h2>
+
+  <div class="arch"><span class="hl">Browser / LINE / HIS</span>
+        │
+        ▼
+<span class="hl2">nginx  (moph-meet.moph.go.th :443)</span>
+  ├── /api/rooms         ──► <span class="hl3">user-app-lite :3000</span>  (session auth proxy)
+  ├── /api/exam/*        ──► <span class="hl3">user-app-lite :3000</span>  (session auth proxy)
+  ├── /api/media-upload  ──► <span class="hl3">user-app-lite :3000</span>  (multipart, 2 GB limit)
+  ├── /api/*             ──► <span class="hl4">core-lite     :3500</span>  (direct API)
+  └── /*                 ──► <span class="hl3">user-app-lite :3000</span>  (UI pages)
+
+<span class="hl3">user-app-lite :3000</span>
+  ├── Session store (express-session, cookie-based)
+  ├── EJS views: dashboard, login, meet, exam, queue
+  └── Proxies to <span class="hl4">core-lite :3500</span> with Bearer token from session
+
+<span class="hl4">core-lite :3500</span>
+  ├── ProviderID OAuth2 (moph.id.th → provider.id.th)
+  ├── Token store: NodeCache (in-memory, lost on restart)
+  ├── Room store:  SQLite   (disk-backed, 24h TTL)
+  └── JWT queue tokens (jsonwebtoken, HS256)
+
+<span class="hl2">Jitsi Meet (moph-meetingroom.moph.go.th)</span>
+  └── Self-hosted video server (separate infrastructure)</div>
+
+  <div class="callout info">
+    <span class="callout-icon">ℹ️</span>
+    <span>All <code>/api/exam/*</code> and <code>/api/rooms</code> routes pass through <strong>user-app-lite</strong> first so the session cookie is translated to a Bearer token before reaching core-lite. Direct browser calls to core-lite are not possible from the public internet.</span>
+  </div>
+</section>
+
+<!-- TECH STACK ───────────────────────────────────────────────────────────── -->
+<section id="stack">
+  <h2><span class="icon">📦</span>Tech Stack</h2>
+  <div class="card-grid">
+    <div class="card">
+      <h4>core-lite</h4>
+      <div class="stack-pills">
+        <span class="pill js">JavaScript ES2022</span>
+        <span class="pill node">Node.js 20 LTS</span>
+        <span class="pill exp">Express 4</span>
+        <span class="pill sql">better-sqlite3</span>
+        <span class="pill node">node-cache</span>
+        <span class="pill node">jsonwebtoken</span>
+      </div>
+    </div>
+    <div class="card">
+      <h4>user-app-lite</h4>
+      <div class="stack-pills">
+        <span class="pill js">JavaScript ES2022</span>
+        <span class="pill node">Node.js 20 LTS</span>
+        <span class="pill exp">Express 4</span>
+        <span class="pill ejs">EJS Templates</span>
+        <span class="pill node">express-session</span>
+        <span class="pill node">multer / node-fetch</span>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Video</h4>
+      <div class="stack-pills">
+        <span class="pill jit">Jitsi Meet (self-hosted)</span>
+        <span class="pill jit">Jitsi JWT HS256</span>
+      </div>
+    </div>
+    <div class="card">
+      <h4>Auth</h4>
+      <div class="stack-pills">
+        <span class="pill exp">ProviderID OAuth2</span>
+        <span class="pill exp">moph.id.th</span>
+        <span class="pill exp">provider.id.th</span>
+        <span class="pill node">JWT queue tokens</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FUNCTIONS ────────────────────────────────────────────────────────────── -->
+<section id="functions">
+  <h2><span class="icon">⚙️</span>Core Functions</h2>
+
+  <h3>Provider (Doctor / Staff) Flow</h3>
+  <ul class="feature-list">
+    <li><span class="dot g">✓</span><div><strong>Login via ProviderID</strong> — OAuth2 through moph.id.th → provider.id.th. No username/password database required.</div></li>
+    <li><span class="dot g">✓</span><div><strong>Dashboard</strong> — Lists all active rooms owned by the logged-in provider, with calendar view of upcoming meetings.</div></li>
+    <li><span class="dot g">✓</span><div><strong>Create Meet Room</strong> — Instant video conference room for multi-party meetings. Returns a shareable join link.</div></li>
+    <li><span class="dot g">✓</span><div><strong>Create Exam Room</strong> — Telemedicine consultation room with patient queue. Only the owning doctor can admit patients.</div></li>
+    <li><span class="dot g">✓</span><div><strong>Invite Patient</strong> — Generate a named patient invite link (JWT-signed, 8h TTL) to send via LINE/SMS.</div></li>
+    <li><span class="dot g">✓</span><div><strong>Queue Management</strong> — Doctor sees live queue and calls next patient with one click.</div></li>
+    <li><span class="dot g">✓</span><div><strong>AI Summary Upload</strong> — Upload consultation recording for AI transcription and summary (poc-mophmeet-ai-summary).</div></li>
+  </ul>
+
+  <h3>Patient Flow</h3>
+  <ul class="feature-list">
+    <li><span class="dot b">→</span><div><strong>Queue Waiting Room</strong> — Patient opens invite link → enters virtual waiting room. No login required.</div></li>
+    <li><span class="dot b">→</span><div><strong>Live Queue Position</strong> — Polls queue status every few seconds. Shows position and total waiting.</div></li>
+    <li><span class="dot b">→</span><div><strong>Auto-Admit to Jitsi</strong> — When doctor calls next, patient is redirected directly into the Jitsi video call.</div></li>
+  </ul>
+
+  <h3>Appointment System (3rd Party HIS)</h3>
+  <ul class="feature-list">
+    <li><span class="dot y">⚡</span><div><strong>Pre-create Room via API</strong> — <code>POST /api/meet/reserved</code> with doctor's CID to create a room in advance.</div></li>
+    <li><span class="dot y">⚡</span><div><strong>Generate Patient Link</strong> — <code>POST /api/meet/reserved/token</code> to generate a named patient queue link for a specific session.</div></li>
+  </ul>
+</section>
+
+<!-- KEY FUNCTIONS ────────────────────────────────────────────────────────── -->
+<section id="key-functions">
+  <h2><span class="icon">🔑</span>Key Capabilities</h2>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-icon">🔐</div>
+      <h4>Zero-Password Auth</h4>
+      <p>Doctors authenticate via ProviderID (national healthcare ID). No separate username/password database needed.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">💾</div>
+      <h4>Stateless by Design</h4>
+      <p>Session tokens in NodeCache, rooms in SQLite. Restart-safe rooms. No PostgreSQL dependency for the core flow.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔗</div>
+      <h4>CID-Locked Rooms</h4>
+      <p>Exam rooms are bound to the doctor's CID. Pre-created rooms (by HIS) can only be opened by the matching ProviderID login.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎫</div>
+      <h4>JWT Patient Tokens</h4>
+      <p>Patients join via signed JWT links (8h TTL). No session or login required on patient side.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🏥</div>
+      <h4>HIS Integration</h4>
+      <p>Backward-compatible API keys for appointment systems to pre-create rooms and generate patient links.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📹</div>
+      <h4>Self-Hosted Video</h4>
+      <p>Jitsi Meet on government infrastructure. No per-user/per-minute video costs. HIPAA-grade isolation.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🤖</div>
+      <h4>AI Summary</h4>
+      <p>Post-consultation recording upload to AI transcription service. Async — does not block the consultation flow.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">📱</div>
+      <h4>Mobile Friendly</h4>
+      <p>Server-side rendered EJS with Tailwind CSS. Works on smartphones via browser — no app install required.</p>
+    </div>
+  </div>
+</section>
+
+<!-- THEME ────────────────────────────────────────────────────────────────── -->
+<section id="theme">
+  <h2><span class="icon">🎨</span>Design Theme</h2>
+  <div class="card-grid">
+    <div class="card">
+      <div style="display:flex;gap:.6rem;margin-bottom:.75rem;">
+        <div style="width:32px;height:32px;border-radius:6px;background:#1a56db;"></div>
+        <div style="width:32px;height:32px;border-radius:6px;background:#0694a2;"></div>
+        <div style="width:32px;height:32px;border-radius:6px;background:#057a55;"></div>
+        <div style="width:32px;height:32px;border-radius:6px;background:#1e2d40;"></div>
+        <div style="width:32px;height:32px;border-radius:6px;background:#f3f4f6;"></div>
+      </div>
+      <h4>MOPH Healthcare Palette</h4>
+      <p>Primary blue (#1a56db) · Teal (#0694a2) · Green (#057a55) · Dark navy (#1e2d40) · Light surface (#f3f4f6)</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">🌐</div>
+      <h4>Bilingual UI</h4>
+      <p>Thai-first interface with English labels. Date/time formatted in Thai locale (th-TH). Room names auto-generated in Thai.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">⚡</div>
+      <h4>Server-Side Rendering</h4>
+      <p>EJS templates rendered on server. No SPA framework — fast initial load, works on low-bandwidth mobile connections in rural areas.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon">♿</div>
+      <h4>Accessibility</h4>
+      <p>Large touch targets, clear status indicators for queue position, high-contrast status badges for waiting / admitted / done states.</p>
+    </div>
+  </div>
+</section>
+
+<!-- API SPEC ─────────────────────────────────────────────────────────────── -->
+<section id="api">
+  <h2><span class="icon">📡</span>API Specification</h2>
+
+  <div class="callout info">
+    <span class="callout-icon">📄</span>
+    <span>Full OpenAPI 3.0 spec: <code>core-lite/docs/openapi.yaml</code> · Postman collection: <code>core-lite/docs/postman_collection.json</code></span>
+  </div>
+
+  <h3>Authentication</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="method GET">GET</span></td><td class="m-path">/api/health</td><td><span class="auth-tag at-open">None</span></td><td>Service health check</td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/auth/providerID</td><td><span class="auth-tag at-open">None</span></td><td>OAuth2 login via moph.id.th. Body: <code>{ code }</code>. Returns session token.</td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/auth/guest</td><td><span class="auth-tag at-open">None</span></td><td>Resolve a pre-issued guest token to user + meetId</td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/auth/check</td><td><span class="auth-tag at-open">None</span></td><td>Check if a session token is still valid</td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/logout</td><td><span class="auth-tag at-open">None</span></td><td>Invalidate a session token. Body: <code>{ token }</code></td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/guest/token</td><td><span class="auth-tag at-sess">Session</span></td><td>Create short-lived guest token for patient invite</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Rooms</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="method GET">GET</span></td><td class="m-path">/api/meets</td><td><span class="auth-tag at-sess">Session</span></td><td>List all rooms owned by the current user</td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/rooms</td><td><span class="auth-tag at-sess">Session</span></td><td>Create room. Body: <code>{ type: "meet"|"exam", starttime, endtime }</code></td></tr>
+      <tr><td><span class="method GET">GET</span></td><td class="m-path">/api/rooms/:id</td><td><span class="auth-tag at-sess">Session</span></td><td>Get room details (owner only)</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Exam / Queue</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="method GET">GET</span></td><td class="m-path">/api/exam/:id/doctor</td><td><span class="auth-tag at-sess">Session</span></td><td>Full room info + live queue for the owning doctor</td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/exam/:id/invite</td><td><span class="auth-tag at-sess">Session</span></td><td>Generate patient JWT invite link. Body: <code>{ patientName, cid }</code></td></tr>
+      <tr><td><span class="method GET">GET</span></td><td class="m-path">/api/exam/:id/queue</td><td><span class="auth-tag at-jwt">JWT (query)</span></td><td>Patient queue poll. Registers patient on first call. Returns status + position.</td></tr>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/exam/:id/next</td><td><span class="auth-tag at-sess">Session</span></td><td>Doctor admits next patient from queue</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Legacy / Appointment System (HIS Integration)</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="m-path">/api/meet/reserved</td>
+        <td><span class="auth-tag at-open">Open*</span></td>
+        <td>
+          Pre-create exam room for a doctor by CID.<br/>
+          Body: <code>{ sessionName?, startTime, endTime, cid, displayName, account_id }</code><br/>
+          Returns: <code>{ sessionID, meet: &lt;doctor URL&gt;, patientJoinUrl: &lt;patient URL&gt; }</code>
+        </td>
+      </tr>
+      <tr>
+        <td><span class="method POST">POST</span></td>
+        <td class="m-path">/api/meet/reserved/token</td>
+        <td><span class="auth-tag at-key">API Key</span></td>
+        <td>
+          Generate named patient queue link for an existing session.<br/>
+          Body: <code>{ sessionID, displayName, cid }</code><br/>
+          Returns: <code>{ sessionID, meet: &lt;full URL&gt;, patientJoinUrl: &lt;full URL&gt; }</code>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:.8rem;color:var(--muted)">* <code>/api/meet/reserved</code> is temporarily open for 3rd-party onboarding. Re-enable <code>auth()</code> middleware once API keys are distributed.</p>
+
+  <h3>JWT Utility</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="method POST">POST</span></td><td class="m-path">/api/jwt/verify</td><td><span class="auth-tag at-open">None</span></td><td>Verify patient queue JWT. Used internally by user-app-lite.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- USER FLOW ────────────────────────────────────────────────────────────── -->
+<section id="userflow">
+  <h2><span class="icon">🔄</span>User Flows</h2>
+
+  <div class="flow">
+    <h4>Flow A — Doctor-Initiated Exam (Queue)</h4>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="step-num">1</div>
+        <div class="step-body"><strong>Doctor logs in</strong><span>Opens moph-meet.moph.go.th → redirected to moph.id.th ProviderID OAuth → token issued</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">2</div>
+        <div class="step-body"><strong>Create Exam Room</strong><span><code>POST /api/rooms { type:"exam" }</code> → room created in SQLite with doctor's CID as owner</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">3</div>
+        <div class="step-body"><strong>Invite Patient</strong><span><code>POST /api/exam/:id/invite { patientName, cid }</code> → returns JWT-signed queue URL → doctor sends via LINE/SMS</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num cyan">4</div>
+        <div class="step-body"><strong>Patient joins queue</strong><span>Patient opens URL → waiting room page → polls <code>GET /api/exam/:id/queue?jwt=…</code> every 5s</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num green">5</div>
+        <div class="step-body"><strong>Doctor calls next</strong><span><code>POST /api/exam/:id/next</code> → patient status changes to <em>admitted</em> → patient page auto-redirects to Jitsi room</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num purple">6</div>
+        <div class="step-body"><strong>Consultation ends</strong><span>Doctor uploads recording → <code>POST /api/exam/:id/submit-summary</code> → AI transcription (async)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <h4>Flow B — Appointment System (HIS Pre-booking)</h4>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="step-num">1</div>
+        <div class="step-body"><strong>HIS creates room</strong><span><code>POST /api/meet/reserved { cid, startTime, endTime, displayName }</code> → returns <code>sessionID</code> + doctor URL + default patient URL</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">2</div>
+        <div class="step-body"><strong>HIS generates patient link</strong><span><code>POST /api/meet/reserved/token { sessionID, displayName, cid }</code> → returns named patient queue URL</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num cyan">3</div>
+        <div class="step-body"><strong>HIS sends links</strong><span>Doctor URL sent to doctor via HIS portal. Patient URL sent to patient via LINE OA / SMS.</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num green">4</div>
+        <div class="step-body"><strong>Appointment time</strong><span>Doctor logs in via ProviderID → room is waiting on dashboard. Patient joins queue via link → Flow A steps 4–6 continue.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow">
+    <h4>Flow C — Meet Room (Multi-party Conference)</h4>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="step-num">1</div>
+        <div class="step-body"><strong>Provider creates meet room</strong><span><code>POST /api/rooms { type:"meet" }</code> → returns <code>meetJoinUrl: /room/:id</code></span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">2</div>
+        <div class="step-body"><strong>Share link</strong><span>Provider shares the full URL. Other authenticated providers can join directly.</span></div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num green">3</div>
+        <div class="step-body"><strong>Join Jitsi</strong><span>Browser opens <code>/room/:id</code> → user-app-lite fetches room info → renders Jitsi embed for the meeting domain.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MINIMUM SPEC ─────────────────────────────────────────────────────────── -->
+<section id="spec">
+  <h2><span class="icon">🖥️</span>Minimum Server Specification</h2>
+
+  <div class="callout tip">
+    <span class="callout-icon">💡</span>
+    <span>core-lite + user-app-lite are extremely lean. Both services together idle at ~80 MB RAM. The bottleneck is Jitsi Meet which runs separately.</span>
+  </div>
+
+  <h3>moph-meet.moph.go.th (core-lite + user-app-lite)</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Resource</th><th>Minimum</th><th>Recommended</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>CPU</td><td>1 vCPU</td><td>2 vCPU</td><td>Node.js is single-threaded; 2 vCPU helps under concurrent load</td></tr>
+      <tr><td>RAM</td><td>512 MB</td><td>1 GB</td><td>Both services idle ~80 MB; leave headroom for video upload buffering</td></tr>
+      <tr><td>Storage</td><td>8 GB SSD</td><td>20 GB SSD</td><td>OS + app + SQLite rooms.db (tiny) + temp video uploads (2 GB max per file)</td></tr>
+      <tr><td>Network</td><td>100 Mbps</td><td>1 Gbps</td><td>Video upload to AI service can be large; nginx handles streaming</td></tr>
+      <tr><td>OS</td><td>Ubuntu 22.04 LTS</td><td>Ubuntu 22.04 LTS</td><td>—</td></tr>
+      <tr><td>Node.js</td><td>v20 LTS</td><td>v20 LTS</td><td>Required for ES2022 features and security patches</td></tr>
+      <tr><td>nginx</td><td>1.24+</td><td>1.24+</td><td>SSL termination, routing, <code>client_max_body_size 2048m</code></td></tr>
+      <tr><td>SSL</td><td>Wildcard *.moph.go.th</td><td>Wildcard *.moph.go.th</td><td>Provided by MOPH IT</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>moph-meetingroom.moph.go.th (Jitsi Meet — separate)</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Resource</th><th>Minimum</th><th>Recommended (50 concurrent)</th></tr></thead>
+    <tbody>
+      <tr><td>CPU</td><td>4 vCPU</td><td>8 vCPU</td></tr>
+      <tr><td>RAM</td><td>4 GB</td><td>8 GB</td></tr>
+      <tr><td>Network</td><td>1 Gbps</td><td>1 Gbps dedicated</td></tr>
+      <tr><td>Storage</td><td>20 GB</td><td>50 GB</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- AWS COST ─────────────────────────────────────────────────────────────── -->
+<section id="cost">
+  <h2><span class="icon">💰</span>AWS Cost Estimate</h2>
+
+  <div class="cost-note">
+    ✅ Estimates based on <strong>ap-southeast-1 (Singapore)</strong> region · On-Demand pricing · March 2026 · USD/month
+  </div>
+
+  <div class="callout warn">
+    <span class="callout-icon">⚠️</span>
+    <span>These are estimates only. Actual costs depend on traffic patterns, data transfer, and Reserved Instance discounts (up to 40% savings with 1-year commitment).</span>
+  </div>
+
+  <h3>Option A — Minimal (Dev / Pilot, &lt;20 concurrent users)</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Service</th><th>Type</th><th>Spec</th><th>Tier</th><th>USD/mo</th></tr></thead>
+    <tbody>
+      <tr><td>EC2 (app server)</td><td>t3.small</td><td>2 vCPU, 2 GB RAM</td><td><span class="tier-badge t-paid">On-Demand</span></td><td>~$16</td></tr>
+      <tr><td>EC2 (Jitsi)</td><td>t3.medium</td><td>2 vCPU, 4 GB RAM</td><td><span class="tier-badge t-paid">On-Demand</span></td><td>~$33</td></tr>
+      <tr><td>EBS Storage (app)</td><td>gp3 20 GB</td><td>—</td><td><span class="tier-badge t-paid">Paid</span></td><td>~$1.6</td></tr>
+      <tr><td>EBS Storage (Jitsi)</td><td>gp3 50 GB</td><td>—</td><td><span class="tier-badge t-paid">Paid</span></td><td>~$4</td></tr>
+      <tr><td>Data Transfer OUT</td><td>~50 GB/mo</td><td>Video / API</td><td><span class="tier-badge t-paid">Paid</span></td><td>~$4.5</td></tr>
+      <tr><td>Elastic IP</td><td>×2</td><td>—</td><td><span class="tier-badge t-free">Free (attached)</span></td><td>$0</td></tr>
+      <tr><td>Route 53</td><td>Hosted zone</td><td>—</td><td><span class="tier-badge t-paid">Paid</span></td><td>~$0.5</td></tr>
+      <tr class="total-row"><td colspan="4"><strong>Total (Option A)</strong></td><td><strong>~$60/mo</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Option B — Production (50–100 concurrent users)</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Service</th><th>Type</th><th>Spec</th><th>Tier</th><th>USD/mo</th></tr></thead>
+    <tbody>
+      <tr><td>EC2 (app server)</td><td>t3.medium</td><td>2 vCPU, 4 GB RAM</td><td><span class="tier-badge t-paid">On-Demand</span></td><td>~$33</td></tr>
+      <tr><td>EC2 (Jitsi ×2)</td><td>c5.xlarge</td><td>4 vCPU, 8 GB RAM</td><td><span class="tier-badge t-paid">On-Demand</span></td><td>~$124×2 = $248 (if HA) or $124 (single)</td></tr>
+      <tr><td>Application Load Balancer</td><td>ALB</td><td>—</td><td><span class="tier-badge t-opt">Optional (HA)</span></td><td>~$16</td></tr>
+      <tr><td>EBS Storage</td><td>gp3 100 GB</td><td>All servers</td><td><span class="tier-badge t-paid">Paid</span></td><td>~$8</td></tr>
+      <tr><td>Data Transfer OUT</td><td>~500 GB/mo</td><td>Video streams</td><td><span class="tier-badge t-paid">Paid</span></td><td>~$45</td></tr>
+      <tr><td>CloudWatch Logs</td><td>5 GB/mo</td><td>App + nginx logs</td><td><span class="tier-badge t-free">Near-free</span></td><td>~$2.5</td></tr>
+      <tr><td>Route 53</td><td>Hosted zone</td><td>—</td><td><span class="tier-badge t-paid">Paid</span></td><td>~$0.5</td></tr>
+      <tr class="total-row"><td colspan="4"><strong>Total (Option B — single Jitsi)</strong></td><td><strong>~$209/mo</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Cost Reduction Tips</h3>
+  <ul class="feature-list">
+    <li><span class="dot g">✓</span><div><strong>1-Year Reserved Instances</strong> — Save ~38% on EC2 vs On-Demand. Option A drops to ~$37/mo.</div></li>
+    <li><span class="dot g">✓</span><div><strong>Savings Plans</strong> — Compute Savings Plans cover EC2 + Fargate with flexible instance type switching.</div></li>
+    <li><span class="dot b">→</span><div><strong>Spot Instances for Jitsi</strong> — Jitsi can tolerate interruption with graceful reconnect. Spot saves ~70% on Jitsi servers.</div></li>
+    <li><span class="dot b">→</span><div><strong>MOPH Government Pricing</strong> — AWS GovTech / government pricing agreements may apply. Contact AWS Thailand account team.</div></li>
+    <li><span class="dot y">⚡</span><div><strong>On-Premise Alternative</strong> — Running on existing MOPH data center hardware eliminates compute cost entirely. Only egress bandwidth applies.</div></li>
+  </ul>
+</section>
+
+<!-- ENV VARS ─────────────────────────────────────────────────────────────── -->
+<section id="env">
+  <h2><span class="icon">🔧</span>Environment Variables</h2>
+
+  <h3>core-lite (.env)</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>APP_PORT</code></td><td>3500</td><td>Port core-lite listens on</td></tr>
+      <tr><td><code>APP_BASE_URL</code></td><td>—</td><td>Public base URL, e.g. <code>https://moph-meet.moph.go.th</code>. Used to build absolute links in responses.</td></tr>
+      <tr><td><code>JWT_SECRET</code></td><td>change_me</td><td><strong>Change in production.</strong> Signs patient queue JWT tokens.</td></tr>
+      <tr><td><code>PROVIDER_ID_CLIENT_ID</code></td><td>—</td><td>moph.id.th OAuth client ID</td></tr>
+      <tr><td><code>PROVIDER_ID_CLIENT_SECRET</code></td><td>—</td><td>moph.id.th OAuth client secret</td></tr>
+      <tr><td><code>PROVIDER_ID_REDIRECT_URI</code></td><td>—</td><td>OAuth redirect URI, must match moph.id.th registration</td></tr>
+      <tr><td><code>PROVIDER_SERVICE_CLIENT_ID</code></td><td>—</td><td>provider.id.th service client ID</td></tr>
+      <tr><td><code>PROVIDER_SERVICE_SECRET_KEY</code></td><td>—</td><td>provider.id.th service secret key</td></tr>
+      <tr><td><code>DATA_DIR</code></td><td><code>../../data</code></td><td>Directory for SQLite <code>rooms.db</code> file</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>user-app-lite (.env)</h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>PORT</code></td><td>3000</td><td>Port user-app-lite listens on</td></tr>
+      <tr><td><code>API_BASE</code></td><td>—</td><td>Public base URL (used for non-exam API calls via nginx)</td></tr>
+      <tr><td><code>CORE_BASE</code></td><td><code>API_BASE</code></td><td>Internal direct URL to core-lite, e.g. <code>http://localhost:3500</code>. Bypasses nginx for exam/room proxying.</td></tr>
+      <tr><td><code>APP_BASE_URL</code></td><td>—</td><td>Public base URL for absolute link generation</td></tr>
+      <tr><td><code>MEETING_URL</code></td><td>—</td><td>Jitsi Meet base URL, e.g. <code>https://moph-meetingroom.moph.go.th</code></td></tr>
+      <tr><td><code>MEETING_DOMAIN</code></td><td>—</td><td>Jitsi domain for iframe embed (without https://)</td></tr>
+      <tr><td><code>SESSION_SECRET</code></td><td>change_me</td><td><strong>Change in production.</strong> express-session signing secret.</td></tr>
+      <tr><td><code>PROVIDER_ID_CLIENT_ID</code></td><td>—</td><td>For OAuth redirect URL construction</td></tr>
+      <tr><td><code>PROVIDER_ID_REDIRECT_URI</code></td><td>—</td><td>OAuth callback URI</td></tr>
+      <tr><td><code>AI_SUMMARY_URL</code></td><td><code>http://localhost:3600</code></td><td>URL of AI summary service for recording upload</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <span class="callout-icon">⚠️</span>
+    <span>Never commit <code>.env</code> files to git. Use <code>.env.example</code> templates and inject secrets via environment or a secrets manager in production.</span>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+// Active nav link on scroll
+const sections = document.querySelectorAll('section[id]');
+const navLinks  = document.querySelectorAll('nav.sidebar a');
+const observer  = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(l => l.classList.remove('active'));
+      const active = document.querySelector(`nav.sidebar a[href="#${e.target.id}"]`);
+      if (active) active.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
