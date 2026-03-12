@@ -21,6 +21,7 @@ const PROVIDER_ID_CLIENT_SECRET = process.env.PROVIDER_ID_CLIENT_SECRET;
 const PROVIDER_ID_REDIRECT_URI = process.env.PROVIDER_ID_REDIRECT_URI;
 const PROVIDER_SERVICE_CLIENT_ID = process.env.PROVIDER_SERVICE_CLIENT_ID;
 const PROVIDER_SERVICE_SECRET_KEY = process.env.PROVIDER_SERVICE_SECRET_KEY;
+const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/$/, ''); // e.g. https://moph-meet.moph.go.th
 
 // ── App ────────────────────────────────────────────────────────────────────────
 const app = express();
@@ -396,9 +397,61 @@ app.post('/api/exam/:id/invite', auth(), (req, res) => {
 // Legacy stubs kept for compatibility
 app.get('/api/meets/:id', auth(), (req, res) => res.status(404).json({ error: 404, message: 'notFound' }));
 
-// ── POST /api/meet/reserved/token – returns queue link only (no direct Jitsi) ─
-// Backward-compat: accepts { sessionID, displayName, cid, patientName }
-// Returns patientJoinUrl (queue flow) instead of raw Jitsi JWT
+// ── POST /api/meet/reserved – backward-compat: create exam room via API key ───
+// Called by appointment system to pre-create a room for a specific doctor.
+// Body: { sessionName?, startTime, endTime, cid, displayName, account_id }
+//   cid / account_id  — doctor's CID; becomes the room owner so only that doctor
+//                       can open the exam room with their ProviderID session.
+// Returns: { sessionID, meet: <full doctor URL>, patientJoinUrl: <full patient URL> }
+app.post('/api/meet/reserved', auth(), (req, res) => {
+    const { sessionName, startTime, endTime, cid, displayName, account_id } = req.body;
+
+    // Doctor identity MUST come from the request body (CID from appointment),
+    // not from the API-key caller's session which has no meaningful user context.
+    const doctorId      = account_id || cid;
+    const doctorDisplay = displayName || doctorId || 'แพทย์';
+
+    if (!doctorId) {
+        return res.status(400).json({ error: 400, message: 'cid or account_id required' });
+    }
+
+    const id   = makeRoomId();
+    const name = sessionName || autoRoomName('exam', doctorDisplay);
+
+    const room = {
+        id,
+        type: 'exam',
+        name,
+        starttime:    startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
+        endtime:      endTime   ? new Date(endTime).toISOString()   : new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
+        ownerId:      doctorId,       // doctor's CID — must match their ProviderID login
+        ownerDisplay: doctorDisplay,
+        createdAt:    new Date().toISOString(),
+        queue:               [],
+        currentPatientToken: null,
+        recording:           true,
+    };
+
+    roomStore.set(id, room);
+    console.log(`[reserved] created exam room ${id} owner=${doctorId} (${doctorDisplay})`);
+
+    // Doctor link — full absolute URL so doctor can open it directly
+    const doctorUrl = `${APP_BASE_URL}/exam/${id}`;
+
+    // Patient link — JWT queue flow, full absolute URL
+    const queue_token = jwt.sign(
+        { roomId: id, role: 'patient', ownerId: doctorId, patientName: 'ผู้ป่วย', cid: '' },
+        JWT_SECRET,
+        { expiresIn: '8h' }
+    );
+    const patientJoinUrl = `${APP_BASE_URL}/queue/${id}?jwt=${queue_token}`;
+
+    res.json({ sessionID: id, meet: doctorUrl, patientJoinUrl });
+});
+
+// ── POST /api/meet/reserved/token – backward-compat: generate patient queue link ─
+// Accepts: { sessionID, displayName, cid, patientName }
+// Returns: { sessionID, meet: patientJoinUrl, patientJoinUrl }
 app.post('/api/meet/reserved/token', auth(), (req, res) => {
     const { sessionID, displayName, patientName, cid } = req.body;
     if (!sessionID) return res.status(400).json({ error: 400, message: 'sessionID required' });
@@ -416,7 +469,6 @@ app.post('/api/meet/reserved/token', auth(), (req, res) => {
     const patientJoinUrl = `/queue/${sessionID}?jwt=${queue_token}`;
 
     console.log(`[reserved/token] queue link issued for "${name}" in room ${sessionID}`);
-    // Return same shape as original for compat, but meet = queue URL not Jitsi
     res.json({ sessionID, meet: patientJoinUrl, patientJoinUrl });
 });
 
