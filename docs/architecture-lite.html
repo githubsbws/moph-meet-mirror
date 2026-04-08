@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOPH-Meet Lite — Architecture, Flow &amp; Specs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* ── MOPH Green Light Theme (matches user-app-lite mytheme) ── */
+    --primary:    #056839;          /* oklch(38% 0.12 156) */
+    --primary-lt: #288d5c;          /* accent */
+    --primary-content: #f5faf7;
+    --secondary:  #ffee53;
+    --secondary-content: #3a3510;
+    --bg:         #edf5f2;          /* base-100 */
+    --surface:    #ffffff;          /* white cards */
+    --surface2:   #dde9e3;          /* base-200/300 for table headers */
+    --border:     #c5d5cd;          /* subtle green-gray */
+    --text:       #1a3328;          /* base-content dark green */
+    --text-muted: #5a7a6a;          /* muted green-gray */
+    --accent:     #056839;          /* primary green (replaces old blue) */
+    --accent2:    #288d5c;          /* lighter green */
+    --green:      #16a34a;          /* success */
+    --orange:     #d97706;          /* warning */
+    --red:        #dc2626;          /* error */
+    --yellow:     #a16207;          /* dark yellow for readability on light */
+    --pink:       #c026d3;          /* fuchsia accent */
+    --info:       #2563eb;          /* info blue */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Sarabun', sans-serif; background: var(--bg); color: var(--text); line-height: 1.7; }
+
+  /* ── Layout ──────────────────────────────────────────── */
+  .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+  header { background: var(--primary); border-bottom: none; padding: 2.5rem 0; text-align: center; color: var(--primary-content); }
+  header h1 { font-size: 2.2rem; font-weight: 700; letter-spacing: -.5px; color: #fff; }
+  header h1 span { color: var(--secondary); }
+  header p { color: rgba(255,255,255,.8); margin-top: .5rem; font-size: 1rem; }
+
+  /* ── Section ─────────────────────────────────────────── */
+  section { margin: 3rem 0; }
+  h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem; padding-bottom: .5rem; border-bottom: 2px solid var(--primary); display: inline-block; color: var(--primary); }
+  h3 { font-size: 1.15rem; font-weight: 600; margin: 1.5rem 0 .75rem; color: var(--accent2); }
+  p, li { font-size: .95rem; }
+  ul, ol { padding-left: 1.5rem; margin: .5rem 0 1rem; }
+  li { margin-bottom: .35rem; }
+
+  /* ── Cards ───────────────────────────────────────────── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; }
+
+  /* ── Diagram (CSS-drawn) ──────────────────────────────── */
+  .arch { display: flex; flex-direction: column; gap: 0; align-items: center; padding: 1.5rem 0; }
+  .arch-layer { width: 100%; border: 1.5px solid var(--border); border-radius: 14px; padding: 1.25rem 1.5rem; position: relative; background: var(--surface); }
+  .arch-layer-label { position: absolute; top: -.65rem; left: 1.25rem; background: var(--bg); padding: 0 .6rem; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; }
+  .layer-internet .arch-layer-label { color: var(--info); }
+  .layer-cf .arch-layer-label { color: var(--orange); }
+  .layer-server .arch-layer-label { color: var(--primary); }
+  .layer-ext .arch-layer-label { color: var(--pink); }
+
+  .layer-internet { border-color: rgba(37,99,235,.25); background: rgba(37,99,235,.03); }
+  .layer-cf { border-color: rgba(217,119,6,.25); background: rgba(217,119,6,.03); }
+  .layer-server { border-color: rgba(5,104,57,.25); background: rgba(5,104,57,.03); }
+  .layer-ext { border-color: rgba(192,38,211,.2); background: rgba(192,38,211,.03); }
+
+  .arch-nodes { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: center; }
+  .arch-node { background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; padding: .65rem .9rem; text-align: center; min-width: 120px; transition: border-color .2s, box-shadow .2s; }
+  .arch-node:hover { border-color: var(--primary); box-shadow: 0 0 12px rgba(5,104,57,.12); }
+  .arch-node .node-icon { font-size: 1.5rem; display: block; margin-bottom: .3rem; }
+  .arch-node .node-name { font-size: .82rem; font-weight: 700; color: var(--text); display: block; }
+  .arch-node .node-desc { font-size: .7rem; color: var(--text-muted); display: block; margin-top: .15rem; }
+  .arch-node .node-port { display: inline-block; margin-top: .3rem; font-size: .65rem; padding: .1rem .4rem; border-radius: 4px; font-weight: 700; }
+
+  .arch-arrow { display: flex; flex-direction: column; align-items: center; padding: .2rem 0; color: var(--text-muted); font-size: .75rem; line-height: 1; }
+  .arch-arrow .arrow-line { width: 2px; height: 22px; background: var(--border); }
+  .arch-arrow .arrow-head { font-size: 1rem; margin: -2px 0; }
+  .arch-arrow .arrow-label { font-size: .68rem; color: var(--text-muted); margin-top: 1px; }
+
+  .arch-inner { display: flex; gap: 1rem; margin-top: .75rem; flex-wrap: wrap; justify-content: center; }
+  .arch-box { flex: 1; min-width: 220px; max-width: 360px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; padding: 1rem; position: relative; }
+  .arch-box .box-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .6rem; font-weight: 700; font-size: .9rem; }
+  .arch-box .box-header .node-icon { font-size: 1.1rem; }
+  .arch-box ul { list-style: none; padding: 0; margin: 0; }
+  .arch-box ul li { font-size: .78rem; padding: .2rem 0 .2rem .9rem; position: relative; color: var(--text-muted); }
+  .arch-box ul li::before { content: ''; position: absolute; left: 0; top: .55rem; width: .35rem; height: .35rem; border-radius: 50%; }
+  .arch-box.box-core { border-color: rgba(37,99,235,.3); }
+  .arch-box.box-core .box-header { color: var(--info); }
+  .arch-box.box-core ul li::before { background: var(--info); }
+  .arch-box.box-app { border-color: rgba(5,104,57,.3); }
+  .arch-box.box-app .box-header { color: var(--primary); }
+  .arch-box.box-app ul li::before { background: var(--primary); }
+  .arch-box.box-nginx { border-color: rgba(88,80,236,.3); }
+  .arch-box.box-nginx .box-header { color: #5850ec; }
+  .arch-box.box-data { border-color: rgba(161,98,7,.3); }
+  .arch-box.box-data .box-header { color: var(--yellow); }
+  .arch-box.box-data ul li::before { background: var(--yellow); }
+
+  .nginx-routes { display: grid; grid-template-columns: 1fr auto 1fr; gap: .4rem .6rem; align-items: center; margin: .5rem 0; font-size: .78rem; }
+  .nginx-routes .nr-loc { text-align: right; font-weight: 600; color: var(--text); }
+  .nginx-routes .nr-arrow { color: #5850ec; font-weight: 700; }
+  .nginx-routes .nr-target { color: var(--text-muted); }
+
+  .arch-conn { display: flex; align-items: center; gap: .4rem; font-size: .75rem; color: var(--text-muted); padding: .25rem 0 .25rem .9rem; }
+  .arch-conn::before { content: ''; display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; flex-shrink: 0; }
+  .conn-core::before { background: var(--info); }
+  .conn-app::before { background: var(--primary); }
+
+  /* ── Tables ──────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: .9rem; }
+  th { background: var(--surface2); color: var(--primary); text-align: left; padding: .65rem 1rem; font-weight: 600; }
+  td { padding: .6rem 1rem; border-bottom: 1px solid var(--border); }
+  tr:hover td { background: rgba(5,104,57,.03); }
+
+  /* ── Badges ──────────────────────────────────────────── */
+  .badge { display: inline-block; font-size: .75rem; padding: .15rem .55rem; border-radius: 6px; font-weight: 600; }
+  .b-blue { background: rgba(37,99,235,.1); color: var(--info); }
+  .b-green { background: rgba(5,104,57,.1); color: var(--primary); }
+  .b-orange { background: rgba(217,119,6,.1); color: var(--orange); }
+  .b-red { background: rgba(220,38,38,.1); color: var(--red); }
+  .b-purple { background: rgba(88,80,236,.1); color: #5850ec; }
+  .b-yellow { background: rgba(161,98,7,.1); color: var(--yellow); }
+  .b-pink { background: rgba(192,38,211,.1); color: var(--pink); }
+
+  /* ── Flow Steps ──────────────────────────────────────── */
+  .flow { counter-reset: step; }
+  .flow-step { position: relative; padding: 1rem 1.5rem 1rem 3.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: .75rem; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .flow-step::before { counter-increment: step; content: counter(step); position: absolute; left: 1rem; top: 1rem; width: 1.8rem; height: 1.8rem; background: var(--primary); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; }
+  .flow-step strong { color: var(--accent2); }
+
+  /* ── Limitation list ─────────────────────────────────── */
+  .lim-item { display: flex; gap: .75rem; align-items: flex-start; margin-bottom: .75rem; }
+  .lim-icon { flex-shrink: 0; width: 1.5rem; height: 1.5rem; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: .85rem; }
+  .lim-warn .lim-icon { background: rgba(217,119,6,.1); color: var(--orange); }
+  .lim-crit .lim-icon { background: rgba(220,38,38,.1); color: var(--red); }
+  .lim-info .lim-icon { background: rgba(37,99,235,.1); color: var(--info); }
+
+  /* ── Spec Box ────────────────────────────────────────── */
+  .spec-box { display: grid; grid-template-columns: 160px 1fr; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 1rem 0; }
+  .spec-box dt { background: var(--surface2); padding: .6rem 1rem; font-weight: 600; border-bottom: 1px solid var(--border); }
+  .spec-box dd { padding: .6rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface); }
+
+  code { background: var(--surface2); padding: .15rem .4rem; border-radius: 4px; font-size: .85rem; font-family: 'Cascadia Code', 'Fira Code', monospace; color: var(--primary); }
+
+  /* ── Customer Journey ────────────────────────────────── */
+  .journey { margin: 1.5rem 0; }
+  .journey-title { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; padding: .75rem 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .journey-title .persona-icon { width: 2.5rem; height: 2.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
+  .journey-title h4 { font-size: 1.05rem; font-weight: 700; margin: 0; }
+  .journey-title p { font-size: .82rem; color: var(--text-muted); margin: .15rem 0 0; }
+
+  .swimlane { display: grid; grid-template-columns: 120px 1fr; gap: 0; margin-bottom: .5rem; }
+  .swim-phase { background: var(--surface2); padding: .6rem .75rem; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--primary); border: 1px solid var(--border); border-right: none; display: flex; align-items: center; }
+  .swim-steps { display: flex; gap: .5rem; padding: .5rem .75rem; border: 1px solid var(--border); overflow-x: auto; flex-wrap: wrap; background: var(--surface); }
+  .swim-step { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: .5rem .75rem; font-size: .82rem; min-width: 140px; max-width: 220px; flex-shrink: 0; position: relative; }
+  .swim-step::after { content: '→'; position: absolute; right: -.85rem; top: 50%; transform: translateY(-50%); color: var(--primary); font-weight: 700; font-size: .9rem; }
+  .swim-step:last-child::after { content: ''; }
+  .swim-step .s-action { font-weight: 600; color: var(--text); display: block; margin-bottom: .2rem; }
+  .swim-step .s-detail { color: var(--text-muted); font-size: .75rem; }
+  .swim-step .s-touch { display: inline-block; margin-top: .25rem; font-size: .68rem; padding: .1rem .4rem; border-radius: 4px; font-weight: 600; }
+  .tp-web { background: rgba(37,99,235,.1); color: var(--info); }
+  .tp-app { background: rgba(88,80,236,.1); color: #5850ec; }
+  .tp-msg { background: rgba(5,104,57,.1); color: var(--primary); }
+  .tp-api { background: rgba(217,119,6,.1); color: var(--orange); }
+  .tp-video { background: rgba(192,38,211,.1); color: var(--pink); }
+  .tp-sys { background: rgba(161,98,7,.1); color: var(--yellow); }
+
+  .emotion-bar { display: flex; gap: 0; margin: .75rem 0 1.5rem; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+  .emo-seg { padding: .35rem .6rem; font-size: .72rem; text-align: center; flex: 1; font-weight: 600; }
+  .emo-happy { background: rgba(22,163,74,.12); color: var(--green); }
+  .emo-neutral { background: rgba(161,98,7,.1); color: var(--yellow); }
+  .emo-anxious { background: rgba(217,119,6,.1); color: var(--orange); }
+  .emo-frustrated { background: rgba(220,38,38,.1); color: var(--red); }
+  .emo-relieved { background: rgba(37,99,235,.1); color: var(--info); }
+
+  .pain-points { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: .75rem; margin: 1rem 0; }
+  .pain-point { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--red); border-radius: 0 8px 8px 0; padding: .65rem 1rem; }
+  .pain-point strong { color: var(--orange); font-size: .85rem; }
+  .pain-point p { font-size: .8rem; color: var(--text-muted); margin-top: .2rem; }
+  .opp-point { border-left-color: var(--primary); }
+  .opp-point strong { color: var(--primary); }
+
+  @media (max-width: 700px) {
+    .swimlane { grid-template-columns: 1fr; }
+    .swim-phase { border-right: 1px solid var(--border); border-bottom: none; }
+    .swim-steps { flex-direction: column; }
+    .swim-step { max-width: 100%; }
+    .swim-step::after { content: '↓'; right: auto; bottom: -.7rem; top: auto; left: 50%; transform: translateX(-50%); }
+    .pain-points { grid-template-columns: 1fr; }
+  }
+
+  footer { text-align: center; color: var(--text-muted); padding: 2rem 0; font-size: .8rem; border-top: 1px solid var(--border); margin-top: 3rem; }
+
+  @media (max-width: 700px) {
+    .card-grid { grid-template-columns: 1fr; }
+    .spec-box { grid-template-columns: 1fr; }
+    .spec-box dt { border-right: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<header>
+  <div class="container">
+    <h1><span>MOPH-Meet Lite</span> — Infrastructure Architecture</h1>
+    <p>core-lite + user-app-lite + Jitsi Meet &nbsp;·&nbsp; Nginx LB &nbsp;·&nbsp; Cloudflare CDN</p>
+    <p style="margin-top:.4rem"><span class="badge" style="background:rgba(255,255,255,.2);color:#fff;">v1.0</span> <span class="badge" style="background:rgba(255,238,83,.25);color:#ffee53;">March 2026</span></p>
+  </div>
+</header>
+
+<div class="container">
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>1 &nbsp; System Overview</h2>
+  <div class="card-grid">
+    <div class="card">
+      <h3>core-lite <span class="badge b-blue">Port 3500</span></h3>
+      <p>Lightweight Express.js API server. No TypeScript build step. Handles authentication (ProviderID OAuth2), room/exam management, patient queue, JWT issuance, and guest tokens.</p>
+      <ul>
+        <li>Session &amp; token store → <strong>SQLite</strong> (better-sqlite3, disk-backed)</li>
+        <li>Room store → <strong>SQLite</strong> (rooms.db, lazy TTL expiry)</li>
+        <li>Auth → SHA-256 token + static API key whitelist</li>
+        <li>External deps → <code>moph.id.th</code>, <code>provider.id.th</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>user-app-lite <span class="badge b-green">Port 3001</span></h3>
+      <p>Express.js + EJS server-side rendered web app. Proxies all data through core-lite. Provides dashboards, meeting rooms (Jitsi embed), exam rooms with patient queue, and AI summary upload.</p>
+      <ul>
+        <li>View engine → <strong>EJS</strong> templates (login, dashboard, meet, queue)</li>
+        <li>Session → <code>express-session</code> (in-memory, cookie 24 h)</li>
+        <li>File uploads → <code>multer</code> (memory storage, 2 GB limit)</li>
+        <li>Static assets → <code>/public</code> (CSS, JS, images)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Jitsi Meet <span class="badge b-pink">moph-meetingroom.moph.go.th</span></h3>
+      <p>Self-hosted Jitsi Meet platform providing WebRTC video/audio conferencing. Branded as "MOPH Meet". Embedded into user-app-lite views via <code>JitsiMeetExternalAPI</code> iframe. Containerized with Docker (Nginx-Alpine).</p>
+      <ul>
+        <li>Frontend → Custom Jitsi Meet Web (nginx-alpine container, port 80/443)</li>
+        <li>Signaling → <strong>Prosody</strong> XMPP server (BOSH <code>/http-bind</code> + WebSocket <code>/xmpp-websocket</code>)</li>
+        <li>Media → <strong>Jitsi Videobridge (JVB)</strong> — WebRTC SFU, UDP :10000</li>
+        <li>NAT → <strong>TURN/STUN</strong> coturn server (ports 3478, 5349)</li>
+        <li>Plugins → 60+ custom Prosody modules (lobby, polls, breakout rooms, etc.)</li>
+        <li>Assets → CSS, fonts (Oleo Script), sounds, lang (50+ locales), virtual backgrounds</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>2 &nbsp; Infrastructure Diagram</h2>
+  <div class="arch">
+
+    <!-- ── Layer 1: Internet / Users ── -->
+    <div class="arch-layer layer-internet">
+      <div class="arch-layer-label">Internet / Users</div>
+      <div class="arch-nodes">
+        <div class="arch-node">
+          <span class="node-icon">🩺</span>
+          <span class="node-name">Doctor</span>
+          <span class="node-desc">Browser (Desktop/Mobile)</span>
+        </div>
+        <div class="arch-node">
+          <span class="node-icon">🧑‍🦳</span>
+          <span class="node-name">Patient</span>
+          <span class="node-desc">Mobile Browser</span>
+        </div>
+        <div class="arch-node">
+          <span class="node-icon">🏢</span>
+          <span class="node-name">3rd-Party HIS</span>
+          <span class="node-desc">REST API Client</span>
+        </div>
+        <div class="arch-node">
+          <span class="node-icon">🔐</span>
+          <span class="node-name">moph.id.th</span>
+          <span class="node-desc">ProviderID IdP (OAuth2)</span>
+        </div>
+        <div class="arch-node">
+          <span class="node-icon">🪪</span>
+          <span class="node-name">provider.id.th</span>
+          <span class="node-desc">Provider Service API</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arch-arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head">▼</div>
+      <div class="arrow-label">HTTPS :443</div>
+    </div>
+
+    <!-- ── Layer 2: Cloudflare ── -->
+    <div class="arch-layer layer-cf">
+      <div class="arch-layer-label">☁️ Cloudflare CDN / WAF</div>
+      <div class="arch-nodes" style="flex-wrap:wrap;">
+        <div class="arch-node" style="border-color:rgba(217,119,6,.3);">
+          <span class="node-icon">🌐</span>
+          <span class="node-name">DNS Proxy</span>
+          <span class="node-desc">Orange-cloud, hide origin IP</span>
+        </div>
+        <div class="arch-node" style="border-color:rgba(217,119,6,.3);">
+          <span class="node-icon">🛡️</span>
+          <span class="node-name">WAF + DDoS</span>
+          <span class="node-desc">OWASP rules, rate limiting</span>
+        </div>
+        <div class="arch-node" style="border-color:rgba(217,119,6,.3);">
+          <span class="node-icon">🔒</span>
+          <span class="node-name">SSL Termination</span>
+          <span class="node-desc">Edge cert → Full (Strict)</span>
+        </div>
+        <div class="arch-node" style="border-color:rgba(217,119,6,.3);">
+          <span class="node-icon">⚡</span>
+          <span class="node-name">Cache + Compress</span>
+          <span class="node-desc">Static assets, Brotli, HTTP/2</span>
+        </div>
+      </div>
+      <p style="text-align:center; margin-top:.6rem; font-size:.75rem; color:var(--text-muted);">DNS: <code>moph-meet.moph.go.th</code> + <code>moph-meetingroom.moph.go.th</code> → Cloudflare Edge → Origin pull</p>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arch-arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head">▼</div>
+      <div class="arrow-label">Origin pull → server IP</div>
+    </div>
+
+    <!-- ── Layer 3: Server ── -->
+    <div class="arch-layer layer-server">
+      <div class="arch-layer-label">🖥️ Server (Single VM)</div>
+
+      <!-- Nginx -->
+      <div class="arch-box box-nginx" style="max-width:100%; margin-bottom:.75rem;">
+        <div class="box-header">
+          <span class="node-icon">⚙️</span> NGINX — Reverse Proxy / Load Balancer
+          <span class="badge b-purple" style="margin-left:auto;">listen :80 / :443</span>
+        </div>
+        <div class="nginx-routes">
+          <span class="nr-loc"><code>/api/*</code></span>
+          <span class="nr-arrow">→</span>
+          <span class="nr-target">upstream <strong>core-lite</strong> <code>127.0.0.1:3500</code></span>
+          <span class="nr-loc"><code>/*</code></span>
+          <span class="nr-arrow">→</span>
+          <span class="nr-target">upstream <strong>user-app-lite</strong> <code>127.0.0.1:3001</code></span>
+        </div>
+        <p style="font-size:.72rem; color:var(--text-muted); margin-top:.5rem; border-top:1px dashed var(--border); padding-top:.4rem;">
+          <span style="color:var(--pink); font-weight:700;">📹 moph-meetingroom.moph.go.th</span> — separate Nginx vhost / Jitsi server (HTTPS :443, JVB UDP :10000)
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.4rem; font-size:.72rem; color:var(--text-muted);">
+          <span>• <code>X-Real-IP</code> / <code>X-Forwarded-For</code></span>
+          <span>• <code>client_max_body_size 2G</code></span>
+          <span>• <code>proxy_read_timeout 300s</code></span>
+        </div>
+      </div>
+
+      <!-- Two service boxes -->
+      <div class="arch-inner">
+        <div class="arch-box box-core">
+          <div class="box-header">
+            <span class="node-icon">🔷</span> core-lite
+            <span class="node-port b-blue">:3500</span>
+          </div>
+          <ul>
+            <li>Express.js REST API</li>
+            <li>Auth: ProviderID OAuth2</li>
+            <li>JWT issuance &amp; verify</li>
+            <li>Room &amp; exam management</li>
+            <li>Patient queue engine</li>
+            <li>Static API key whitelist</li>
+          </ul>
+          <div style="margin-top:.6rem; border-top:1px solid var(--border); padding-top:.5rem;">
+            <div style="font-size:.72rem; font-weight:700; color:var(--yellow); margin-bottom:.3rem;">💾 SQLite (disk-backed)</div>
+            <div style="display:flex; gap:.4rem;">
+              <span class="badge b-yellow" style="font-size:.65rem;">sessions.db</span>
+              <span class="badge b-yellow" style="font-size:.65rem;">rooms.db</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-box box-app">
+          <div class="box-header">
+            <span class="node-icon">🟢</span> user-app-lite
+            <span class="node-port b-green">:3001</span>
+          </div>
+          <ul>
+            <li>Express.js + EJS (SSR)</li>
+            <li>Proxies API to core-lite</li>
+            <li>Session: express-session</li>
+            <li>File upload: multer (2 GB)</li>
+          </ul>
+          <div style="margin-top:.6rem; border-top:1px solid var(--border); padding-top:.5rem;">
+            <div style="font-size:.72rem; font-weight:700; color:var(--accent2); margin-bottom:.3rem;">📄 EJS Views</div>
+            <div style="display:flex; flex-wrap:wrap; gap:.3rem;">
+              <span class="badge b-purple" style="font-size:.65rem;">login.ejs</span>
+              <span class="badge b-purple" style="font-size:.65rem;">dashboard.ejs</span>
+              <span class="badge b-purple" style="font-size:.65rem;">meet.ejs</span>
+              <span class="badge b-purple" style="font-size:.65rem;">queue.ejs</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-box box-jitsi" style="border-color:rgba(192,38,211,.3);">
+          <div class="box-header" style="color:var(--pink);">
+            <span class="node-icon">📹</span> Jitsi Meet
+            <span class="node-port b-pink">:443 / :10000</span>
+          </div>
+          <ul style="font-size:.78rem;">
+            <li style="color:var(--text-muted); position:relative; padding:.2rem 0 .2rem .9rem;">Nginx-Alpine (static frontend)</li>
+            <li style="color:var(--text-muted); position:relative; padding:.2rem 0 .2rem .9rem;">Prosody XMPP (signaling)</li>
+            <li style="color:var(--text-muted); position:relative; padding:.2rem 0 .2rem .9rem;">JVB — WebRTC SFU (UDP :10000)</li>
+            <li style="color:var(--text-muted); position:relative; padding:.2rem 0 .2rem .9rem;">TURN/STUN coturn (:3478/:5349)</li>
+            <li style="color:var(--text-muted); position:relative; padding:.2rem 0 .2rem .9rem;">external_api.js → iframe embed</li>
+          </ul>
+          <div style="margin-top:.6rem; border-top:1px solid var(--border); padding-top:.5rem;">
+            <div style="font-size:.72rem; font-weight:700; color:var(--pink); margin-bottom:.3rem;">🌐 moph-meetingroom.moph.go.th</div>
+            <div style="display:flex; flex-wrap:wrap; gap:.3rem;">
+              <span class="badge b-pink" style="font-size:.65rem;">/http-bind</span>
+              <span class="badge b-pink" style="font-size:.65rem;">/xmpp-websocket</span>
+              <span class="badge b-pink" style="font-size:.65rem;">/external_api.js</span>
+              <span class="badge b-pink" style="font-size:.65rem;">/{room}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data + External in a row -->
+      <div class="arch-inner" style="margin-top:.75rem;">
+        <div class="arch-box box-data">
+          <div class="box-header">
+            <span class="node-icon">📁</span> Data Directory <code>/data/</code>
+          </div>
+          <ul>
+            <li><code>sessions.db</code> — auth tokens (24h TTL)</li>
+            <li><code>rooms.db</code> — meeting rooms (24h TTL)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arch-arrow">
+      <div class="arrow-line"></div>
+      <div class="arrow-head">▼</div>
+      <div class="arrow-label">Outbound calls</div>
+    </div>
+
+    <!-- ── Layer 4: External Services ── -->
+    <div class="arch-layer layer-ext">
+      <div class="arch-layer-label">🔗 External Service Calls</div>
+      <div style="display:flex; flex-direction:column; gap:.2rem;">
+        <div class="arch-conn conn-core"><strong>core-lite</strong>&nbsp; → &nbsp;<code>moph.id.th</code>&nbsp; <span style="color:var(--text-muted);">(OAuth token exchange)</span></div>
+        <div class="arch-conn conn-core"><strong>core-lite</strong>&nbsp; → &nbsp;<code>provider.id.th</code>&nbsp; <span style="color:var(--text-muted);">(Provider profile API)</span></div>
+        <div class="arch-conn conn-app"><strong>user-app-lite</strong>&nbsp; → &nbsp;<code>Jitsi Meet</code>&nbsp; <span style="color:var(--text-muted);">(Video call iframe)</span></div>
+        <div class="arch-conn conn-app"><strong>user-app-lite</strong>&nbsp; → &nbsp;<code>AI Summary (ABS)</code>&nbsp; <span style="color:var(--text-muted);">(Video transcription)</span></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>3 &nbsp; Request Flow Diagrams</h2>
+
+  <!-- ── 3.1 Doctor Login ── -->
+  <h3>3.1 &nbsp; Doctor Login (ProviderID OAuth2)</h3>
+  <div class="flow">
+    <div class="flow-step">Doctor opens <code>https://moph-meet.moph.go.th/login</code> → Cloudflare → Nginx → <strong>user-app-lite</strong> serves <code>login.ejs</code></div>
+    <div class="flow-step">Doctor clicks "Login with ProviderID" → browser redirects to <code>moph.id.th</code> OAuth2 authorize URL with <code>client_id</code> + <code>redirect_uri</code></div>
+    <div class="flow-step">After credentials, <code>moph.id.th</code> redirects back to <code>/auth/providerid/callback?code=XXXX</code> → Cloudflare → Nginx → <strong>user-app-lite</strong></div>
+    <div class="flow-step"><strong>user-app-lite</strong> calls <code>CORE_BASE/api/auth/providerID</code> (direct, bypassing Nginx/internet) with the OAuth code</div>
+    <div class="flow-step"><strong>core-lite</strong> exchanges code → <code>moph.id.th/api/v1/token</code> → gets HealthID access_token</div>
+    <div class="flow-step"><strong>core-lite</strong> exchanges HealthID token → <code>provider.id.th/api/v1/services/token</code> → gets Provider service token</div>
+    <div class="flow-step"><strong>core-lite</strong> fetches profile from <code>provider.id.th/api/v1/services/profile</code></div>
+    <div class="flow-step"><strong>core-lite</strong> creates SHA-256 session token, stores user in <code>sessions.db</code> (SQLite), returns token + user to user-app-lite</div>
+    <div class="flow-step"><strong>user-app-lite</strong> saves token + user in <code>express-session</code> cookie, redirects doctor to <code>/</code> (dashboard)</div>
+  </div>
+
+  <!-- ── 3.2 Create Exam Room ── -->
+  <h3>3.2 &nbsp; Create Exam Room &amp; Patient Invite</h3>
+  <div class="flow">
+    <div class="flow-step">Doctor clicks "สร้างห้องตรวจ" on dashboard → <code>POST /api/rooms</code> with <code>{"type":"exam"}</code></div>
+    <div class="flow-step"><strong>user-app-lite</strong> proxies to <code>CORE_BASE/api/rooms</code> with Bearer token</div>
+    <div class="flow-step"><strong>core-lite</strong> generates room ID (SHA-256 truncated to 12 chars), creates room object, stores in <code>rooms.db</code></div>
+    <div class="flow-step"><strong>core-lite</strong> mints a patient JWT (8 h TTL) with roomId + role:patient, returns <code>patientJoinUrl = /queue/:id?jwt=TOKEN</code></div>
+    <div class="flow-step">Doctor generates invite link via <code>POST /api/exam/:id/invite</code> with patient name → returns shareable URL</div>
+    <div class="flow-step">Doctor shares link (LINE, SMS, etc.) → patient opens link in browser</div>
+  </div>
+
+  <!-- ── 3.3 Patient Queue ── -->
+  <h3>3.3 &nbsp; Patient Queue &amp; Video Call Flow</h3>
+  <div class="flow">
+    <div class="flow-step">Patient opens <code>/queue/:id?jwt=TOKEN</code> → Cloudflare → Nginx → <strong>user-app-lite</strong></div>
+    <div class="flow-step"><strong>user-app-lite</strong> verifies JWT via <code>POST CORE_BASE/api/jwt/verify</code>, renders <code>queue.ejs</code> waiting room</div>
+    <div class="flow-step">Patient's browser polls <code>GET /api/exam/:id/queue?jwt=TOKEN</code> every few seconds → proxied to <strong>core-lite</strong></div>
+    <div class="flow-step">Patient is auto-registered in room queue on first poll (status: <code>waiting</code>)</div>
+    <div class="flow-step">Doctor clicks "เรียกคนไข้ถัดไป" → <code>POST /api/exam/:id/next</code> → core-lite admits next patient (status: <code>admitted</code>)</div>
+    <div class="flow-step">Patient's next poll returns <code>status: admitted</code> → browser redirects to Jitsi Meet room (embedded iframe on <code>MEETING_DOMAIN</code>)</div>
+    <div class="flow-step">Video call runs via external Jitsi server; optional recording uploads video to AI Summary service (ABS) for transcription</div>
+  </div>
+
+  <!-- ── 3.4 Reserved Room (3rd-Party HIS) ── -->
+  <h3>3.4 &nbsp; Reserved Room (3rd-Party HIS Integration)</h3>
+  <div class="flow">
+    <div class="flow-step">External HIS/EMR calls <code>POST /api/meet/reserved</code> with <code>{startTime, endTime, cid, displayName}</code> (no auth required)</div>
+    <div class="flow-step"><strong>core-lite</strong> creates exam room, mints doctor session token + patient JWT, returns <code>{sessionID, meet: doctorURL, patientJoinUrl}</code></div>
+    <div class="flow-step">HIS sends <code>meet</code> URL to doctor app, <code>patientJoinUrl</code> to patient via SMS/LINE</div>
+    <div class="flow-step">Doctor opens URL with <code>?token=</code> → auto-session created via <code>autoSessionFromToken</code> middleware → enters exam room</div>
+    <div class="flow-step">HIS can also call <code>POST /api/meet/reserved/token</code> to generate additional patient invite links</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>4 &nbsp; Customer Journey Maps</h2>
+  <p style="color:var(--text-muted); margin-bottom:1.5rem;">End-to-end experience for each persona — from first touchpoint to task completion. Includes emotional states, pain points, and opportunities.</p>
+
+  <!-- ── Journey A: Doctor (ProviderID) ─────────────────────────────────────── -->
+  <div class="journey">
+    <div class="journey-title">
+      <div class="persona-icon" style="background:rgba(5,104,57,.12); color:var(--accent2);">🩺</div>
+      <div>
+        <h4>Journey A — แพทย์ / บุคลากร (Doctor / Staff)</h4>
+        <p>เข้าสู่ระบบด้วย ProviderID → สร้างห้องตรวจ → เชิญคนไข้ → ตรวจผ่าน Video Call → สรุปผล AI</p>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">🔍 Awareness</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">ได้รับลิงก์ระบบ</span>
+          <span class="s-detail">จากผู้ดูแลระบบ หรือ รพ.</span>
+          <span class="s-touch tp-msg">📩 Email / LINE</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เปิดเว็บ MOPH-Meet</span>
+          <span class="s-detail">moph-meet.moph.go.th</span>
+          <span class="s-touch tp-web">🌐 Browser</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">🔐 Login</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">หน้า Login</span>
+          <span class="s-detail">เห็นปุ่ม ProviderID</span>
+          <span class="s-touch tp-web">🌐 login.ejs</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">Redirect → moph.id.th</span>
+          <span class="s-detail">กรอก username/password</span>
+          <span class="s-touch tp-web">🌐 ProviderID IdP</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">Callback + สร้าง Session</span>
+          <span class="s-detail">OAuth code exchange → token</span>
+          <span class="s-touch tp-sys">⚙️ Auto</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เข้าหน้า Dashboard</span>
+          <span class="s-detail">เห็นรายการห้องของตัวเอง</span>
+          <span class="s-touch tp-web">🌐 dashboard.ejs</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">🏥 สร้างห้อง</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">กดสร้างห้องตรวจ</span>
+          <span class="s-detail">เลือก type: exam</span>
+          <span class="s-touch tp-web">🌐 Dashboard</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">ระบบสร้างห้อง</span>
+          <span class="s-detail">Room ID + ชื่ออัตโนมัติ</span>
+          <span class="s-touch tp-sys">⚙️ core-lite</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">ได้ลิงก์เชิญคนไข้</span>
+          <span class="s-detail">/queue/:id?jwt=TOKEN</span>
+          <span class="s-touch tp-web">🌐 Dashboard</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">📨 เชิญคนไข้</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">กดเชิญ + ใส่ชื่อ</span>
+          <span class="s-detail">สร้างลิงก์เฉพาะคนไข้</span>
+          <span class="s-touch tp-web">🌐 meet.ejs</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">ส่งลิงก์ให้คนไข้</span>
+          <span class="s-detail">ผ่าน LINE / SMS / QR</span>
+          <span class="s-touch tp-msg">📩 LINE / SMS</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">📹 ตรวจรักษา</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">รอคนไข้เข้าคิว</span>
+          <span class="s-detail">เห็นจำนวนคิว real-time</span>
+          <span class="s-touch tp-web">🌐 meet.ejs</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">กด "เรียกคนไข้"</span>
+          <span class="s-detail">POST /api/exam/:id/next</span>
+          <span class="s-touch tp-web">🌐 meet.ejs</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">Video Call กับคนไข้</span>
+          <span class="s-detail">Jitsi Meet iframe</span>
+          <span class="s-touch tp-video">📹 Jitsi</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">บันทึกวิดีโอ (ถ้าเปิด)</span>
+          <span class="s-detail">Upload → ABS AI Server</span>
+          <span class="s-touch tp-api">🤖 AI Summary</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">✅ จบงาน</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">เรียกคนไข้ถัดไป / จบ</span>
+          <span class="s-detail">ห้องหมดอายุ 24 ชม.</span>
+          <span class="s-touch tp-web">🌐 meet.ejs</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">ออกจากระบบ</span>
+          <span class="s-detail">POST /logout</span>
+          <span class="s-touch tp-web">🌐 Dashboard</span>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-weight:600; margin: .75rem 0 .25rem; color:var(--text-muted); font-size:.82rem;">EMOTIONAL STATE</p>
+    <div class="emotion-bar">
+      <div class="emo-seg emo-neutral">🤔 ลองดู</div>
+      <div class="emo-seg emo-anxious">😟 OAuth ช้า?</div>
+      <div class="emo-seg emo-happy">😊 เข้าได้แล้ว</div>
+      <div class="emo-seg emo-happy">😊 ง่ายดี</div>
+      <div class="emo-seg emo-happy">😊 สะดวก</div>
+      <div class="emo-seg emo-relieved">😌 เสร็จแล้ว</div>
+    </div>
+  </div>
+
+  <!-- ── Journey B: Patient (via invite link) ──────────────────────────────── -->
+  <div class="journey">
+    <div class="journey-title">
+      <div class="persona-icon" style="background:rgba(22,163,74,.12); color:var(--green);">🧑‍🦳</div>
+      <div>
+        <h4>Journey B — ผู้ป่วย / คนไข้ (Patient via Invite Link)</h4>
+        <p>ได้รับลิงก์ผ่าน LINE/SMS → เข้าห้องรอ → รอคิว → พบแพทย์ผ่าน Video Call</p>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">📩 ได้รับลิงก์</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">ได้รับ Link จากแพทย์</span>
+          <span class="s-detail">ผ่าน LINE / SMS / QR Code</span>
+          <span class="s-touch tp-msg">📩 LINE / SMS</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">กดลิงก์เปิด Browser</span>
+          <span class="s-detail">ไม่ต้องติดตั้ง App</span>
+          <span class="s-touch tp-web">🌐 Mobile Browser</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">🔐 ยืนยันตัว</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">JWT ถูก verify อัตโนมัติ</span>
+          <span class="s-detail">ไม่ต้อง login / ใส่รหัส</span>
+          <span class="s-touch tp-sys">⚙️ Auto JWT</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เข้าหน้ารอคิว</span>
+          <span class="s-detail">เห็นชื่อแพทย์ + ชื่อห้อง</span>
+          <span class="s-touch tp-web">🌐 queue.ejs</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">⏳ รอคิว</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">ลงทะเบียนในคิว</span>
+          <span class="s-detail">Auto-register on first poll</span>
+          <span class="s-touch tp-sys">⚙️ Auto</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เห็นลำดับคิว</span>
+          <span class="s-detail">"คุณคือคิวที่ 3 จาก 5"</span>
+          <span class="s-touch tp-web">🌐 queue.ejs</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">รอแพทย์เรียก</span>
+          <span class="s-detail">Polling ทุก 3-5 วินาที</span>
+          <span class="s-touch tp-web">🌐 queue.ejs</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">📹 พบแพทย์</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">ได้รับเรียก (admitted)</span>
+          <span class="s-detail">Status เปลี่ยนจาก waiting</span>
+          <span class="s-touch tp-sys">⚙️ Auto redirect</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เข้า Video Call</span>
+          <span class="s-detail">Jitsi Meet เปิดอัตโนมัติ</span>
+          <span class="s-touch tp-video">📹 Jitsi</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">พูดคุยกับแพทย์</span>
+          <span class="s-detail">เสียง + วิดีโอ + แชท</span>
+          <span class="s-touch tp-video">📹 Jitsi</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">✅ จบการตรวจ</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">แพทย์จบ Video Call</span>
+          <span class="s-detail">ห้องตรวจปิด</span>
+          <span class="s-touch tp-video">📹 Jitsi</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">ปิด Browser</span>
+          <span class="s-detail">ไม่ต้องทำอะไรเพิ่ม</span>
+          <span class="s-touch tp-web">🌐 Browser</span>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-weight:600; margin: .75rem 0 .25rem; color:var(--text-muted); font-size:.82rem;">EMOTIONAL STATE</p>
+    <div class="emotion-bar">
+      <div class="emo-seg emo-neutral">🤔 ลิงก์อะไร?</div>
+      <div class="emo-seg emo-happy">😊 ไม่ต้อง login</div>
+      <div class="emo-seg emo-anxious">😟 รออีกนาน?</div>
+      <div class="emo-seg emo-happy">😊 ได้เรียกแล้ว!</div>
+      <div class="emo-seg emo-relieved">😌 เสร็จแล้ว</div>
+    </div>
+  </div>
+
+  <!-- ── Journey C: 3rd-Party HIS ──────────────────────────────────────────── -->
+  <div class="journey">
+    <div class="journey-title">
+      <div class="persona-icon" style="background:rgba(217,119,6,.12); color:var(--orange);">🏢</div>
+      <div>
+        <h4>Journey C — ระบบ HIS / EMR ภายนอก (3rd-Party Integration)</h4>
+        <p>ระบบนัดหมายเรียก API สร้างห้อง → ส่งลิงก์แพทย์ + คนไข้ → แพทย์เข้าห้องอัตโนมัติ</p>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">🔗 API Call</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">HIS สร้างนัดหมาย</span>
+          <span class="s-detail">มีข้อมูล แพทย์ + คนไข้</span>
+          <span class="s-touch tp-api">⚡ HIS System</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">POST /api/meet/reserved</span>
+          <span class="s-detail">{cid, displayName, startTime, endTime}</span>
+          <span class="s-touch tp-api">⚡ REST API</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">รับ Response</span>
+          <span class="s-detail">sessionID + doctorURL + patientURL</span>
+          <span class="s-touch tp-api">⚡ JSON</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">📨 แจ้งเตือน</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">ส่ง URL แพทย์</span>
+          <span class="s-detail">doctor URL with ?token=</span>
+          <span class="s-touch tp-msg">📩 Notification</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">ส่ง URL คนไข้</span>
+          <span class="s-detail">patientJoinUrl via SMS/LINE</span>
+          <span class="s-touch tp-msg">📩 SMS / LINE</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เพิ่มคนไข้ (ถ้ามีหลายคน)</span>
+          <span class="s-detail">POST /api/meet/reserved/token</span>
+          <span class="s-touch tp-api">⚡ REST API</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">🩺 แพทย์เข้า</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">แพทย์กดลิงก์</span>
+          <span class="s-detail">?token= auto-login</span>
+          <span class="s-touch tp-web">🌐 Browser</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">autoSessionFromToken</span>
+          <span class="s-detail">สร้าง session อัตโนมัติ</span>
+          <span class="s-touch tp-sys">⚙️ Middleware</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เข้าห้องตรวจ</span>
+          <span class="s-detail">/exam/:id พร้อมใช้งาน</span>
+          <span class="s-touch tp-web">🌐 meet.ejs</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="swimlane">
+      <div class="swim-phase">🧑‍🦳 คนไข้เข้า</div>
+      <div class="swim-steps">
+        <div class="swim-step">
+          <span class="s-action">คนไข้กดลิงก์</span>
+          <span class="s-detail">/queue/:id?jwt=TOKEN</span>
+          <span class="s-touch tp-web">🌐 Mobile Browser</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">เข้าคิวรอ</span>
+          <span class="s-detail">เหมือน Journey B</span>
+          <span class="s-touch tp-web">🌐 queue.ejs</span>
+        </div>
+        <div class="swim-step">
+          <span class="s-action">พบแพทย์ผ่าน Video</span>
+          <span class="s-detail">Jitsi Meet</span>
+          <span class="s-touch tp-video">📹 Jitsi</span>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-weight:600; margin: .75rem 0 .25rem; color:var(--text-muted); font-size:.82rem;">INTEGRATION COMPLEXITY</p>
+    <div class="emotion-bar">
+      <div class="emo-seg emo-happy">✅ 1 API Call</div>
+      <div class="emo-seg emo-happy">✅ Auto dispatch</div>
+      <div class="emo-seg emo-happy">✅ No login needed</div>
+      <div class="emo-seg emo-relieved">✅ Standard flow</div>
+    </div>
+  </div>
+
+  <!-- ── Pain Points & Opportunities ──────────────────────────────────────── -->
+  <h3>Pain Points &amp; Opportunities</h3>
+  <div class="pain-points">
+    <div class="pain-point">
+      <strong>🔴 ProviderID OAuth ช้า</strong>
+      <p>Token exchange ผ่าน moph.id.th → provider.id.th ใช้เวลา 3-8 วินาที อาจ timeout ถ้า network ช้า</p>
+    </div>
+    <div class="pain-point">
+      <strong>🔴 Polling ทำให้รอนาน</strong>
+      <p>คนไข้ต้อง poll ทุก 3-5 วินาที ทำให้มี delay ไม่เกิน 5 วิ ก่อนรู้ว่าถูกเรียก เสี่ยงปิดหน้าจอระหว่างรอ</p>
+    </div>
+    <div class="pain-point">
+      <strong>🔴 ไม่มีแจ้งเตือน Push</strong>
+      <p>ถ้าคนไข้ปิด browser หรือ lock จอมือถือ จะไม่ได้รับการแจ้งเตือนเมื่อถึงคิว</p>
+    </div>
+    <div class="pain-point">
+      <strong>🔴 ลิงก์หมดอายุ 8 ชม.</strong>
+      <p>JWT มี TTL 8 ชม. ถ้านัดล่วงหน้าข้ามวัน ลิงก์จะหมดอายุก่อนวันนัด</p>
+    </div>
+    <div class="pain-point opp-point">
+      <strong>💡 WebSocket / SSE แทน Polling</strong>
+      <p>ลด latency เรียกคนไข้เหลือ < 1 วินาที ลด network traffic 90%</p>
+    </div>
+    <div class="pain-point opp-point">
+      <strong>💡 Web Push Notification</strong>
+      <p>แจ้งเตือนคนไข้แม้ปิดหน้าจอ ใช้ Service Worker + pwa-worker.js ที่มีอยู่แล้ว</p>
+    </div>
+    <div class="pain-point opp-point">
+      <strong>💡 QR Code Inline</strong>
+      <p>แสดง QR ในหน้าแพทย์ให้คนไข้สแกนเลย ไม่ต้องส่ง link ทาง LINE/SMS</p>
+    </div>
+    <div class="pain-point opp-point">
+      <strong>💡 Appointment-Based Token TTL</strong>
+      <p>ผูก JWT expiry กับเวลานัดหมาย (startTime) แทนค่า 8 ชม. คงที่</p>
+    </div>
+  </div>
+
+  <!-- ── Journey Summary Table ────────────────────────────────────────────── -->
+  <h3>Journey Comparison Summary</h3>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Attribute</th>
+          <th>🩺 Doctor</th>
+          <th>🧑‍🦳 Patient</th>
+          <th>🏢 3rd-Party HIS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Authentication</td><td>ProviderID OAuth2 (3-step)</td><td>JWT via URL (zero-click)</td><td>None (open API)</td></tr>
+        <tr><td>Login Required</td><td><span class="badge b-orange">Yes</span></td><td><span class="badge b-green">No</span></td><td><span class="badge b-green">No</span></td></tr>
+        <tr><td>Install App</td><td><span class="badge b-green">No (web)</span></td><td><span class="badge b-green">No (web)</span></td><td><span class="badge b-blue">N/A</span></td></tr>
+        <tr><td>Steps to Video Call</td><td>5 steps</td><td>3 steps</td><td>1 API call + link open</td></tr>
+        <tr><td>Time to First Action</td><td>~15-30 sec (OAuth)</td><td>~3-5 sec (link → queue)</td><td>~1-2 sec (API response)</td></tr>
+        <tr><td>Touchpoints</td><td>Browser, ProviderID IdP</td><td>LINE/SMS → Browser</td><td>REST API → SMS → Browser</td></tr>
+        <tr><td>Session Duration</td><td>24 hours (cookie)</td><td>8 hours (JWT)</td><td>Session per token</td></tr>
+        <tr><td>Pain Level</td><td><span class="badge b-yellow">Medium</span> (OAuth latency)</td><td><span class="badge b-green">Low</span> (simple flow)</td><td><span class="badge b-green">Low</span> (1 API call)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>5 &nbsp; Nginx Configuration</h2>
+  <div class="card">
+    <p>Nginx acts as a <strong>reverse proxy / load balancer</strong> in front of both services on the same server.</p>
+    <table>
+      <thead><tr><th>Location</th><th>Upstream</th><th>Target</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>/api/*</code></td><td>core-lite</td><td><code>127.0.0.1:3500</code></td><td>All REST API endpoints</td></tr>
+        <tr><td><code>/*</code></td><td>user-app-lite</td><td><code>127.0.0.1:3001</code></td><td>SSR pages + static assets</td></tr>
+      </tbody>
+    </table>
+    <h3>Key Nginx Headers</h3>
+    <ul>
+      <li><code>X-Real-IP</code> — real client IP (from Cloudflare)</li>
+      <li><code>X-Forwarded-For</code> — proxy chain</li>
+      <li><code>X-Forwarded-Proto</code> — original protocol (https)</li>
+      <li><code>Host</code> — original host header</li>
+    </ul>
+    <h3>Recommended Additional Directives</h3>
+    <ul>
+      <li><code>client_max_body_size 2g;</code> — support video uploads via multer</li>
+      <li><code>proxy_read_timeout 300s;</code> — long-running AI summary requests</li>
+      <li><code>proxy_buffering off;</code> — for real-time queue polling</li>
+      <li><code>set_real_ip_from 173.245.48.0/20; ...</code> — Cloudflare IP ranges for <code>$remote_addr</code></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>6 &nbsp; Cloudflare CDN Layer</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Feature</th><th>Setting</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>DNS Proxy</td><td>Proxied (orange cloud) ☁️</td><td>Hide origin IP, enable CDN</td></tr>
+        <tr><td>SSL Mode</td><td>Full (Strict)</td><td>End-to-end encryption; origin cert required</td></tr>
+        <tr><td>Cache Level</td><td>Standard</td><td>Cache <code>/public/**</code> static assets (CSS, JS, images)</td></tr>
+        <tr><td>Browser Cache TTL</td><td>4 hours</td><td>Reduce origin load for static content</td></tr>
+        <tr><td>Page Rule: /api/*</td><td>Cache Level: Bypass</td><td>Never cache API responses</td></tr>
+        <tr><td>Page Rule: /queue/*</td><td>Cache Level: Bypass</td><td>Never cache dynamic queue pages</td></tr>
+        <tr><td>WAF</td><td>OWASP Core Ruleset</td><td>Block SQL injection, XSS, etc.</td></tr>
+        <tr><td>Rate Limiting</td><td>100 req/min per IP on <code>/api/auth/*</code></td><td>Prevent brute force auth attempts</td></tr>
+        <tr><td>Bot Protection</td><td>Managed Challenge</td><td>Block automated abuse</td></tr>
+        <tr><td>WebSocket</td><td>Enabled</td><td>Future real-time features (if needed)</td></tr>
+        <tr><td>HTTP/2</td><td>Enabled</td><td>Multiplexed connections, header compression</td></tr>
+        <tr><td>Brotli</td><td>Enabled</td><td>Compress text responses (~20% smaller than gzip)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>7 &nbsp; API Endpoint Map</h2>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Method</th><th>Endpoint</th><th>Auth</th><th>Handler</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/health</code></td><td>None</td><td>core-lite</td><td>Health check</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/auth/providerID</code></td><td>None</td><td>core-lite</td><td>ProviderID OAuth2 code exchange</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/auth/guest</code></td><td>Token</td><td>core-lite</td><td>Guest/patient auth via pre-shared token</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/auth/check</code></td><td>Token</td><td>core-lite</td><td>Validate session token</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/logout</code></td><td>Token</td><td>core-lite</td><td>Destroy session</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/meets</code></td><td>Bearer</td><td>core-lite</td><td>List rooms for current user</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/rooms</code></td><td>Bearer</td><td>core-lite</td><td>Create meet or exam room</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/rooms/:id</code></td><td>Bearer</td><td>core-lite</td><td>Get room details + auto-join provider</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/rooms/:id/join</code></td><td>Bearer</td><td>core-lite</td><td>Explicitly join room as provider</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/exam/:id/queue</code></td><td>JWT query</td><td>core-lite</td><td>Patient queue poll (register + status)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/exam/:id/doctor</code></td><td>Bearer</td><td>core-lite</td><td>Doctor view of exam room</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/exam/:id/next</code></td><td>Bearer</td><td>core-lite</td><td>Admit next patient from queue</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/exam/:id/invite</code></td><td>Bearer</td><td>core-lite</td><td>Generate patient invite link</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/meet/reserved</code></td><td>None*</td><td>core-lite</td><td>3rd-party HIS creates pre-reserved room</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/meet/reserved/token</code></td><td>None*</td><td>core-lite</td><td>Generate patient link for reserved room</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/jwt/verify</code></td><td>None</td><td>core-lite</td><td>Verify patient JWT token</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/guest/token</code></td><td>None*</td><td>core-lite</td><td>Create guest invite token</td></tr>
+      </tbody>
+    </table>
+    <p style="color:var(--text-muted); font-size:.82rem;">* Open endpoints — intended for trusted 3rd-party systems. Should be restricted by IP whitelist or API key in production.</p>
+  </div>
+
+  <!-- Jitsi Meet paths -->
+  <h3>7.1 &nbsp; Jitsi Meet Paths — <code>moph-meetingroom.moph.go.th</code></h3>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Type</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--pink);">📹 Conference &amp; Signaling</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/{roomName}</code></td><td>Page</td><td>Join video conference room (main UI)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/http-bind</code></td><td>BOSH</td><td>XMPP-over-HTTP (Prosody BOSH endpoint)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/xmpp-websocket</code></td><td>WSS</td><td>XMPP-over-WebSocket (Prosody WS endpoint)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/colibri-ws/**</code></td><td>WSS</td><td>JVB Colibri WebSocket (bridge channel)</td></tr>
+
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--pink);">📦 JavaScript &amp; Config</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/external_api.js</code></td><td>JS</td><td>JitsiMeetExternalAPI — iframe embed SDK</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/external_api.min.js</code></td><td>JS</td><td>Minified external API (used by meet.ejs, queue.ejs)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/config.js</code></td><td>JS</td><td>Jitsi runtime configuration</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/interface_config.js</code></td><td>JS</td><td>UI configuration (APP_NAME: "MOPH Meet")</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/libs/lib-jitsi-meet.min.js</code></td><td>JS</td><td>Core Jitsi library (WebRTC, XMPP)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/libs/*.js</code></td><td>JS</td><td>App bundle, vendor chunks, analytics</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/pwa-worker.js</code></td><td>JS</td><td>Progressive Web App service worker</td></tr>
+
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--pink);">🎨 Static Assets</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/css/all.css</code></td><td>CSS</td><td>Jitsi Meet compiled stylesheet</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/fonts/*</code></td><td>Font</td><td>Oleo Script, icon fonts (icomoon)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/images/*</code></td><td>Image</td><td>Icons, logos, favicon, watermark</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/images/virtual-background/*</code></td><td>Image</td><td>Virtual background images</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/sounds/*</code></td><td>Audio</td><td>Notification sounds (join, leave, ring)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/lang/*</code></td><td>JSON</td><td>i18n language packs (50+ locales, Thai included)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/static/*</code></td><td>HTML</td><td>Close page, prejoin, offline, OAuth, whiteboard</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/manifest.json</code></td><td>JSON</td><td>PWA manifest (MOPH Meet)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/robots.txt</code></td><td>Text</td><td>Search engine directives</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>8 &nbsp; Limitations &amp; Constraints</h2>
+
+  <h3>🔴 Critical Limitations</h3>
+  <div class="card">
+    <div class="lim-item lim-crit">
+      <div class="lim-icon">!</div>
+      <div><strong>Single Server / No Horizontal Scaling</strong> — Both services run on one VM. SQLite (file-locked) prevents multi-instance deployment. A single server failure takes down the entire system. No auto-scaling under load spikes.</div>
+    </div>
+    <div class="lim-item lim-crit">
+      <div class="lim-icon">!</div>
+      <div><strong>In-Memory Sessions (user-app-lite)</strong> — <code>express-session</code> uses the default <code>MemoryStore</code>. Server restart loses all user sessions (doctors must re-login). Not suitable for clustered/PM2-cluster mode.</div>
+    </div>
+    <div class="lim-item lim-crit">
+      <div class="lim-icon">!</div>
+      <div><strong>SQLite Write Contention</strong> — Under heavy concurrent writes (many rooms created simultaneously), SQLite's single-writer lock can become a bottleneck, causing <code>SQLITE_BUSY</code> errors.</div>
+    </div>
+    <div class="lim-item lim-crit">
+      <div class="lim-icon">!</div>
+      <div><strong>Open API Endpoints</strong> — <code>/api/meet/reserved</code>, <code>/api/meet/reserved/token</code>, and <code>/api/guest/token</code> have no authentication. Any client can create rooms and mint patient tokens. Must add IP whitelist or API key gating.</div>
+    </div>
+    <div class="lim-item lim-crit">
+      <div class="lim-icon">!</div>
+      <div><strong>TLS Verification Disabled</strong> — <code>NODE_TLS_REJECT_UNAUTHORIZED=0</code> is set globally in core-lite, and user-app-lite uses an insecure HTTPS agent. Vulnerable to MITM attacks on outbound calls to government APIs.</div>
+    </div>
+  </div>
+
+  <h3>🟠 Operational Limitations</h3>
+  <div class="card">
+    <div class="lim-item lim-warn">
+      <div class="lim-icon">⚠</div>
+      <div><strong>No Database Backup / Replication</strong> — SQLite files (<code>sessions.db</code>, <code>rooms.db</code>) are the only data stores. No automated backup. Disk corruption = total data loss.</div>
+    </div>
+    <div class="lim-item lim-warn">
+      <div class="lim-icon">⚠</div>
+      <div><strong>Polling-Based Queue</strong> — Patient queue uses HTTP polling (client-side <code>setInterval</code>). Each patient generates ~10-20 requests/minute. With 100 patients waiting, this creates ~1,000-2,000 req/min of polling traffic.</div>
+    </div>
+    <div class="lim-item lim-warn">
+      <div class="lim-icon">⚠</div>
+      <div><strong>24-Hour Room TTL</strong> — All rooms auto-expire after 24 hours (lazy purge). No persistent history, audit trail, or meeting records beyond the TTL window.</div>
+    </div>
+    <div class="lim-item lim-warn">
+      <div class="lim-icon">⚠</div>
+      <div><strong>No Rate Limiting at App Level</strong> — No Express rate-limiter middleware. Must rely entirely on Cloudflare + Nginx for rate limiting. Internal calls (server-to-server) bypass these protections.</div>
+    </div>
+    <div class="lim-item lim-warn">
+      <div class="lim-icon">⚠</div>
+      <div><strong>Video Upload Size (2 GB)</strong> — multer's memory storage holds the entire video in RAM before forwarding. A 2 GB upload can spike memory usage significantly. Concurrent uploads may cause OOM.</div>
+    </div>
+    <div class="lim-item lim-warn">
+      <div class="lim-icon">⚠</div>
+      <div><strong>No Health Check Orchestration</strong> — No PM2, systemd watchdog, or container orchestration (K8s). If Node.js crashes, manual intervention is required to restart.</div>
+    </div>
+  </div>
+
+  <h3>🔵 Design Limitations</h3>
+  <div class="card">
+    <div class="lim-item lim-info">
+      <div class="lim-icon">ℹ</div>
+      <div><strong>No WebSocket / SSE</strong> — Real-time updates (queue status, room events) require polling. Adds latency (poll interval) and unnecessary network traffic.</div>
+    </div>
+    <div class="lim-item lim-info">
+      <div class="lim-icon">ℹ</div>
+      <div><strong>SSR Only (EJS)</strong> — No SPA framework, no client-side routing. Every navigation is a full page reload. Limited interactivity compared to Vue/React SPA.</div>
+    </div>
+    <div class="lim-item lim-info">
+      <div class="lim-icon">ℹ</div>
+      <div><strong>Hardcoded API Keys</strong> — Static API key whitelist in <code>auth.js</code> middleware. No rotation mechanism, no per-client scoping.</div>
+    </div>
+    <div class="lim-item lim-info">
+      <div class="lim-icon">ℹ</div>
+      <div><strong>No Logging / Monitoring Stack</strong> — Only <code>console.log</code> output. No structured logging (JSON), no log aggregation, no APM, no alerting.</div>
+    </div>
+    <div class="lim-item lim-info">
+      <div class="lim-icon">ℹ</div>
+      <div><strong>Single JWT Secret</strong> — One <code>JWT_SECRET</code> for all patient tokens. Key compromise = all patient tokens forgeable. No key rotation support.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>9 &nbsp; Required Server Specifications</h2>
+
+  <h3>9.1 &nbsp; Minimum Spec (≤ 50 concurrent users)</h3>
+  <div class="card">
+    <dl class="spec-box">
+      <dt>CPU</dt><dd>2 vCPU (x86_64) — e.g. Intel Xeon E-2236, AMD EPYC</dd>
+      <dt>RAM</dt><dd>4 GB DDR4</dd>
+      <dt>Storage</dt><dd>40 GB SSD (NVMe preferred for SQLite I/O)</dd>
+      <dt>Network</dt><dd>100 Mbps symmetric</dd>
+      <dt>OS</dt><dd>Ubuntu 22.04 LTS / Debian 12 / RHEL 9</dd>
+      <dt>Node.js</dt><dd>v18 LTS or v20 LTS</dd>
+      <dt>Nginx</dt><dd>1.24+</dd>
+      <dt>Use Case</dt><dd>Small clinic, 1-5 doctors, ≤ 20 patients/day</dd>
+    </dl>
+  </div>
+
+  <h3>9.2 &nbsp; Recommended Spec (50–200 concurrent users)</h3>
+  <div class="card">
+    <dl class="spec-box">
+      <dt>CPU</dt><dd>4 vCPU (x86_64)</dd>
+      <dt>RAM</dt><dd>8 GB DDR4</dd>
+      <dt>Storage</dt><dd>100 GB NVMe SSD</dd>
+      <dt>Network</dt><dd>500 Mbps symmetric</dd>
+      <dt>OS</dt><dd>Ubuntu 22.04 LTS / Debian 12</dd>
+      <dt>Node.js</dt><dd>v20 LTS</dd>
+      <dt>Nginx</dt><dd>1.24+ with worker_connections 2048</dd>
+      <dt>Process Mgr</dt><dd>PM2 (single instance mode) or systemd</dd>
+      <dt>Use Case</dt><dd>Medium hospital, 10-30 doctors, ≤ 100 patients/day</dd>
+    </dl>
+  </div>
+
+  <h3>9.3 &nbsp; Production Spec (200–500 concurrent users)</h3>
+  <div class="card">
+    <dl class="spec-box">
+      <dt>CPU</dt><dd>8 vCPU (x86_64)</dd>
+      <dt>RAM</dt><dd>16 GB DDR4/DDR5</dd>
+      <dt>Storage</dt><dd>200 GB NVMe SSD (RAID-1 recommended)</dd>
+      <dt>Network</dt><dd>1 Gbps symmetric</dd>
+      <dt>OS</dt><dd>Ubuntu 22.04 LTS</dd>
+      <dt>Node.js</dt><dd>v20 LTS</dd>
+      <dt>Nginx</dt><dd>1.24+ with worker_connections 4096</dd>
+      <dt>Process Mgr</dt><dd>PM2 with <code>--max-memory-restart 1G</code></dd>
+      <dt>Backup</dt><dd>Daily SQLite backup to S3/NAS + WAL mode enabled</dd>
+      <dt>Monitoring</dt><dd>Prometheus + Grafana or Uptime Kuma</dd>
+      <dt>Use Case</dt><dd>Large hospital / multi-site, 30-100 doctors</dd>
+    </dl>
+    <p style="margin-top:1rem; color:var(--orange); font-weight:600;">⚠ Beyond 500 concurrent users, migrate SQLite → PostgreSQL and consider multi-server with Redis session store.</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>10 &nbsp; Software Dependencies</h2>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Component</th><th>Required</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>Node.js</td><td>≥ 18.x LTS</td><td>Runtime for both services</td></tr>
+        <tr><td>Nginx</td><td>≥ 1.24</td><td>Reverse proxy, TLS termination (if not Cloudflare), static cache</td></tr>
+        <tr><td>Cloudflare</td><td>Free tier or Pro</td><td>DNS, CDN, WAF, DDoS protection, SSL edge cert</td></tr>
+        <tr><td>PM2 <em>(recommended)</em></td><td>≥ 5.x</td><td>Process management, auto-restart, log rotation</td></tr>
+        <tr><td>certbot <em>(if no CF SSL)</em></td><td>Latest</td><td>Let's Encrypt SSL cert for origin</td></tr>
+        <tr><td>better-sqlite3</td><td>12.x</td><td>Native SQLite3 binding (requires build-essential, python3)</td></tr>
+        <tr><td>Jitsi Meet</td><td>External server</td><td>Video conferencing (embedded via iframe)</td></tr>
+        <tr><td>AI Summary (ABS)</td><td>External server</td><td>Video transcription &amp; summarization</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>11 &nbsp; Network &amp; Port Map</h2>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Port</th><th>Service</th><th>Exposed To</th><th>Protocol</th></tr></thead>
+      <tbody>
+        <tr><td><code>443</code></td><td>Cloudflare → Nginx</td><td>Internet</td><td>HTTPS (TLS 1.2+)</td></tr>
+        <tr><td><code>80</code></td><td>Nginx (redirect to 443)</td><td>Internet</td><td>HTTP → 301 HTTPS</td></tr>
+        <tr><td><code>3500</code></td><td>core-lite</td><td>localhost only</td><td>HTTP</td></tr>
+        <tr><td><code>3001</code></td><td>user-app-lite</td><td>localhost only</td><td>HTTP</td></tr>
+        <tr><td><code>3600</code></td><td>AI Summary (ABS)</td><td>localhost / internal</td><td>HTTP</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:.5rem; color:var(--text-muted); font-size:.85rem;"><strong>Firewall rule:</strong> Only ports 80, 443 should be open to the internet. Ports 3001, 3500, 3600 must be bound to <code>127.0.0.1</code> or blocked by firewall (iptables/ufw).</p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>12 &nbsp; Environment Variables</h2>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>Variable</th><th>Service</th><th>Example</th><th>Required</th></tr></thead>
+      <tbody>
+        <tr><td><code>APP_PORT</code></td><td>core-lite</td><td><code>3500</code></td><td>No (default 3500)</td></tr>
+        <tr><td><code>JWT_SECRET</code></td><td>core-lite</td><td><code>my-strong-secret-key</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>DATA_DIR</code></td><td>core-lite</td><td><code>/opt/telemed/data</code></td><td>No (default ../../data)</td></tr>
+        <tr><td><code>APP_BASE_URL</code></td><td>core-lite</td><td><code>https://moph-meet.moph.go.th</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>PROVIDER_ID_CLIENT_ID</code></td><td>both</td><td><code>client-id-from-moph</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>PROVIDER_ID_CLIENT_SECRET</code></td><td>core-lite</td><td><code>secret-from-moph</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>PROVIDER_ID_REDIRECT_URI</code></td><td>both</td><td><code>https://…/auth/providerid/callback</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>PROVIDER_SERVICE_CLIENT_ID</code></td><td>core-lite</td><td><code>service-client-id</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>PROVIDER_SERVICE_SECRET_KEY</code></td><td>core-lite</td><td><code>service-secret-key</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>PORT</code></td><td>user-app-lite</td><td><code>3001</code></td><td>No (default 3001)</td></tr>
+        <tr><td><code>API_BASE</code></td><td>user-app-lite</td><td><code>https://moph-meet.moph.go.th</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>CORE_BASE</code></td><td>user-app-lite</td><td><code>http://127.0.0.1:3500</code></td><td>Recommended</td></tr>
+        <tr><td><code>SESSION_SECRET</code></td><td>user-app-lite</td><td><code>random-session-secret</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>MEETING_URL</code></td><td>user-app-lite</td><td><code>https://meet.moph.go.th</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>MEETING_DOMAIN</code></td><td>user-app-lite</td><td><code>meet.moph.go.th</code></td><td><span class="badge b-red">Yes</span></td></tr>
+        <tr><td><code>AI_SUMMARY_URL</code></td><td>user-app-lite</td><td><code>http://localhost:3600</code></td><td>No (default 3600)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>13 &nbsp; Deployment Checklist</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>#</th><th>Task</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Provision VM with recommended specs</td><td>☐</td></tr>
+        <tr><td>2</td><td>Install Node.js 20 LTS, Nginx, PM2, build-essential</td><td>☐</td></tr>
+        <tr><td>3</td><td>Clone repository, <code>npm install</code> in <code>core-lite/</code> and <code>user-app-lite/</code></td><td>☐</td></tr>
+        <tr><td>4</td><td>Configure <code>.env</code> files for both services (see §11)</td><td>☐</td></tr>
+        <tr><td>5</td><td>Create <code>/opt/telemed/data/</code> directory with write permissions</td><td>☐</td></tr>
+        <tr><td>6</td><td>Configure Nginx reverse proxy (<code>/api/</code> → 3500, <code>/</code> → 3001)</td><td>☐</td></tr>
+        <tr><td>7</td><td>Install SSL origin certificate (Cloudflare origin cert or Let's Encrypt)</td><td>☐</td></tr>
+        <tr><td>8</td><td>Configure Cloudflare DNS (A record, proxied), SSL mode Full (Strict)</td><td>☐</td></tr>
+        <tr><td>9</td><td>Add Cloudflare page rules: bypass cache for <code>/api/*</code> and <code>/queue/*</code></td><td>☐</td></tr>
+        <tr><td>10</td><td>Configure firewall: allow only 80/443, block 3001/3500/3600</td><td>☐</td></tr>
+        <tr><td>11</td><td>Start services with PM2: <code>pm2 start core-lite/src/index.js</code> and <code>pm2 start user-app-lite/server.js</code></td><td>☐</td></tr>
+        <tr><td>12</td><td>Set up PM2 startup: <code>pm2 startup</code> + <code>pm2 save</code></td><td>☐</td></tr>
+        <tr><td>13</td><td>Set up daily SQLite backup cron job</td><td>☐</td></tr>
+        <tr><td>14</td><td>Test health check: <code>curl https://domain/api/health</code></td><td>☐</td></tr>
+        <tr><td>15</td><td>Test full login → room creation → patient queue flow</td><td>☐</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>14 &nbsp; Scaling Path (Future)</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Scale Tier</th><th>Change Required</th><th>Complexity</th></tr></thead>
+      <tbody>
+        <tr><td>&gt; 500 users</td><td>Replace SQLite with <strong>PostgreSQL</strong> for sessions &amp; rooms</td><td><span class="badge b-orange">Medium</span></td></tr>
+        <tr><td>&gt; 500 users</td><td>Add <strong>Redis</strong> for express-session store (share sessions across instances)</td><td><span class="badge b-green">Low</span></td></tr>
+        <tr><td>&gt; 1,000 users</td><td>Replace polling with <strong>WebSocket / SSE</strong> for queue updates</td><td><span class="badge b-orange">Medium</span></td></tr>
+        <tr><td>&gt; 1,000 users</td><td>Run multiple Node.js instances behind Nginx upstream (round-robin)</td><td><span class="badge b-orange">Medium</span></td></tr>
+        <tr><td>&gt; 2,000 users</td><td>Containerize with <strong>Docker</strong> + orchestrate with <strong>K8s / Docker Swarm</strong></td><td><span class="badge b-red">High</span></td></tr>
+        <tr><td>&gt; 2,000 users</td><td>Separate static assets to dedicated CDN bucket (Cloudflare R2 / S3)</td><td><span class="badge b-green">Low</span></td></tr>
+        <tr><td>&gt; 5,000 users</td><td>Migrate to SPA (Vue/Nuxt) + API gateway + microservices</td><td><span class="badge b-red">High</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<section>
+  <h2>15 &nbsp; ISP Toll-Free Whitelist — URL &amp; API List</h2>
+  <p style="color:var(--text-muted); margin-bottom:1rem;">รายการ Domain, URL และ API ทั้งหมดที่ ISP ในประเทศไทยต้องเปิด Toll-Free ให้ประชาชนเข้าถึงระบบ MOPH-Meeting ได้โดยไม่เสียค่า data <br><span style="color:var(--orange); font-weight:600;">⚠ ส่งเอกสารนี้ให้ ISP (AIS, TRUE, DTAC, NT, 3BB, TOT) เพื่อขอ zero-rating / toll-free</span></p>
+
+  <!-- ── 15.1 Primary Domains ── -->
+  <h3>15.1 &nbsp; Primary Domains (ต้อง Toll-Free ทั้งหมด)</h3>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>#</th><th>Domain</th><th>IP / Cloudflare</th><th>Port</th><th>Protocol</th><th>Purpose</th><th>Priority</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><code>moph-meet.moph.go.th</code></td>
+          <td>Cloudflare Proxy (dynamic IP)</td>
+          <td>443</td>
+          <td>HTTPS</td>
+          <td>Web App หลัก — หน้า Login, Dashboard, ห้องตรวจ, คิวคนไข้</td>
+          <td><span class="badge b-red">Critical</span></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><code>moph-meetingroom.moph.go.th</code></td>
+          <td>Jitsi Server IP</td>
+          <td>443</td>
+          <td>HTTPS / WSS</td>
+          <td>Jitsi Meet — Video/Audio call, Jitsi external_api.js, WebRTC signaling</td>
+          <td><span class="badge b-red">Critical</span></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><code>moph.id.th</code></td>
+          <td>MOPH Server</td>
+          <td>443</td>
+          <td>HTTPS</td>
+          <td>ProviderID Identity Provider — OAuth2 login สำหรับแพทย์/บุคลากร</td>
+          <td><span class="badge b-red">Critical</span></td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td><code>provider.id.th</code></td>
+          <td>MOPH Server</td>
+          <td>443</td>
+          <td>HTTPS</td>
+          <td>Provider Service — Token exchange + ดึงข้อมูลโปรไฟล์แพทย์</td>
+          <td><span class="badge b-red">Critical</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 15.2 Jitsi / WebRTC ── -->
+  <h3>15.2 &nbsp; Jitsi Meet / WebRTC Ports (สำหรับ Video Call)</h3>
+  <div class="card" style="overflow-x:auto;">
+    <p style="color:var(--text-muted); margin-bottom:.75rem;">Jitsi Meet ใช้ WebRTC ซึ่งต้องเปิด port เพิ่มเติมนอกจาก HTTPS สำหรับ media stream</p>
+    <table>
+      <thead><tr><th>#</th><th>Domain</th><th>Port(s)</th><th>Protocol</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><code>moph-meetingroom.moph.go.th</code></td>
+          <td>443</td>
+          <td>HTTPS / WSS</td>
+          <td>Jitsi Web UI + XMPP-over-WebSocket (BOSH signaling)</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><code>moph-meetingroom.moph.go.th</code></td>
+          <td>10000</td>
+          <td>UDP</td>
+          <td>Jitsi Videobridge (JVB) — RTP media stream (video/audio data)</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><code>moph-meetingroom.moph.go.th</code></td>
+          <td>10000</td>
+          <td>TCP (fallback)</td>
+          <td>JVB TCP fallback เมื่อ UDP ถูก block</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td><code>moph-meetingroom.moph.go.th</code></td>
+          <td>3478, 5349</td>
+          <td>UDP / TCP</td>
+          <td>TURN/STUN server — NAT traversal สำหรับ network ที่อยู่หลัง firewall</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td><code>moph-meetingroom.moph.go.th</code></td>
+          <td>5222</td>
+          <td>TCP</td>
+          <td>XMPP (Prosody) — internal signaling (ถ้า expose)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 15.3 AI Summary Service ── -->
+  <h3>15.3 &nbsp; AI Summary Service (ถ้าเปิดใช้งาน)</h3>
+  <div class="card" style="overflow-x:auto;">
+    <table>
+      <thead><tr><th>#</th><th>Domain</th><th>Port</th><th>Protocol</th><th>Purpose</th><th>Priority</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><code>ai-telemedicine.abs.co.th</code></td>
+          <td>443</td>
+          <td>HTTPS</td>
+          <td>ABS AI Server — รับ video upload + สร้าง AI Summary</td>
+          <td><span class="badge b-orange">Optional</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 15.4 CDN / Third-Party Assets ── -->
+  <h3>15.4 &nbsp; CDN / Third-Party Assets (โหลดหน้าเว็บ)</h3>
+  <div class="card" style="overflow-x:auto;">
+    <p style="color:var(--text-muted); margin-bottom:.75rem;">Domain เหล่านี้ใช้โหลด CSS framework, fonts ที่จำเป็นสำหรับแสดงหน้าเว็บ — ถ้าไม่ toll-free หน้าเว็บจะพังหรือแสดงผลผิด</p>
+    <table>
+      <thead><tr><th>#</th><th>Domain</th><th>Port</th><th>Protocol</th><th>Purpose</th><th>Priority</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><code>cdn.jsdelivr.net</code></td>
+          <td>443</td>
+          <td>HTTPS</td>
+          <td>TailwindCSS Browser + DaisyUI CSS framework</td>
+          <td><span class="badge b-orange">High</span></td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td><code>fonts.googleapis.com</code></td>
+          <td>443</td>
+          <td>HTTPS</td>
+          <td>Google Fonts API — โหลด font Sarabun (ภาษาไทย)</td>
+          <td><span class="badge b-orange">High</span></td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><code>fonts.gstatic.com</code></td>
+          <td>443</td>
+          <td>HTTPS</td>
+          <td>Google Fonts file hosting — ไฟล์ .woff2 ตัวอักษร</td>
+          <td><span class="badge b-orange">High</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin-top:.5rem; font-size:.8rem; color:var(--text-muted);"><strong>หมายเหตุ:</strong> สามารถ self-host fonts + CSS ในอนาคตเพื่อลด dependency ภายนอก (แนะนำสำหรับ production)</p>
+  </div>
+
+  <!-- ── 15.5 Cloudflare IP Ranges ── -->
+  <h3>15.5 &nbsp; Cloudflare IP Ranges (สำหรับ whitelist by IP)</h3>
+  <div class="card" style="overflow-x:auto;">
+    <p style="color:var(--text-muted); margin-bottom:.75rem;">เนื่องจาก <code>moph-meet.moph.go.th</code> ผ่าน Cloudflare Proxy — ISP ต้อง whitelist ด้วย domain (SNI) ไม่ใช่ IP เพราะ Cloudflare IP เปลี่ยนได้ ถ้าต้องใช้ IP range:</p>
+    <table>
+      <thead><tr><th>Type</th><th>CIDR Ranges</th></tr></thead>
+      <tbody>
+        <tr><td>IPv4</td><td><code>173.245.48.0/20</code>, <code>103.21.244.0/22</code>, <code>103.22.200.0/22</code>, <code>103.31.4.0/22</code>, <code>141.101.64.0/18</code>, <code>108.162.192.0/18</code>, <code>190.93.240.0/20</code>, <code>188.114.96.0/20</code>, <code>197.234.240.0/22</code>, <code>198.41.128.0/17</code>, <code>162.158.0.0/15</code>, <code>104.16.0.0/13</code>, <code>104.24.0.0/14</code>, <code>172.64.0.0/13</code>, <code>131.0.72.0/22</code></td></tr>
+        <tr><td>IPv6</td><td><code>2400:cb00::/32</code>, <code>2606:4700::/32</code>, <code>2803:f800::/32</code>, <code>2405:b500::/32</code>, <code>2405:8100::/32</code>, <code>2a06:98c0::/29</code>, <code>2c0f:f248::/32</code></td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:.5rem; font-size:.8rem; color:var(--orange);">⚠ แนะนำ whitelist ด้วย <strong>SNI (Server Name Indication)</strong> แทน IP เพื่อความแม่นยำ — ดูรายชื่อ domain ในข้อ 15.1</p>
+  </div>
+
+  <!-- ── 15.6 Full API Endpoints ── -->
+  <h3>15.6 &nbsp; Full API Endpoint List (ทุก URL path ที่ใช้งาน)</h3>
+  <div class="card" style="overflow-x:auto;">
+    <p style="color:var(--text-muted); margin-bottom:.75rem;">รายการ URL path ทั้งหมดบน <code>moph-meet.moph.go.th</code> — ISP ควร whitelist ทั้ง domain ไม่ต้องแยก path</p>
+    <table>
+      <thead><tr><th>Method</th><th>URL Path</th><th>ใครใช้</th><th>คำอธิบาย</th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--accent);">🌐 Web Pages (user-app-lite → SSR)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/login</code></td><td>แพทย์</td><td>หน้า Login ProviderID</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/</code></td><td>แพทย์</td><td>Dashboard — รายการห้องประชุม/ตรวจ</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/room/:id</code></td><td>แพทย์</td><td>ห้องประชุม (Meet) — Jitsi embed</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/exam/:id</code></td><td>แพทย์</td><td>ห้องตรวจ (Exam) — Jitsi + คิวคนไข้</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/queue/:id</code></td><td>คนไข้</td><td>ห้องรอคิว — คนไข้รอแพทย์เรียก</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/auth/providerid/callback</code></td><td>ระบบ</td><td>OAuth2 callback จาก moph.id.th</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/guest</code></td><td>คนไข้</td><td>Guest login (token-based)</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/logout</code></td><td>แพทย์</td><td>ออกจากระบบ</td></tr>
+
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--accent);">🔗 REST API (core-lite)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/health</code></td><td>ระบบ</td><td>Health check</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/auth/providerID</code></td><td>ระบบ</td><td>ProviderID OAuth2 code exchange</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/auth/guest</code></td><td>คนไข้</td><td>Guest auth (pre-shared token)</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/auth/check</code></td><td>ระบบ</td><td>ตรวจสอบ session token</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/logout</code></td><td>แพทย์</td><td>ลบ session</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/meets</code></td><td>แพทย์</td><td>รายการห้องของ user</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/rooms</code></td><td>แพทย์</td><td>สร้างห้อง (meet/exam)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/rooms/:id</code></td><td>แพทย์</td><td>ข้อมูลห้อง</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/rooms/:id/join</code></td><td>แพทย์</td><td>เข้าร่วมห้อง</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/exam/:id/queue</code></td><td>คนไข้</td><td>Poll สถานะคิว (ทุก 3-5 วินาที)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/exam/:id/doctor</code></td><td>แพทย์</td><td>ข้อมูลห้องตรวจสำหรับแพทย์</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/exam/:id/next</code></td><td>แพทย์</td><td>เรียกคนไข้ถัดไป</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/exam/:id/invite</code></td><td>แพทย์</td><td>สร้างลิงก์เชิญคนไข้</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/exam/:id/submit-summary</code></td><td>แพทย์</td><td>ส่ง metadata ไป AI Summary</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/api/media-upload/credentials</code></td><td>แพทย์</td><td>ขอ ABS upload URL + token</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/jwt/verify</code></td><td>ระบบ</td><td>ตรวจสอบ patient JWT</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/guest/token</code></td><td>ระบบ</td><td>สร้าง guest invite token</td></tr>
+
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--accent);">🏢 3rd-Party HIS Integration API</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/meet/reserved</code></td><td>HIS</td><td>สร้างห้อง reserved (จากระบบนัดหมาย)</td></tr>
+        <tr><td><span class="badge b-orange">POST</span></td><td><code>/api/meet/reserved/token</code></td><td>HIS</td><td>สร้าง patient link สำหรับ reserved room</td></tr>
+
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--accent);">📁 Static Assets</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/css/*</code></td><td>ทุกคน</td><td>CSS stylesheets</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/js/*</code></td><td>ทุกคน</td><td>JavaScript files</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/images/*</code></td><td>ทุกคน</td><td>รูปภาพ, icons</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 15.6.2 Jitsi Meet paths ── -->
+  <h3>15.6.2 &nbsp; Jitsi Meet Paths — <code>moph-meetingroom.moph.go.th</code></h3>
+  <div class="card" style="overflow-x:auto;">
+    <p style="color:var(--text-muted); margin-bottom:.75rem;">URL path ทั้งหมดบน <code>moph-meetingroom.moph.go.th</code> — สำหรับ Video Call (Jitsi Meet)</p>
+    <table>
+      <thead><tr><th>Method</th><th>URL Path</th><th>ใครใช้</th><th>คำอธิบาย</th></tr></thead>
+      <tbody>
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--pink);">📹 Conference Room &amp; Signaling</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/{roomName}</code></td><td>แพทย์/คนไข้</td><td>เข้าห้อง Video Call (conference UI)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/http-bind</code></td><td>Browser</td><td>XMPP BOSH endpoint (Prosody)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/xmpp-websocket</code></td><td>Browser</td><td>XMPP WebSocket endpoint (Prosody)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/colibri-ws/**</code></td><td>Browser</td><td>JVB Colibri WebSocket (bridge channel)</td></tr>
+
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--pink);">📦 JavaScript &amp; Config</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/external_api.js</code></td><td>Browser</td><td>JitsiMeetExternalAPI SDK (iframe embed)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/external_api.min.js</code></td><td>Browser</td><td>SDK minified (ใช้ใน meet.ejs, queue.ejs)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/config.js</code></td><td>Browser</td><td>Jitsi runtime config</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/interface_config.js</code></td><td>Browser</td><td>UI config (ชื่อ MOPH Meet, theme)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/libs/*.js</code></td><td>Browser</td><td>lib-jitsi-meet, app bundle, vendor chunks</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/pwa-worker.js</code></td><td>Browser</td><td>PWA Service Worker</td></tr>
+
+        <tr><td colspan="4" style="background:var(--surface2); font-weight:700; color:var(--pink);">🎨 Static Assets</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/css/all.css</code></td><td>Browser</td><td>Jitsi stylesheet</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/fonts/*</code></td><td>Browser</td><td>Oleo Script, icomoon icon fonts</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/images/*</code></td><td>Browser</td><td>Icons, logos, favicon, watermark</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/images/virtual-background/*</code></td><td>Browser</td><td>Virtual background images</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/sounds/*</code></td><td>Browser</td><td>Notification sounds (join, leave, ring)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/lang/*.json</code></td><td>Browser</td><td>i18n language packs (50+ locales)</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/static/*</code></td><td>Browser</td><td>close page, prejoin, offline, whiteboard</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/manifest.json</code></td><td>Browser</td><td>PWA manifest</td></tr>
+        <tr><td><span class="badge b-green">GET</span></td><td><code>/robots.txt</code></td><td>Bot</td><td>Search engine directives</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 15.7 External OAuth URLs ── -->
+  <h3>15.7 &nbsp; External OAuth / Identity URLs</h3>
+  <div class="card" style="overflow-x:auto;">
+    <p style="color:var(--text-muted); margin-bottom:.75rem;">URL ภายนอกที่ browser ของแพทย์ต้องเข้าถึงระหว่าง login flow</p>
+    <table>
+      <thead><tr><th>#</th><th>Full URL</th><th>Direction</th><th>คำอธิบาย</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>https://moph.id.th/oauth/redirect</code></td><td>Browser → moph.id.th</td><td>OAuth2 authorize redirect (หน้า login ProviderID)</td></tr>
+        <tr><td>2</td><td><code>https://moph.id.th/api/v1/token</code></td><td>Server → moph.id.th</td><td>OAuth2 token exchange (server-side)</td></tr>
+        <tr><td>3</td><td><code>https://provider.id.th/api/v1/services/token</code></td><td>Server → provider.id.th</td><td>HealthID → Provider service token exchange</td></tr>
+        <tr><td>4</td><td><code>https://provider.id.th/api/v1/services/profile</code></td><td>Server → provider.id.th</td><td>ดึงโปรไฟล์แพทย์ (ชื่อ, สังกัด, CID)</td></tr>
+        <tr><td>5</td><td><code>https://moph-meet.moph.go.th/auth/providerid/callback</code></td><td>moph.id.th → Browser → Server</td><td>OAuth2 callback redirect URI</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── 15.8 Summary for ISP ── -->
+  <h3>15.8 &nbsp; สรุปสำหรับ ISP (Quick Reference Card)</h3>
+  <div class="card" style="border-color: var(--accent); border-width: 2px;">
+    <h3 style="margin-top:0; color:var(--accent);">🇹🇭 รายการ Domain ขอ Toll-Free — MOPH-Meeting กระทรวงสาธารณสุข</h3>
+    <table>
+      <thead><tr><th style="width:30px;">#</th><th>Domain</th><th>Ports</th><th>Protocols</th><th>ระดับความจำเป็น</th></tr></thead>
+      <tbody>
+        <tr style="background:rgba(220,38,38,.05);">
+          <td>1</td><td><strong><code>moph-meet.moph.go.th</code></strong></td><td>443</td><td>HTTPS</td>
+          <td><span class="badge b-red">จำเป็น</span> เว็บแอปหลัก</td>
+        </tr>
+        <tr style="background:rgba(220,38,38,.05);">
+          <td>2</td><td><strong><code>moph-meetingroom.moph.go.th</code></strong></td><td>443, 10000, 3478, 5349</td><td>HTTPS, UDP, TCP</td>
+          <td><span class="badge b-red">จำเป็น</span> Video Call</td>
+        </tr>
+        <tr style="background:rgba(220,38,38,.05);">
+          <td>3</td><td><strong><code>moph.id.th</code></strong></td><td>443</td><td>HTTPS</td>
+          <td><span class="badge b-red">จำเป็น</span> Login แพทย์</td>
+        </tr>
+        <tr style="background:rgba(220,38,38,.05);">
+          <td>4</td><td><strong><code>provider.id.th</code></strong></td><td>443</td><td>HTTPS</td>
+          <td><span class="badge b-red">จำเป็น</span> ยืนยันตัวตน</td>
+        </tr>
+        <tr>
+          <td>5</td><td><code>cdn.jsdelivr.net</code></td><td>443</td><td>HTTPS</td>
+          <td><span class="badge b-orange">แนะนำ</span> CSS framework</td>
+        </tr>
+        <tr>
+          <td>6</td><td><code>fonts.googleapis.com</code></td><td>443</td><td>HTTPS</td>
+          <td><span class="badge b-orange">แนะนำ</span> Font ภาษาไทย</td>
+        </tr>
+        <tr>
+          <td>7</td><td><code>fonts.gstatic.com</code></td><td>443</td><td>HTTPS</td>
+          <td><span class="badge b-orange">แนะนำ</span> Font files</td>
+        </tr>
+        <tr>
+          <td>8</td><td><code>ai-telemedicine.abs.co.th</code></td><td>443</td><td>HTTPS</td>
+          <td><span class="badge b-yellow">Optional</span> AI สรุปผล</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top:1.25rem; padding:1rem; background:var(--surface2); border-radius:8px;">
+      <p style="font-weight:700; color:var(--accent); margin-bottom:.5rem;">📋 Wildcard Format (สำหรับ ISP ที่รับ wildcard)</p>
+      <div style="font-family:'Cascadia Code','Fira Code',monospace; font-size:.82rem; color:var(--green); line-height:1.8;">
+        <code>*.moph.go.th</code><br>
+        <code>*.id.th</code><br>
+        <code>cdn.jsdelivr.net</code><br>
+        <code>fonts.googleapis.com</code><br>
+        <code>fonts.gstatic.com</code><br>
+        <code>ai-telemedicine.abs.co.th</code>
+      </div>
+    </div>
+
+    <div style="margin-top:1rem; padding:1rem; background:rgba(5,104,57,.05); border:1px solid rgba(5,104,57,.15); border-radius:8px;">
+      <p style="font-weight:700; color:var(--accent); margin-bottom:.5rem;">📊 Estimated Bandwidth per Session</p>
+      <table style="margin:0;">
+        <thead><tr><th>Activity</th><th>Est. Data / Session</th><th>Duration</th></tr></thead>
+        <tbody>
+          <tr><td>เปิดหน้าเว็บ (HTML+CSS+JS+Font)</td><td>~2–3 MB</td><td>Once</td></tr>
+          <tr><td>API calls (login, queue poll, room)</td><td>~50–200 KB</td><td>Per session</td></tr>
+          <tr><td>Video Call (720p, 2 participants)</td><td>~1–2 GB/hr</td><td>Per hour</td></tr>
+          <tr><td>Video Call (360p, low bandwidth)</td><td>~300–500 MB/hr</td><td>Per hour</td></tr>
+          <tr><td>AI Video Upload (ถ้าเปิด)</td><td>~100 MB – 2 GB</td><td>Once</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:1rem; padding:1rem; background:rgba(217,119,6,.06); border:1px solid rgba(217,119,6,.15); border-radius:8px;">
+      <p style="font-weight:700; color:var(--orange); margin-bottom:.5rem;">⚠ หมายเหตุสำคัญสำหรับ ISP</p>
+      <ul style="font-size:.85rem; color:var(--text-muted);">
+        <li><strong>SNI-based filtering:</strong> แนะนำ whitelist ด้วย SNI (domain) ไม่ใช่ IP เพราะ Cloudflare IP เปลี่ยนได้</li>
+        <li><strong>UDP port 10000:</strong> จำเป็นสำหรับ WebRTC media — ถ้า block จะ fallback TCP แต่คุณภาพ video ลดลง</li>
+        <li><strong>TURN (3478/5349):</strong> จำเป็นสำหรับ user ที่อยู่หลัง strict NAT/firewall (เช่น Wi-Fi โรงพยาบาล)</li>
+        <li><strong>ไม่ต้อง whitelist port 3001, 3500:</strong> เป็น internal port ที่ bind localhost เท่านั้น ไม่ expose internet</li>
+        <li><strong>Data cap suggestion:</strong> แนะนำ toll-free cap ~5 GB/session สำหรับ fair use (video call ~2 ชม.)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<footer>
+  <p>MOPH-Meet Lite Architecture Documentation &nbsp;·&nbsp; Generated March 2026 &nbsp;·&nbsp; core-lite v1.0 + user-app-lite v1.0</p>
+</footer>
+
+</body>
+</html>

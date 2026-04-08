@@ -1,0 +1,156 @@
+Domain,Method,Path,Auth,Component,Type,User,Description (TH),Description (EN)
+,,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+# moph-meet.moph.go.th — Web App + REST API,,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+,,,,,,,,
+# ── Web Pages (user-app-lite SSR) ──,,,,,,,,
+moph-meet.moph.go.th,GET,/login,None,user-app-lite,Page,แพทย์,หน้า Login ProviderID,Login page with ProviderID button
+moph-meet.moph.go.th,GET,/,Session,user-app-lite,Page,แพทย์,Dashboard — รายการห้องประชุม/ตรวจ,Dashboard — list of meeting/exam rooms
+moph-meet.moph.go.th,GET,/room/:id,Session,user-app-lite,Page,แพทย์,ห้องประชุม (Meet) — Jitsi embed,Meeting room with Jitsi embed
+moph-meet.moph.go.th,GET,/exam/:id,Session,user-app-lite,Page,แพทย์,ห้องตรวจ (Exam) — Jitsi + คิวคนไข้,Exam room with Jitsi + patient queue
+moph-meet.moph.go.th,GET,/queue/:id,JWT (query),user-app-lite,Page,คนไข้,ห้องรอคิว — คนไข้รอแพทย์เรียก,Patient waiting room / queue
+moph-meet.moph.go.th,GET,/auth/providerid/callback,None,user-app-lite,Callback,ระบบ,OAuth2 callback จาก moph.id.th,OAuth2 redirect callback from ProviderID
+moph-meet.moph.go.th,GET,/guest,Token (query),user-app-lite,Page,คนไข้,Guest login (token-based),Guest login page with pre-shared token
+moph-meet.moph.go.th,POST,/logout,Session,user-app-lite,Action,แพทย์,ออกจากระบบ,Logout and destroy session
+,,,,,,,,
+# ── REST API (core-lite) ──,,,,,,,,
+moph-meet.moph.go.th,GET,/api/health,None,core-lite,API,ระบบ,Health check,Health check endpoint
+moph-meet.moph.go.th,POST,/api/auth/providerID,None,core-lite,API,ระบบ,ProviderID OAuth2 code exchange,Exchange OAuth2 code for session token
+moph-meet.moph.go.th,POST,/api/auth/guest,Token,core-lite,API,คนไข้,Guest auth (pre-shared token),Guest/patient auth via pre-shared token
+moph-meet.moph.go.th,POST,/api/auth/check,Token,core-lite,API,ระบบ,ตรวจสอบ session token,Validate session token
+moph-meet.moph.go.th,POST,/api/logout,Token,core-lite,API,แพทย์,ลบ session,Destroy session from SQLite
+moph-meet.moph.go.th,GET,/api/meets,Bearer,core-lite,API,แพทย์,รายการห้องของ user,List rooms for current user
+moph-meet.moph.go.th,POST,/api/rooms,Bearer,core-lite,API,แพทย์,สร้างห้อง (meet/exam),Create meeting or exam room
+moph-meet.moph.go.th,GET,/api/rooms/:id,Bearer,core-lite,API,แพทย์,ข้อมูลห้อง + auto-join,Get room details and auto-join provider
+moph-meet.moph.go.th,POST,/api/rooms/:id/join,Bearer,core-lite,API,แพทย์,เข้าร่วมห้อง,Explicitly join room as provider
+moph-meet.moph.go.th,GET,/api/exam/:id/queue,JWT (query),core-lite,API,คนไข้,Poll สถานะคิว (ทุก 3-5 วินาที),Patient queue poll — register + status check
+moph-meet.moph.go.th,GET,/api/exam/:id/doctor,Bearer,core-lite,API,แพทย์,ข้อมูลห้องตรวจสำหรับแพทย์,Doctor view of exam room
+moph-meet.moph.go.th,POST,/api/exam/:id/next,Bearer,core-lite,API,แพทย์,เรียกคนไข้ถัดไป,Admit next patient from queue
+moph-meet.moph.go.th,POST,/api/exam/:id/invite,Bearer,core-lite,API,แพทย์,สร้างลิงก์เชิญคนไข้,Generate patient invite link with JWT
+moph-meet.moph.go.th,POST,/api/exam/:id/submit-summary,Bearer,user-app-lite,API,แพทย์,ส่ง metadata ไป AI Summary,Submit metadata to AI summary service
+moph-meet.moph.go.th,GET,/api/media-upload/credentials,Bearer,user-app-lite,API,แพทย์,ขอ ABS upload URL + token,Get ABS media upload credentials
+moph-meet.moph.go.th,POST,/api/jwt/verify,None,core-lite,API,ระบบ,ตรวจสอบ patient JWT,Verify patient JWT token
+moph-meet.moph.go.th,POST,/api/guest/token,None*,core-lite,API,ระบบ,สร้าง guest invite token,Create guest invite token
+,,,,,,,,
+# ── 3rd-Party HIS Integration API ──,,,,,,,,
+moph-meet.moph.go.th,POST,/api/meet/reserved,None*,core-lite,API,HIS,สร้างห้อง reserved (จากระบบนัดหมาย),Create pre-reserved room from HIS
+moph-meet.moph.go.th,POST,/api/meet/reserved/token,None*,core-lite,API,HIS,สร้าง patient link สำหรับ reserved room,Generate patient link for reserved room
+,,,,,,,,
+# ── Static Assets ──,,,,,,,,
+moph-meet.moph.go.th,GET,/css/*,None,user-app-lite,Static,ทุกคน,CSS stylesheets,CSS stylesheets
+moph-meet.moph.go.th,GET,/js/*,None,user-app-lite,Static,ทุกคน,JavaScript files,JavaScript files
+moph-meet.moph.go.th,GET,/images/*,None,user-app-lite,Static,ทุกคน,รูปภาพ / icons,Images and icons
+,,,,,,,,
+,,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+# moph-meetingroom.moph.go.th — Jitsi Meet (Video Conferencing),,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+,,,,,,,,
+# ── Conference Room & Signaling ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/{roomName},None,Jitsi Meet,Page,แพทย์/คนไข้,เข้าห้อง Video Call,Join video conference room (main UI)
+moph-meetingroom.moph.go.th,GET,/http-bind,None,Prosody,BOSH,Browser,XMPP BOSH endpoint,XMPP-over-HTTP signaling (Prosody)
+moph-meetingroom.moph.go.th,GET,/xmpp-websocket,None,Prosody,WebSocket,Browser,XMPP WebSocket endpoint,XMPP-over-WebSocket signaling (Prosody)
+moph-meetingroom.moph.go.th,GET,/colibri-ws/**,None,JVB,WebSocket,Browser,JVB Colibri WebSocket,Videobridge data channel (bridge)
+,,,,,,,,
+# ── JavaScript & Config ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/external_api.js,None,Jitsi Meet,JS,Browser,JitsiMeetExternalAPI SDK,Iframe embed SDK for external integration
+moph-meetingroom.moph.go.th,GET,/external_api.min.js,None,Jitsi Meet,JS,Browser,SDK minified (meet.ejs / queue.ejs ใช้),Minified external API (used by user-app-lite)
+moph-meetingroom.moph.go.th,GET,/config.js,None,Jitsi Meet,JS,Browser,Jitsi runtime config,Runtime configuration for Jitsi
+moph-meetingroom.moph.go.th,GET,/interface_config.js,None,Jitsi Meet,JS,Browser,UI config (MOPH Meet theme),UI configuration — APP_NAME: MOPH Meet
+moph-meetingroom.moph.go.th,GET,/libs/lib-jitsi-meet.min.js,None,Jitsi Meet,JS,Browser,Core Jitsi library,Core WebRTC + XMPP library
+moph-meetingroom.moph.go.th,GET,/libs/app.bundle.min.js,None,Jitsi Meet,JS,Browser,App bundle,Main application bundle
+moph-meetingroom.moph.go.th,GET,/libs/vendor.bundle.min.js,None,Jitsi Meet,JS,Browser,Vendor bundle,Third-party vendor libraries
+moph-meetingroom.moph.go.th,GET,/libs/do_external_connect.min.js,None,Jitsi Meet,JS,Browser,External connect helper,Pre-authentication helper
+moph-meetingroom.moph.go.th,GET,/libs/analytics-ga.min.js,None,Jitsi Meet,JS,Browser,Analytics module,Google Analytics integration
+moph-meetingroom.moph.go.th,GET,/libs/oleo_script.min.js,None,Jitsi Meet,JS,Browser,Oleo Script font loader,Custom font loader
+moph-meetingroom.moph.go.th,GET,/libs/allocation.ogg,None,Jitsi Meet,Audio,Browser,Location notification sound,Audio notification file
+moph-meetingroom.moph.go.th,GET,/pwa-worker.js,None,Jitsi Meet,JS,Browser,PWA Service Worker,Progressive Web App service worker
+,,,,,,,,
+# ── CSS & Fonts ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/css/all.css,None,Jitsi Meet,CSS,Browser,Jitsi stylesheet,Compiled Jitsi Meet CSS
+moph-meetingroom.moph.go.th,GET,/fonts/*,None,Jitsi Meet,Font,Browser,"Oleo Script, icomoon icons",Custom fonts and icon fonts
+,,,,,,,,
+# ── Images ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/images/favicon.svg,None,Jitsi Meet,Image,Browser,Favicon,Site favicon
+moph-meetingroom.moph.go.th,GET,/images/oleo-font.svg,None,Jitsi Meet,Image,Browser,Oleo font SVG,Font rendering fallback
+moph-meetingroom.moph.go.th,GET,/images/oleo-font.ttf,None,Jitsi Meet,Font,Browser,Oleo font TTF,Font file
+moph-meetingroom.moph.go.th,GET,/images/oleo-font.woff,None,Jitsi Meet,Font,Browser,Oleo font WOFF,Web font file
+moph-meetingroom.moph.go.th,GET,/images/oleo-font.woff2,None,Jitsi Meet,Font,Browser,Oleo font WOFF2,Optimized web font
+moph-meetingroom.moph.go.th,GET,/images/oleo-font.eot,None,Jitsi Meet,Font,Browser,Oleo font EOT,IE compatibility font
+moph-meetingroom.moph.go.th,GET,/images/oleo-font-oleo.svg,None,Jitsi Meet,Image,Browser,Oleo font SVG variant,Font rendering variant
+moph-meetingroom.moph.go.th,GET,/images/oleo-font-oleo.ttf,None,Jitsi Meet,Font,Browser,Oleo font TTF variant,Font file variant
+moph-meetingroom.moph.go.th,GET,/images/oleo-font-oleo.woff,None,Jitsi Meet,Font,Browser,Oleo font WOFF variant,Web font variant
+moph-meetingroom.moph.go.th,GET,/images/oleo-font-oleo.woff2,None,Jitsi Meet,Font,Browser,Oleo font WOFF2 variant,Optimized web font variant
+moph-meetingroom.moph.go.th,GET,/images/oleo-font-oleo.eot,None,Jitsi Meet,Font,Browser,Oleo font EOT variant,IE compatibility font variant
+moph-meetingroom.moph.go.th,GET,/images/oleo-sans-pro-fonts.svg,None,Jitsi Meet,Image,Browser,Oleo Sans Pro SVG,Font rendering
+moph-meetingroom.moph.go.th,GET,/images/oleo-sans-pro-fonts.ttf,None,Jitsi Meet,Font,Browser,Oleo Sans Pro TTF,Font file
+moph-meetingroom.moph.go.th,GET,/images/oleo-sans-pro-fonts.woff,None,Jitsi Meet,Font,Browser,Oleo Sans Pro WOFF,Web font
+moph-meetingroom.moph.go.th,GET,/images/oleo-sans-pro-fonts.woff2,None,Jitsi Meet,Font,Browser,Oleo Sans Pro WOFF2,Optimized web font
+moph-meetingroom.moph.go.th,GET,/images/oleo-sans-pro-fonts.eot,None,Jitsi Meet,Font,Browser,Oleo Sans Pro EOT,IE compatibility font
+moph-meetingroom.moph.go.th,GET,/images/virtual-background/*,None,Jitsi Meet,Image,Browser,Virtual background images,Background images for video calls
+moph-meetingroom.moph.go.th,GET,/images/*,None,Jitsi Meet,Image,Browser,ไอคอน / โลโก้ / watermark,Icons logos watermark images
+,,,,,,,,
+# ── Audio (Sounds) ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/sounds/joined.ogg,None,Jitsi Meet,Audio,Browser,เสียงเข้าห้อง,Participant joined notification
+moph-meetingroom.moph.go.th,GET,/sounds/left.ogg,None,Jitsi Meet,Audio,Browser,เสียงออกห้อง,Participant left notification
+moph-meetingroom.moph.go.th,GET,/sounds/outgoingRinging.ogg,None,Jitsi Meet,Audio,Browser,เสียงโทรออก,Outgoing call ringing
+moph-meetingroom.moph.go.th,GET,/sounds/incoming.ogg,None,Jitsi Meet,Audio,Browser,เสียงโทรเข้า,Incoming call notification
+moph-meetingroom.moph.go.th,GET,/sounds/reaction.ogg,None,Jitsi Meet,Audio,Browser,เสียง reaction,Emoji reaction sound
+moph-meetingroom.moph.go.th,GET,/sounds/*,None,Jitsi Meet,Audio,Browser,เสียงแจ้งเตือนอื่นๆ,Other notification sounds
+,,,,,,,,
+# ── Localization (Languages) ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/lang/main.json,None,Jitsi Meet,JSON,Browser,ภาษาหลัก (English),Main language file
+moph-meetingroom.moph.go.th,GET,/lang/main-th.json,None,Jitsi Meet,JSON,Browser,ภาษาไทย,Thai language pack
+moph-meetingroom.moph.go.th,GET,/lang/countries-en.json,None,Jitsi Meet,JSON,Browser,รายชื่อประเทศ (EN),Country names in English
+moph-meetingroom.moph.go.th,GET,/lang/countries-th.json,None,Jitsi Meet,JSON,Browser,รายชื่อประเทศ (TH),Country names in Thai
+moph-meetingroom.moph.go.th,GET,/lang/*.json,None,Jitsi Meet,JSON,Browser,ภาษาอื่นๆ (50+ locales),Other language packs
+,,,,,,,,
+# ── Static Pages ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/static/close.html,None,Jitsi Meet,HTML,Browser,หน้าปิดการประชุม,Meeting ended close page
+moph-meetingroom.moph.go.th,GET,/static/close2.html,None,Jitsi Meet,HTML,Browser,หน้าปิดการประชุม (v2),Alternative close page
+moph-meetingroom.moph.go.th,GET,/static/close3.html,None,Jitsi Meet,HTML,Browser,หน้าปิดการประชุม (v3),Close page with script
+moph-meetingroom.moph.go.th,GET,/static/prejoin.html,None,Jitsi Meet,HTML,Browser,Prejoin preview,Camera/mic preview before joining
+moph-meetingroom.moph.go.th,GET,/static/offline.html,None,Jitsi Meet,HTML,Browser,หน้า Offline,Offline fallback page
+moph-meetingroom.moph.go.th,GET,/static/dialInInfo.html,None,Jitsi Meet,HTML,Browser,Dial-in info,Phone dial-in information
+moph-meetingroom.moph.go.th,GET,/static/oauth.html,None,Jitsi Meet,HTML,Browser,OAuth page,OAuth authentication page
+moph-meetingroom.moph.go.th,GET,/static/whiteboard.html,None,Jitsi Meet,HTML,Browser,Whiteboard,Collaborative whiteboard
+moph-meetingroom.moph.go.th,GET,/static/404.html,None,Jitsi Meet,HTML,Browser,404 page,Page not found
+moph-meetingroom.moph.go.th,GET,/static/planLimit.html,None,Jitsi Meet,HTML,Browser,Plan limit,Plan/usage limit page
+,,,,,,,,
+# ── Manifest & Meta ──,,,,,,,,
+moph-meetingroom.moph.go.th,GET,/manifest.json,None,Jitsi Meet,JSON,Browser,PWA manifest,Progressive Web App manifest
+moph-meetingroom.moph.go.th,GET,/robots.txt,None,Jitsi Meet,Text,Bot,Search engine directives,Robots exclusion rules
+,,,,,,,,
+,,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+# External Services (Outbound from Server),,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+,,,,,,,,
+moph.id.th,GET,/oauth/redirect,None,ProviderID,OAuth,Browser → IdP,OAuth2 authorize redirect,ProviderID OAuth2 authorize URL
+moph.id.th,POST,/api/v1/token,None,ProviderID,API,Server → IdP,OAuth2 token exchange,Exchange auth code for access token
+provider.id.th,POST,/api/v1/services/token,Bearer,Provider Service,API,Server → Provider,Token exchange,Exchange HealthID token for Provider token
+provider.id.th,GET,/api/v1/services/profile,Bearer,Provider Service,API,Server → Provider,ดึงโปรไฟล์แพทย์,Fetch doctor profile (name / org / CID)
+ai-telemedicine.abs.co.th,POST,/api/upload,Bearer,ABS AI,API,Server → ABS,Upload video สำหรับ AI Summary,Upload video for AI transcription/summary
+ai-telemedicine.abs.co.th,GET,/api/credentials,Bearer,ABS AI,API,Server → ABS,ขอ upload credentials,Get pre-signed upload URL and token
+,,,,,,,,
+# ── CDN / Third-Party Assets ──,,,,,,,,
+cdn.jsdelivr.net,GET,/npm/daisyui@5/*,None,CDN,CSS,Browser,DaisyUI CSS framework,DaisyUI component library
+cdn.jsdelivr.net,GET,/npm/@tailwindcss/browser@4/*,None,CDN,JS,Browser,TailwindCSS browser,Tailwind CSS in-browser compiler
+fonts.googleapis.com,GET,/css2?family=Sarabun*,None,Google Fonts,CSS,Browser,Google Fonts API — Sarabun,Thai font (Sarabun) stylesheet
+fonts.gstatic.com,GET,/*.woff2,None,Google Fonts,Font,Browser,Font files (.woff2),Actual font binary files
+,,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+# Port Summary,,,,,,,,
+# ═══════════════════════════════════════════════════════════════════════,,,,,,,,
+,,,,,,,,
+# Domain,Port,Protocol,Service,,,,
+# moph-meet.moph.go.th,443,HTTPS,Web App + API (Cloudflare proxy),,,,
+# moph-meetingroom.moph.go.th,443,HTTPS/WSS,Jitsi Web UI + BOSH/WebSocket,,,,
+# moph-meetingroom.moph.go.th,10000,UDP,JVB media stream (WebRTC RTP),,,,
+# moph-meetingroom.moph.go.th,10000,TCP,JVB fallback (when UDP blocked),,,,
+# moph-meetingroom.moph.go.th,3478,UDP/TCP,TURN/STUN (NAT traversal),,,,
+# moph-meetingroom.moph.go.th,5349,TCP,TURNS (TLS TURN),,,,
+# moph.id.th,443,HTTPS,ProviderID OAuth2,,,,
+# provider.id.th,443,HTTPS,Provider Service API,,,,
+# ai-telemedicine.abs.co.th,443,HTTPS,AI Summary (optional),,,,

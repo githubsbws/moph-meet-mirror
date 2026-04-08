@@ -166,7 +166,8 @@ app.post('/api/auth/check', (req, res, next) => {
     if (!tokenStorage.has(req.body.token)) {
         return res.status(401).json({ error: 401, message: 'invalidToken' });
     }
-    res.json({ token: req.body.token });
+    const user = tokenStorage.get(req.body.token);
+    res.json({ token: req.body.token, user });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -233,12 +234,15 @@ function autoRoomName(type, ownerDisplay) {
 
 // ── Meets – proxied from token cache (no DB) ─────────────────────────────────
 app.get('/api/meets', auth(), (req, res) => {
-    // Return all rooms owned by this user
+    // Return all rooms owned by OR joined by this user
     const userId = res.locals.user?.username;
     const rooms = [];
     roomStore.keys().forEach(k => {
         const r = roomStore.get(k);
-        if (r && r.ownerId === userId) rooms.push(r);
+        if (!r) return;
+        const isOwner = r.ownerId === userId;
+        const isJoined = Array.isArray(r.joinedProviders) && r.joinedProviders.some(p => p.userId === userId);
+        if (isOwner || isJoined) rooms.push(r);
     });
     rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(rooms);
@@ -264,6 +268,7 @@ app.post('/api/rooms', auth(), (req, res) => {
         ownerId:      user.username,
         ownerDisplay: user.display,
         createdAt:    new Date().toISOString(),
+        joinedProviders: [],   // [{ userId, display, joinedAt }] — other providers who accessed this room
         // exam-specific
         queue:               [],   // [{ token, patientName, joinedAt, status:'waiting'|'admitted'|'done' }]
         currentPatientToken: null,
@@ -294,10 +299,22 @@ app.post('/api/rooms', auth(), (req, res) => {
 app.get('/api/rooms/:id', auth(), (req, res) => {
     const room = roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
-    // Only owner can view full room details
-    if (room.ownerId !== res.locals.user?.username) {
-        return res.status(403).json({ error: 403, message: 'forbidden' });
+
+    // Track that this provider has joined/viewed the room
+    const userId = res.locals.user?.username;
+    if (userId && room.ownerId !== userId) {
+        if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
+        if (!room.joinedProviders.some(p => p.userId === userId)) {
+            room.joinedProviders.push({
+                userId,
+                display: res.locals.user?.display || userId,
+                joinedAt: new Date().toISOString()
+            });
+            roomStore.set(req.params.id, room);
+            console.log(`[rooms] provider ${userId} joined room ${req.params.id}`);
+        }
     }
+
     res.json(room);
 });
 
@@ -337,7 +354,22 @@ app.get('/api/exam/:id/queue', (req, res) => {
 app.post('/api/exam/:id/next', auth(), (req, res) => {
     const room = roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
-    if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
+
+    // Any authenticated provider can call next patient
+    // Track them as joined if not owner
+    const userId = res.locals.user?.username;
+    if (userId && room.ownerId !== userId) {
+        if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
+        if (!room.joinedProviders.some(p => p.userId === userId)) {
+            room.joinedProviders.push({
+                userId,
+                display: res.locals.user?.display || userId,
+                joinedAt: new Date().toISOString()
+            });
+            roomStore.set(req.params.id, room);
+            console.log(`[exam] provider ${userId} joined room ${req.params.id} via next-patient`);
+        }
+    }
 
     // Mark previous current as done
     if (room.currentPatientToken) {
@@ -368,7 +400,7 @@ app.post('/api/exam/:id/next', auth(), (req, res) => {
 app.get('/api/exam/:id/doctor', auth(), (req, res) => {
     const room = roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
-    if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
+    // if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
     res.json(room);
 });
 
@@ -378,7 +410,22 @@ app.get('/api/exam/:id/doctor', auth(), (req, res) => {
 app.post('/api/exam/:id/invite', auth(), (req, res) => {
     const room = roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
-    if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
+
+    // Any authenticated provider can invite patients
+    // Track them as joined if not owner
+    const userId = res.locals.user?.username;
+    if (userId && room.ownerId !== userId) {
+        if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
+        if (!room.joinedProviders.some(p => p.userId === userId)) {
+            room.joinedProviders.push({
+                userId,
+                display: res.locals.user?.display || userId,
+                joinedAt: new Date().toISOString()
+            });
+            roomStore.set(req.params.id, room);
+            console.log(`[exam] provider ${userId} joined room ${req.params.id} via invite`);
+        }
+    }
 
     const patientName = (req.body.displayName || req.body.patientName || '').trim() || 'ผู้ป่วย';
     const cid         = (req.body.cid || '').trim();
@@ -396,6 +443,32 @@ app.post('/api/exam/:id/invite', auth(), (req, res) => {
 
 // Legacy stubs kept for compatibility
 app.get('/api/meets/:id', auth(), (req, res) => res.status(404).json({ error: 404, message: 'notFound' }));
+
+// ── POST /api/rooms/:id/join – explicitly join a room as a provider ───────────
+// Called when a logged-in provider opens a room link that was shared with them.
+app.post('/api/rooms/:id/join', auth(), (req, res) => {
+    const room = roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+
+    const userId = res.locals.user?.username;
+    if (!userId) return res.status(401).json({ error: 401, message: 'unauthorized' });
+
+    // Already owner
+    if (room.ownerId === userId) return res.json({ joined: false, reason: 'owner', room });
+
+    if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
+    if (!room.joinedProviders.some(p => p.userId === userId)) {
+        room.joinedProviders.push({
+            userId,
+            display: res.locals.user?.display || userId,
+            joinedAt: new Date().toISOString()
+        });
+        roomStore.set(req.params.id, room);
+        console.log(`[rooms] provider ${userId} explicitly joined room ${req.params.id}`);
+    }
+
+    res.json({ joined: true, room });
+});
 
 // ── POST /api/meet/reserved – backward-compat: create exam room via API key ───
 // Called by appointment system to pre-create a room for a specific doctor.
@@ -428,18 +501,33 @@ app.post('/api/meet/reserved', (req, res) => {
         ownerId:      doctorId,       // doctor's CID — must match their ProviderID login
         ownerDisplay: doctorDisplay,
         createdAt:    new Date().toISOString(),
+        joinedProviders: [],
         queue:               [],
         currentPatientToken: null,
         recording:           true,
     };
 
     roomStore.set(id, room);
+
+    // Mint a session token for the doctor so /exam/:id works immediately
+    // (same shape as ProviderID login — checked by auth() middleware)
+    const doctorUser = {
+        username: doctorId,
+        display:  doctorDisplay,
+        roles:    ['staff'],
+        roleMaps: [{ roleName: 'staff' }],
+    };
+    const doctorToken = createHash('sha256')
+        .update(new Date().toISOString() + doctorId + randomInt(1000))
+        .digest('hex');
+    tokenStorage.set(doctorToken, doctorUser);
+
     console.log(`[reserved] created exam room ${id} owner=${doctorId} (${doctorDisplay})`);
 
-    // Doctor link — full absolute URL so doctor can open it directly
-    const doctorUrl = `${APP_BASE_URL}/exam/${id}`;
+    // Full absolute URLs – include token so 3rd-party apps that only use the
+    // `meet` URL can auto-authenticate the doctor without a separate login step.
+    const doctorUrl = `${APP_BASE_URL}/exam/${id}?token=${doctorToken}`;
 
-    // Patient link — JWT queue flow, full absolute URL
     const queue_token = jwt.sign(
         { roomId: id, role: 'patient', ownerId: doctorId, patientName: 'ผู้ป่วย', cid: '' },
         JWT_SECRET,
@@ -447,34 +535,36 @@ app.post('/api/meet/reserved', (req, res) => {
     );
     const patientJoinUrl = `${APP_BASE_URL}/queue/${id}?jwt=${queue_token}`;
 
-    res.json({ sessionID: id, meet: doctorUrl, patientJoinUrl });
+    res.json({ sessionID: id, meet: doctorUrl, patientJoinUrl, doctorToken });
 });
 
-// ── POST /api/meet/reserved/token – backward-compat: generate patient queue link ─
-// Accepts: { sessionID, displayName, cid, patientName }
+// ── POST /api/meet/reserved/token – generate patient queue link (same as doctor invite)
+// Body: { sessionID, displayName?, patientName?, cid? }
 // Returns: { sessionID, meet: patientJoinUrl, patientJoinUrl }
-app.post('/api/meet/reserved/token', auth(), (req, res) => {
+// Auth: open – called from 3rd-party appointment systems (no session required)
+app.post('/api/meet/reserved/token', (req, res) => {
     const { sessionID, displayName, patientName, cid } = req.body;
     if (!sessionID) return res.status(400).json({ error: 400, message: 'sessionID required' });
 
     const room = roomStore.get(sessionID);
     if (!room) return res.status(400).json({ error: 400, message: 'invalidSessionID' });
 
-    const name = (displayName || patientName || '').trim() || 'ผู้ป่วย';
+    const name       = (displayName || patientName || '').trim() || 'ผู้ป่วย';
+    const patientCid = (cid || '').trim();
 
     const queue_token = jwt.sign(
-        { roomId: sessionID, role: 'patient', ownerId: room.ownerId, patientName: name, cid: cid || '' },
+        { roomId: sessionID, role: 'patient', ownerId: room.ownerId, patientName: name, cid: patientCid },
         JWT_SECRET,
         { expiresIn: '8h' }
     );
     const patientJoinUrl = `${APP_BASE_URL}/queue/${sessionID}?jwt=${queue_token}`;
 
-    console.log(`[reserved/token] queue link issued for "${name}" in room ${sessionID}`);
+    console.log(`[reserved/token] queue link issued for "${name}"${patientCid ? ` (${patientCid})` : ''} in room ${sessionID}`);
     res.json({ sessionID, meet: patientJoinUrl, patientJoinUrl });
 });
 
 // ── Guest token generator (called by staff to create patient invite links) ─────
-app.post('/api/guest/token', auth(), async (req, res, next) => {
+app.post('/api/guest/token', /*auth(),*/ async (req, res, next) => {
     try {
         const { meetId, patientName, ttlSeconds } = req.body;
         if (!meetId) return res.status(400).json({ error: 400, message: 'meetId required' });
