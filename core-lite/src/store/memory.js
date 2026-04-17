@@ -20,11 +20,11 @@ const tokenStorage = {
 };
 
 // ── Room Storage ───────────────────────────────────────────────────────────────
-const _rooms = new NodeCache({ stdTTL: DEFAULT_TTL, checkperiod: 120 });
+const _rooms = new NodeCache({ stdTTL: 0, checkperiod: 0 });
 
 const roomStore = {
   get(id) { return _rooms.get(id); },
-  set(id, value, ttlSeconds) { _rooms.set(id, value, ttlSeconds || DEFAULT_TTL); },
+  set(id, value, _ttlIgnored) { _rooms.set(id, value, 0); },
   del(id) { _rooms.del(id); },
   keys() { return _rooms.keys(); },
 };

@@ -46,38 +46,33 @@ const tokenStorage = {
   del(key) { _sessDel.run(key); },
 };
 
-// ── Room Storage (rooms.db) ────────────────────────────────────────────────────
+// ── Room Storage (rooms.db) — persistent, no expiry ───────────────────────────
 const _roomDb = new Database(path.join(DATA_DIR, 'rooms.db'));
 _roomDb.exec(`
   CREATE TABLE IF NOT EXISTS rooms (
-    id TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    expires_at INTEGER NOT NULL
+    id    TEXT PRIMARY KEY,
+    value TEXT NOT NULL
   );
 `);
-const _purgeRooms = _roomDb.prepare('DELETE FROM rooms WHERE expires_at < ?');
-_purgeRooms.run(Date.now());
-setInterval(() => _purgeRooms.run(Date.now()), 10 * 60 * 1000).unref();
+// Migration: drop expires_at if it exists (old schema)
+try { _roomDb.exec('ALTER TABLE rooms DROP COLUMN expires_at'); } catch (_) {}
 
-const _roomGet  = _roomDb.prepare('SELECT value, expires_at FROM rooms WHERE id = ?');
-const _roomSet  = _roomDb.prepare('INSERT OR REPLACE INTO rooms (id, value, expires_at) VALUES (?, ?, ?)');
+const _roomGet  = _roomDb.prepare('SELECT value FROM rooms WHERE id = ?');
+const _roomSet  = _roomDb.prepare('INSERT OR REPLACE INTO rooms (id, value) VALUES (?, ?)');
 const _roomDel  = _roomDb.prepare('DELETE FROM rooms WHERE id = ?');
-const _roomKeys = _roomDb.prepare('SELECT id FROM rooms WHERE expires_at > ?');
+const _roomKeys = _roomDb.prepare('SELECT id FROM rooms');
 
-const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 const roomStore = {
   get(id) {
     const row = _roomGet.get(id);
     if (!row) return undefined;
-    if (row.expires_at < Date.now()) { _roomDel.run(id); return undefined; }
     return JSON.parse(row.value);
   },
-  set(id, value, ttlSeconds) {
-    const exp = Date.now() + (ttlSeconds ? ttlSeconds * 1000 : ROOM_TTL_MS);
-    _roomSet.run(id, JSON.stringify(value), exp);
+  set(id, value, _ttlIgnored) {
+    _roomSet.run(id, JSON.stringify(value));
   },
   del(id) { _roomDel.run(id); },
-  keys() { return _roomKeys.all(Date.now()).map(r => r.id); },
+  keys() { return _roomKeys.all().map(r => r.id); },
 };
 
 // ── Profile Storage (user_profiles.db) ─────────────────────────────────────────

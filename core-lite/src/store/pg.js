@@ -32,9 +32,8 @@ const DDL = `
   CREATE INDEX IF NOT EXISTS idx_sess_exp ON sessions(expires_at);
 
   CREATE TABLE IF NOT EXISTS rooms (
-    id         TEXT PRIMARY KEY,
-    value      JSONB NOT NULL,
-    expires_at BIGINT NOT NULL
+    id    TEXT PRIMARY KEY,
+    value JSONB NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS user_profiles (
@@ -89,26 +88,22 @@ const tokenStorage = {
 };
 
 // ── Room Storage ───────────────────────────────────────────────────────────────
-const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
-
 const roomStore = {
   async get(id) {
-    const { rows } = await pool.query('SELECT value, expires_at FROM rooms WHERE id = $1', [id]);
+    const { rows } = await pool.query('SELECT value FROM rooms WHERE id = $1', [id]);
     if (!rows.length) return undefined;
-    if (rows[0].expires_at < Date.now()) { await pool.query('DELETE FROM rooms WHERE id = $1', [id]); return undefined; }
     return typeof rows[0].value === 'string' ? JSON.parse(rows[0].value) : rows[0].value;
   },
-  async set(id, value, ttlSeconds) {
-    const exp = Date.now() + (ttlSeconds ? ttlSeconds * 1000 : ROOM_TTL_MS);
+  async set(id, value, _ttlIgnored) {
     await pool.query(
-      `INSERT INTO rooms (id, value, expires_at) VALUES ($1, $2, $3)
-       ON CONFLICT (id) DO UPDATE SET value = $2, expires_at = $3`,
-      [id, JSON.stringify(value), exp]
+      `INSERT INTO rooms (id, value) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET value = $2`,
+      [id, JSON.stringify(value)]
     );
   },
   async del(id) { await pool.query('DELETE FROM rooms WHERE id = $1', [id]); },
   async keys() {
-    const { rows } = await pool.query('SELECT id FROM rooms WHERE expires_at > $1', [Date.now()]);
+    const { rows } = await pool.query('SELECT id FROM rooms');
     return rows.map(r => r.id);
   },
 };
