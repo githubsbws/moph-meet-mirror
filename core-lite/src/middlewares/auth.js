@@ -1,4 +1,4 @@
-const { tokenStorage } = require('../cache');
+const { tokenStorage } = require('../store');
 
 // Static API keys (same whitelist as core)
 const whitelist = [
@@ -11,11 +11,12 @@ const whitelist = [
 ];
 
 function auth() {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const token = req.headers['authorization']?.replace('Bearer ', '');
     if (token && whitelist.includes(token)) return next();
-    if (token && tokenStorage.has(token)) {
-      res.locals.user = tokenStorage.get(token);
+    if (token && await tokenStorage.has(token)) {
+      res.locals.user  = await tokenStorage.get(token);
+      res.locals.token = token;
       return next();
     }
     return res.status(401).json({ error: 401, message: 'tokenExpired' });

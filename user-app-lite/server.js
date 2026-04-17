@@ -20,6 +20,7 @@ const _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'change_me',
@@ -418,6 +419,26 @@ app.get('/guest', async (req, res) => {
   } catch (_) {
     return res.redirect('/login?error=server');
   }
+});
+
+// POST /profile — update extra user fields (hcode, clinic, dob, gender)
+app.post('/profile', requireAuth, async (req, res) => {
+  const { token, user } = req.session;
+  const { hcode5, hcode9, clinicCode, dateOfBirth, gender } = req.body;
+  try {
+    const r = await apiFetch(`${API_BASE}/api/auth/profile`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ hcode5, hcode9, clinicCode, dateOfBirth, gender })
+    });
+    if (r.ok) {
+      const data = await r.json();
+      req.session.user = data.user || { ...user, hcode5, hcode9, clinicCode, dateOfBirth, gender };
+    }
+  } catch (e) {
+    console.error('[profile] update failed:', e.message);
+  }
+  res.redirect('/');
 });
 
 // POST /logout

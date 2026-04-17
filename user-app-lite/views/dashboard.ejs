@@ -89,12 +89,77 @@
                 CID: <%= pid.cid || user.username %>
               </span>
             <% } %>
+            <% if (user.gender) { %>
+              <span class="flex items-center gap-1">🧑 เพศ: <%= user.gender %></span>
+            <% } %>
+            <% if (user.dateOfBirth) { %>
+              <span class="flex items-center gap-1">🎂 วันเกิด: <%= user.dateOfBirth %></span>
+            <% } %>
           </div>
+
+          <!-- Extra Data Hub fields -->
+          <% if (user.hcode5 || user.hcode9 || user.clinicCode) { %>
+          <div class="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-base-content/55">
+            <% if (user.hcode5) { %>
+              <span class="flex items-center gap-1">🏥 HCode 5 หลัก: <strong><%= user.hcode5 %></strong></span>
+            <% } %>
+            <% if (user.hcode9) { %>
+              <span class="flex items-center gap-1">🏥 HCode 9 หลัก: <strong><%= user.hcode9 %></strong></span>
+            <% } %>
+            <% if (user.clinicCode) { %>
+              <span class="flex items-center gap-1">🩺 Clinic Code: <strong><%= user.clinicCode %></strong></span>
+            <% } %>
+          </div>
+          <% } %>
+
+          <!-- Edit profile button -->
+          <button class="btn btn-xs btn-outline btn-primary mt-2" onclick="document.getElementById('profileModal').showModal()">
+            ✏️ แก้ไขข้อมูลเพิ่มเติม
+          </button>
         </div>
 
       </div>
     </div>
   </div>
+
+  <!-- ── Profile Edit Modal ──────────────────────────────────────── -->
+  <dialog id="profileModal" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg mb-4">แก้ไขข้อมูลเพิ่มเติม (Data Hub)</h3>
+      <form method="POST" action="/profile" class="flex flex-col gap-3">
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">HCode 5 หลัก (รหัสสถานพยาบาล)</span></div>
+          <input type="text" name="hcode5" maxlength="5" pattern="[0-9]{5}" placeholder="เช่น 12345" value="<%= user.hcode5 || '' %>" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">HCode 9 หลัก (รหัสสถานพยาบาล)</span></div>
+          <input type="text" name="hcode9" maxlength="9" pattern="[0-9]{9}" placeholder="เช่น 123456789" value="<%= user.hcode9 || '' %>" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">Clinic Code 5 หลัก (รหัสคลินิก)</span></div>
+          <input type="text" name="clinicCode" maxlength="5" pattern="[0-9]{5}" placeholder="เช่น 54321" value="<%= user.clinicCode || '' %>" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">วันเดือนปีเกิด</span></div>
+          <input type="date" name="dateOfBirth" value="<%= user.dateOfBirth || '' %>" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">เพศ</span></div>
+          <select name="gender" class="select select-bordered w-full">
+            <option value="" <%= !user.gender ? 'selected' : '' %>>-- เลือก --</option>
+            <option value="ชาย" <%= user.gender === 'ชาย' ? 'selected' : '' %>>ชาย</option>
+            <option value="หญิง" <%= user.gender === 'หญิง' ? 'selected' : '' %>>หญิง</option>
+            <option value="อื่น ๆ" <%= user.gender === 'อื่น ๆ' ? 'selected' : '' %>>อื่น ๆ</option>
+          </select>
+        </label>
+        <div class="modal-action">
+          <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+          <button type="button" class="btn" onclick="document.getElementById('profileModal').close()">ยกเลิก</button>
+        </div>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
 
   <% if (isProvider) { %>
 

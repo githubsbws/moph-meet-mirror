@@ -6,7 +6,7 @@ const cors = require('cors');
 const { createHash, randomInt } = require('crypto');
 const NodeCache = require('node-cache');
 const jwt = require('jsonwebtoken');
-const { tokenStorage } = require('./cache');
+const { tokenStorage, roomStore, profileStore, logStore } = require('./store');
 const { auth } = require('./middlewares/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_me_jwt_secret';
@@ -107,7 +107,8 @@ app.post('/api/auth/providerID', async (req, res, next) => {
             return res.status(401).json({ error: 401, message: 'invalidProviderIDProfile' });
         }
 
-        // Step 4 – build user object from ProviderID profile (no DB)
+        // Step 4 – build user object from ProviderID profile + saved extra fields
+        const extraProfile = await profileStore.get(profile.data.account_id);
         const user = {
             username: profile.data.account_id,
             display: profile.data.name_th || profile.data.name_en || profile.data.account_id,
@@ -115,13 +116,18 @@ app.post('/api/auth/providerID', async (req, res, next) => {
             roleMaps: [{ roleName: 'staff' }],
             organization: profile.data.organization || null,
             providerIDProfile: profile.data,
+            hcode5: extraProfile.hcode5 || '',
+            hcode9: extraProfile.hcode9 || '',
+            clinicCode: extraProfile.clinicCode || '',
+            dateOfBirth: extraProfile.dateOfBirth || '',
+            gender: extraProfile.gender || '',
         };
 
         const token = createHash('sha256')
             .update(new Date().toISOString() + user.username + randomInt(1000))
             .digest('hex');
 
-        tokenStorage.set(token, user);
+        await tokenStorage.set(token, user);
 
         const response = {
             data: {
@@ -146,11 +152,10 @@ app.post('/api/auth/providerID', async (req, res, next) => {
 app.post('/api/auth/guest', async (req, res, next) => {
     try {
         const { token } = req.body;
-        if (!token || !tokenStorage.has(token)) {
+        if (!token || !(await tokenStorage.has(token))) {
             return res.status(401).json({ error: 401, message: 'invalidToken' });
         }
-        // Guest tokens are pre-stored lightweight objects (see /api/guest/token)
-        const guestSession = tokenStorage.get(token);
+        const guestSession = await tokenStorage.get(token);
         return res.json({
             token,
             user: guestSession.user,
@@ -162,104 +167,33 @@ app.post('/api/auth/guest', async (req, res, next) => {
 });
 
 // ── Auth: check & logout ───────────────────────────────────────────────────────
-app.post('/api/auth/check', (req, res, next) => {
-    if (!tokenStorage.has(req.body.token)) {
+app.post('/api/auth/check', async (req, res, next) => {
+    if (!(await tokenStorage.has(req.body.token))) {
         return res.status(401).json({ error: 401, message: 'invalidToken' });
     }
-    const user = tokenStorage.get(req.body.token);
+    const user = await tokenStorage.get(req.body.token);
     res.json({ token: req.body.token, user });
 });
 
-app.post('/api/logout', (req, res) => {
-    tokenStorage.del(req.body.token);
+app.post('/api/logout', async (req, res) => {
+    await tokenStorage.del(req.body.token);
     res.json({ token: req.body.token });
 });
 
-// ── Room storage (disk-backed SQLite via roomStore) ───────────────────────────
-// roomStore: roomId → { id, type, name, starttime, endtime, ownerId, ownerDisplay,
-//                        createdAt, queue: [], currentPatientToken: null }
-// ── Disk-backed room store (same SQLite db as tokenStorage) ──────────────────
-const { Database: _DB } = (() => { try { return { Database: require('better-sqlite3') }; } catch { return {}; } })();
-const _path = require('path');
-const _roomDb = new (require('better-sqlite3'))(_path.join(process.env.DATA_DIR || _path.join(__dirname, '../../data'), 'rooms.db'));
-_roomDb.exec(`
-  CREATE TABLE IF NOT EXISTS rooms (
-    id TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    expires_at INTEGER NOT NULL
-  );
-`);
-const _purgeRooms = _roomDb.prepare('DELETE FROM rooms WHERE expires_at < ?');
-_purgeRooms.run(Date.now());
-setInterval(() => _purgeRooms.run(Date.now()), 10 * 60 * 1000).unref();
-
-const _roomGet  = _roomDb.prepare('SELECT value, expires_at FROM rooms WHERE id = ?');
-const _roomSet  = _roomDb.prepare('INSERT OR REPLACE INTO rooms (id, value, expires_at) VALUES (?, ?, ?)');
-const _roomDel  = _roomDb.prepare('DELETE FROM rooms WHERE id = ?');
-const _roomKeys = _roomDb.prepare('SELECT id FROM rooms WHERE expires_at > ?');
+// ── Auth: update extra profile fields ─────────────────────────────────────────
+app.patch('/api/auth/profile', auth(), async (req, res) => {
+    const token = req.headers['authorization']?.replace('Bearer ', '');
+    const user = res.locals.user;
+    if (!user?.username) return res.status(401).json({ error: 401, message: 'unauthorized' });
+    const { hcode5, hcode9, clinicCode, dateOfBirth, gender } = req.body;
+    await profileStore.upsert(user.username, { hcode5, hcode9, clinicCode, dateOfBirth, gender });
+    // Update in-memory session too
+    const updated = { ...user, hcode5: (hcode5 || '').trim(), hcode9: (hcode9 || '').trim(), clinicCode: (clinicCode || '').trim(), dateOfBirth: (dateOfBirth || '').trim(), gender: (gender || '').trim() };
+    await tokenStorage.set(token, updated);
+    res.json({ ok: true, user: updated });
+});
 
 const ROOM_TTL_MS = 24 * 60 * 60 * 1000;
-
-const roomStore = {
-    get(id) {
-        const row = _roomGet.get(id);
-        if (!row) return undefined;
-        if (row.expires_at < Date.now()) { _roomDel.run(id); return undefined; }
-        return JSON.parse(row.value);
-    },
-    set(id, value, ttlSeconds) {
-        const exp = Date.now() + (ttlSeconds ? ttlSeconds * 1000 : ROOM_TTL_MS);
-        _roomSet.run(id, JSON.stringify(value), exp);
-    },
-    del(id) { _roomDel.run(id); },
-    keys() { return _roomKeys.all(Date.now()).map(r => r.id); },
-};
-
-// ── Usage log (persistent SQLite) ─────────────────────────────────────────────
-const _logDb = new (require('better-sqlite3'))(_path.join(process.env.DATA_DIR || _path.join(__dirname, '../../data'), 'usage_logs.db'));
-_logDb.pragma('journal_mode = WAL');
-_logDb.exec(`
-  CREATE TABLE IF NOT EXISTS usage_logs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts          TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
-    event       TEXT    NOT NULL,
-    room_id     TEXT,
-    room_type   TEXT,
-    room_name   TEXT,
-    doctor_id   TEXT,
-    doctor_name TEXT,
-    patient_name TEXT,
-    patient_cid TEXT,
-    meta        TEXT
-  );
-  CREATE INDEX IF NOT EXISTS idx_logs_ts        ON usage_logs(ts);
-  CREATE INDEX IF NOT EXISTS idx_logs_doctor    ON usage_logs(doctor_id);
-  CREATE INDEX IF NOT EXISTS idx_logs_event     ON usage_logs(event);
-`);
-
-const _logInsert = _logDb.prepare(`
-  INSERT INTO usage_logs (ts, event, room_id, room_type, room_name, doctor_id, doctor_name, patient_name, patient_cid, meta)
-  VALUES (datetime(?,'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
-
-function logEvent(event, data = {}) {
-    try {
-        _logInsert.run(
-            new Date().toISOString(),
-            event,
-            data.roomId    || null,
-            data.roomType  || null,
-            data.roomName  || null,
-            data.doctorId  || null,
-            data.doctorName || null,
-            data.patientName || null,
-            data.patientCid  || null,
-            data.meta ? JSON.stringify(data.meta) : null
-        );
-    } catch (e) {
-        console.error('[logEvent]', e.message);
-    }
-}
 
 // ── Helper: generate a short room ID ──────────────────────────────────────────
 function makeRoomId() {
@@ -279,23 +213,23 @@ function autoRoomName(type, ownerDisplay) {
 }
 
 // ── Meets – proxied from token cache (no DB) ─────────────────────────────────
-app.get('/api/meets', auth(), (req, res) => {
-    // Return all rooms owned by OR joined by this user
+app.get('/api/meets', auth(), async (req, res) => {
     const userId = res.locals.user?.username;
     const rooms = [];
-    roomStore.keys().forEach(k => {
-        const r = roomStore.get(k);
-        if (!r) return;
+    const keys = await roomStore.keys();
+    for (const k of keys) {
+        const r = await roomStore.get(k);
+        if (!r) continue;
         const isOwner = r.ownerId === userId;
         const isJoined = Array.isArray(r.joinedProviders) && r.joinedProviders.some(p => p.userId === userId);
         if (isOwner || isJoined) rooms.push(r);
-    });
+    }
     rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(rooms);
 });
 
 // ── POST /api/rooms – create meet or exam room ────────────────────────────────
-app.post('/api/rooms', auth(), (req, res) => {
+app.post('/api/rooms', auth(), async (req, res) => {
     const { type, starttime, endtime } = req.body;
     if (!['meet', 'exam'].includes(type)) {
         return res.status(400).json({ error: 400, message: 'type must be meet or exam' });
@@ -314,18 +248,16 @@ app.post('/api/rooms', auth(), (req, res) => {
         ownerId:      user.username,
         ownerDisplay: user.display,
         createdAt:    new Date().toISOString(),
-        joinedProviders: [],   // [{ userId, display, joinedAt }] — other providers who accessed this room
-        // exam-specific
-        queue:               [],   // [{ token, patientName, joinedAt, status:'waiting'|'admitted'|'done' }]
+        joinedProviders: [],
+        queue:               [],
         currentPatientToken: null,
         recording:           type === 'exam',
     };
 
-    // Room TTL = endtime + 25 hr buffer (so room stays alive until well after session ends)
     const roomTtlMs = Math.max(ROOM_TTL_MS, new Date(room.endtime).getTime() - Date.now() + 25 * 60 * 60 * 1000);
-    roomStore.set(id, room, roomTtlMs / 1000);
+    await roomStore.set(id, room, roomTtlMs / 1000);
     console.log(`[rooms] created ${type} room ${id} for ${user.display}`);
-    logEvent('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display });
+    await logStore.insert('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display });
 
     // Build patient join URL for exam rooms (JWT, no expiry)
     let patientJoinUrl = null;
@@ -344,11 +276,10 @@ app.post('/api/rooms', auth(), (req, res) => {
 });
 
 // ── GET /api/rooms/:id ────────────────────────────────────────────────────────
-app.get('/api/rooms/:id', auth(), (req, res) => {
-    const room = roomStore.get(req.params.id);
+app.get('/api/rooms/:id', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
 
-    // Track that this provider has joined/viewed the room
     const userId = res.locals.user?.username;
     if (userId && room.ownerId !== userId) {
         if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
@@ -358,7 +289,7 @@ app.get('/api/rooms/:id', auth(), (req, res) => {
                 display: res.locals.user?.display || userId,
                 joinedAt: new Date().toISOString()
             });
-            roomStore.set(req.params.id, room);
+            await roomStore.set(req.params.id, room);
             console.log(`[rooms] provider ${userId} joined room ${req.params.id}`);
         }
     }
@@ -368,7 +299,7 @@ app.get('/api/rooms/:id', auth(), (req, res) => {
 
 // ── GET /api/exam/:id/queue – patient polls this ──────────────────────────────
 // Auth via JWT query param (no session required for patients)
-app.get('/api/exam/:id/queue', (req, res) => {
+app.get('/api/exam/:id/queue', async (req, res) => {
     const { jwt: jwtToken } = req.query;
     if (!jwtToken) return res.status(401).json({ error: 401, message: 'jwt required' });
 
@@ -376,16 +307,15 @@ app.get('/api/exam/:id/queue', (req, res) => {
     try { payload = jwt.verify(jwtToken, JWT_SECRET); }
     catch (e) { return res.status(401).json({ error: 401, message: 'invalid jwt' }); }
 
-    const room = roomStore.get(req.params.id);
+    const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
 
-    // Register patient in queue if not already there
     if (!room.queue.find(q => q.token === jwtToken)) {
         const patientName = payload.patientName || 'ผู้ป่วย';
         room.queue.push({ token: jwtToken, patientName, joinedAt: new Date().toISOString(), status: 'waiting' });
-        roomStore.set(req.params.id, room);
+        await roomStore.set(req.params.id, room);
         console.log(`[exam] patient "${patientName}" joined queue for room ${req.params.id}`);
-        logEvent('patient_joined_queue', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName, patientCid: payload.cid || '' });
+        await logStore.insert('patient_joined_queue', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName, patientCid: payload.cid || '' });
     }
 
     const myEntry = room.queue.find(q => q.token === jwtToken);
@@ -400,80 +330,60 @@ app.get('/api/exam/:id/queue', (req, res) => {
 });
 
 // ── POST /api/exam/:id/next – doctor calls next patient ───────────────────────
-app.post('/api/exam/:id/next', auth(), (req, res) => {
-    const room = roomStore.get(req.params.id);
+app.post('/api/exam/:id/next', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
 
-    // Any authenticated provider can call next patient
-    // Track them as joined if not owner
     const userId = res.locals.user?.username;
     if (userId && room.ownerId !== userId) {
         if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
         if (!room.joinedProviders.some(p => p.userId === userId)) {
-            room.joinedProviders.push({
-                userId,
-                display: res.locals.user?.display || userId,
-                joinedAt: new Date().toISOString()
-            });
-            roomStore.set(req.params.id, room);
-            console.log(`[exam] provider ${userId} joined room ${req.params.id} via next-patient`);
+            room.joinedProviders.push({ userId, display: res.locals.user?.display || userId, joinedAt: new Date().toISOString() });
+            await roomStore.set(req.params.id, room);
         }
     }
 
-    // Mark previous current as done
     if (room.currentPatientToken) {
         const prev = room.queue.find(q => q.token === room.currentPatientToken);
         if (prev) prev.status = 'done';
     }
 
-    // Admit next waiting patient
     const next = room.queue.find(q => q.status === 'waiting');
     if (!next) {
         room.currentPatientToken = null;
-        roomStore.set(req.params.id, room);
+        await roomStore.set(req.params.id, room);
         return res.json({ admitted: null, queueLength: 0 });
     }
 
     next.status = 'admitted';
     room.currentPatientToken = next.token;
-    roomStore.set(req.params.id, room);
+    await roomStore.set(req.params.id, room);
 
     console.log(`[exam] admitted patient "${next.patientName}" for room ${req.params.id}`);
-    logEvent('patient_admitted', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName: next.patientName });
-    res.json({
-        admitted:    next.patientName,
-        queueLength: room.queue.filter(q => q.status === 'waiting').length,
-    });
+    await logStore.insert('patient_admitted', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName: next.patientName });
+    res.json({ admitted: next.patientName, queueLength: room.queue.filter(q => q.status === 'waiting').length });
 });
 
 // ── GET /api/exam/:id/doctor – room info for doctor ───────────────────────────
-app.get('/api/exam/:id/doctor', auth(), (req, res) => {
-    const room = roomStore.get(req.params.id);
+app.get('/api/exam/:id/doctor', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
-    // if (room.ownerId !== res.locals.user?.username) return res.status(403).json({ error: 403, message: 'forbidden' });
     res.json(room);
 });
 
 // ── POST /api/exam/:id/invite – doctor generates a patient invite ─────────────
 // Body: { patientName?, cid?, displayName? }
 // Returns: queue link (for queue.ejs flow) + direct Jitsi JWT link (compat)
-app.post('/api/exam/:id/invite', auth(), (req, res) => {
-    const room = roomStore.get(req.params.id);
+app.post('/api/exam/:id/invite', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
 
-    // Any authenticated provider can invite patients
-    // Track them as joined if not owner
     const userId = res.locals.user?.username;
     if (userId && room.ownerId !== userId) {
         if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
         if (!room.joinedProviders.some(p => p.userId === userId)) {
-            room.joinedProviders.push({
-                userId,
-                display: res.locals.user?.display || userId,
-                joinedAt: new Date().toISOString()
-            });
-            roomStore.set(req.params.id, room);
-            console.log(`[exam] provider ${userId} joined room ${req.params.id} via invite`);
+            room.joinedProviders.push({ userId, display: res.locals.user?.display || userId, joinedAt: new Date().toISOString() });
+            await roomStore.set(req.params.id, room);
         }
     }
 
@@ -487,7 +397,7 @@ app.post('/api/exam/:id/invite', auth(), (req, res) => {
     const patientJoinUrl = `/queue/${req.params.id}?jwt=${queue_token}`;
 
     console.log(`[exam] invite generated for "${patientName}"${cid ? ` (${cid})` : ''} in room ${req.params.id}`);
-    logEvent('invite_generated', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName, patientCid: cid });
+    await logStore.insert('invite_generated', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName, patientCid: cid });
     res.json({ patientJoinUrl, patientName, cid });
 });
 
@@ -496,25 +406,18 @@ app.get('/api/meets/:id', auth(), (req, res) => res.status(404).json({ error: 40
 
 // ── POST /api/rooms/:id/join – explicitly join a room as a provider ───────────
 // Called when a logged-in provider opens a room link that was shared with them.
-app.post('/api/rooms/:id/join', auth(), (req, res) => {
-    const room = roomStore.get(req.params.id);
+app.post('/api/rooms/:id/join', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
 
     const userId = res.locals.user?.username;
     if (!userId) return res.status(401).json({ error: 401, message: 'unauthorized' });
-
-    // Already owner
     if (room.ownerId === userId) return res.json({ joined: false, reason: 'owner', room });
 
     if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
     if (!room.joinedProviders.some(p => p.userId === userId)) {
-        room.joinedProviders.push({
-            userId,
-            display: res.locals.user?.display || userId,
-            joinedAt: new Date().toISOString()
-        });
-        roomStore.set(req.params.id, room);
-        console.log(`[rooms] provider ${userId} explicitly joined room ${req.params.id}`);
+        room.joinedProviders.push({ userId, display: res.locals.user?.display || userId, joinedAt: new Date().toISOString() });
+        await roomStore.set(req.params.id, room);
     }
 
     res.json({ joined: true, room });
@@ -525,7 +428,7 @@ app.post('/api/rooms/:id/join', auth(), (req, res) => {
 // Body: { sessionName?, startTime, endTime, cid?, displayName?, account_id? }
 // Returns: { sessionID, meet: <full doctor URL>, patientJoinUrl: <full patient URL> }
 // Auth: open temporarily (no key required) for 3rd-party onboarding
-app.post('/api/meet/reserved', (req, res) => {
+app.post('/api/meet/reserved', async (req, res) => {
     const { sessionName, startTime, endTime, cid, displayName, account_id } = req.body;
 
     // Doctor identity is optional for lite — fallback to anonymous room
@@ -552,10 +455,8 @@ app.post('/api/meet/reserved', (req, res) => {
 
     // Room TTL = endtime + 25 hr buffer (so room stays alive until well after session ends)
     const roomTtlMs = Math.max(ROOM_TTL_MS, new Date(room.endtime).getTime() - Date.now() + 25 * 60 * 60 * 1000);
-    roomStore.set(id, room, roomTtlMs / 1000);
+    await roomStore.set(id, room, roomTtlMs / 1000);
 
-    // Mint a session token for the doctor so /exam/:id works immediately
-    // (same shape as ProviderID login — checked by auth() middleware)
     const doctorUser = {
         username: doctorId,
         display:  doctorDisplay,
@@ -565,10 +466,10 @@ app.post('/api/meet/reserved', (req, res) => {
     const doctorToken = createHash('sha256')
         .update(new Date().toISOString() + doctorId + randomInt(1000))
         .digest('hex');
-    tokenStorage.set(doctorToken, doctorUser);
+    await tokenStorage.set(doctorToken, doctorUser);
 
     console.log(`[reserved] created exam room ${id} owner=${doctorId} (${doctorDisplay})`);
-    logEvent('reserved_room_created', { roomId: id, roomType: 'exam', roomName: name, doctorId, doctorName: doctorDisplay, meta: { startTime: room.starttime, endTime: room.endtime } });
+    await logStore.insert('reserved_room_created', { roomId: id, roomType: 'exam', roomName: name, doctorId, doctorName: doctorDisplay, meta: { startTime: room.starttime, endTime: room.endtime } });
 
     // Full absolute URLs – include token so 3rd-party apps that only use the
     // `meet` URL can auto-authenticate the doctor without a separate login step.
@@ -590,17 +491,16 @@ app.post('/api/meet/reserved', (req, res) => {
 // Returns: { sessionID, meet: patientJoinUrl, patientJoinUrl }
 // Auth: open – called from 3rd-party appointment systems (no session required)
 // Note: cid is optional — works without it
-app.post('/api/meet/reserved/token', (req, res) => {
+app.post('/api/meet/reserved/token', async (req, res) => {
     const { sessionID, displayName, patientName, cid } = req.body;
     if (!sessionID) return res.status(400).json({ error: 400, message: 'sessionID required' });
 
-    const room = roomStore.get(sessionID);
+    const room = await roomStore.get(sessionID);
     if (!room) return res.status(400).json({ error: 400, message: 'invalidSessionID' });
 
     const name       = (displayName || patientName || '').trim() || 'ผู้ป่วย';
     const patientCid = (cid || '').trim();
 
-    // exp = 24 hr after session end (iat = now, so token is valid immediately)
     const reservedExp = Math.floor(new Date(room.endtime).getTime() / 1000) + 86400;
     const queue_token = jwt.sign(
         { roomId: sessionID, role: 'patient', ownerId: room.ownerId, patientName: name, cid: patientCid, exp: reservedExp },
@@ -609,7 +509,7 @@ app.post('/api/meet/reserved/token', (req, res) => {
     const patientJoinUrl = `${APP_BASE_URL}/queue/${sessionID}?jwt=${queue_token}`;
 
     console.log(`[reserved/token] queue link issued for "${name}"${patientCid ? ` (${patientCid})` : ''} in room ${sessionID}`);
-    logEvent('reserved_token_issued', { roomId: sessionID, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName: name, patientCid });
+    await logStore.insert('reserved_token_issued', { roomId: sessionID, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName: name, patientCid });
     res.json({ sessionID, meet: patientJoinUrl, patientJoinUrl });
 });
 
@@ -628,7 +528,7 @@ app.post('/api/guest/token', /*auth(),*/ async (req, res, next) => {
             user: { display: patientName || 'Guest', roles: ['guest'] },
         };
 
-        tokenStorage.set(guestToken, guestSession, ttlSeconds || 24 * 60 * 60);
+        await tokenStorage.set(guestToken, guestSession, ttlSeconds || 24 * 60 * 60);
         res.json({ token: guestToken, meetId });
     } catch (err) {
         next(err);
@@ -650,81 +550,28 @@ app.post('/api/jwt/verify', (req, res) => {
 // ── Usage Log API (public – for transparency dashboard) ────────────────────────
 
 // GET /api/logs/summary – overall stats
-app.get('/api/logs/summary', (_req, res) => {
-    const total      = _logDb.prepare('SELECT COUNT(*) as c FROM usage_logs').get().c;
-    const rooms      = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE event IN ('room_created','reserved_room_created')").get().c;
-    const patients   = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE event = 'patient_joined_queue'").get().c;
-    const admitted   = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE event = 'patient_admitted'").get().c;
-    const doctors    = _logDb.prepare("SELECT COUNT(DISTINCT doctor_id) as c FROM usage_logs WHERE doctor_id IS NOT NULL").get().c;
-    const today      = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE date(ts) = date('now','localtime')").get().c;
-    const thisMonth  = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE strftime('%Y-%m', ts) = strftime('%Y-%m', 'now','localtime')").get().c;
-    res.json({ total, rooms, patients, admitted, doctors, today, thisMonth });
+app.get('/api/logs/summary', async (_req, res) => {
+    res.json(await logStore.summary());
 });
 
 // GET /api/logs/daily?days=30 – events per day
-app.get('/api/logs/daily', (req, res) => {
-    const days = Math.min(parseInt(req.query.days) || 30, 365);
-    const rows = _logDb.prepare(`
-        SELECT date(ts) as day,
-               SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
-               SUM(CASE WHEN event = 'patient_joined_queue' THEN 1 ELSE 0 END) as patients,
-               SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted
-        FROM usage_logs
-        WHERE ts >= datetime('now', '-' || ? || ' days', 'localtime')
-        GROUP BY date(ts)
-        ORDER BY day
-    `).all(days);
-    res.json(rows);
+app.get('/api/logs/daily', async (req, res) => {
+    res.json(await logStore.daily(parseInt(req.query.days) || 30));
 });
 
 // GET /api/logs/monthly?months=12 – events per month
-app.get('/api/logs/monthly', (req, res) => {
-    const months = Math.min(parseInt(req.query.months) || 12, 60);
-    const rows = _logDb.prepare(`
-        SELECT strftime('%Y-%m', ts) as month,
-               SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
-               SUM(CASE WHEN event = 'patient_joined_queue' THEN 1 ELSE 0 END) as patients,
-               SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted,
-               COUNT(DISTINCT doctor_id) as doctors
-        FROM usage_logs
-        WHERE ts >= datetime('now', '-' || ? || ' months', 'localtime')
-        GROUP BY strftime('%Y-%m', ts)
-        ORDER BY month
-    `).all(months);
-    res.json(rows);
+app.get('/api/logs/monthly', async (req, res) => {
+    res.json(await logStore.monthly(parseInt(req.query.months) || 12));
 });
 
 // GET /api/logs/by-doctor?months=3 – usage grouped by doctor
-app.get('/api/logs/by-doctor', (req, res) => {
-    const months = Math.min(parseInt(req.query.months) || 3, 24);
-    const rows = _logDb.prepare(`
-        SELECT doctor_id, doctor_name,
-               SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
-               SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted,
-               SUM(CASE WHEN event = 'invite_generated' THEN 1 ELSE 0 END) as invites,
-               COUNT(*) as total_events,
-               MIN(ts) as first_seen,
-               MAX(ts) as last_seen
-        FROM usage_logs
-        WHERE doctor_id IS NOT NULL
-          AND ts >= datetime('now', '-' || ? || ' months', 'localtime')
-        GROUP BY doctor_id
-        ORDER BY total_events DESC
-    `).all(months);
-    res.json(rows);
+app.get('/api/logs/by-doctor', async (req, res) => {
+    res.json(await logStore.byDoctor(parseInt(req.query.months) || 3));
 });
 
 // GET /api/logs/recent?limit=50 – recent event log
-app.get('/api/logs/recent', (req, res) => {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 500);
-    const rows = _logDb.prepare(`
-        SELECT id, ts, event, room_id, room_type, room_name,
-               doctor_id, doctor_name, patient_name, patient_cid
-        FROM usage_logs
-        ORDER BY id DESC
-        LIMIT ?
-    `).all(limit);
-    res.json(rows);
+app.get('/api/logs/recent', async (req, res) => {
+    res.json(await logStore.recent(parseInt(req.query.limit) || 50));
 });
 
 // ── Error handler ──────────────────────────────────────────────────────────────
@@ -735,6 +582,10 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-    console.log(`core-lite running on http://0.0.0.0:${PORT}`);
-});
+(async () => {
+    const { init } = require('./store');
+    await init();
+    app.listen(PORT, () => {
+        console.log(`core-lite running on http://0.0.0.0:${PORT}`);
+    });
+})();
