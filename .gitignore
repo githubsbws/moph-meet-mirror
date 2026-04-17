@@ -1,3 +1,5 @@
 sonarqube/sonar*/*
 .scannerwork
-devserverlist.md
+devserverlist.mddata/*.db
+data/*.db-shm
+data/*.db-wal

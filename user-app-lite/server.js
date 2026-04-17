@@ -335,6 +335,44 @@ app.get('/usage-logs', (_req, res) => {
   res.render('usage-logs');
 });
 
+// ── PHR proxy (phr1.moph.go.th) ──────────────────────────────────────────────
+app.post('/api/phr/request-otp', requireAuth, async (req, res) => {
+  const { cid } = req.body;
+  try {
+    const r = await apiFetch('https://phr1.moph.go.th/api/RequestTokenv1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cid })
+    });
+    const data = await r.json().catch(() => ({}));
+    res.status(r.status).json(data);
+  } catch (e) {
+    res.status(502).json({ message: 'PHR gateway error: ' + e.message });
+  }
+});
+
+app.post('/api/phr/encounter', requireAuth, async (req, res) => {
+  const { cid, otp } = req.body;
+  try {
+    // Validate OTP first
+    await apiFetch('https://phr1.moph.go.th/api/WebApp?Action=ValidateOTP', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cid, otp })
+    });
+    // Fetch encounter data
+    const r = await apiFetch('https://phr1.moph.go.th/api/WebApp?Action=Encounter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cid, otp })
+    });
+    const data = await r.json();
+    res.json(data);
+  } catch (e) {
+    res.status(502).json({ message: 'PHR gateway error: ' + e.message });
+  }
+});
+
 // ── Proxy usage-log API from core-lite (public) ─────────────────────────────────
 app.get('/api/usage-logs/:endpoint', async (req, res) => {
   const allowed = ['summary', 'daily', 'monthly', 'by-doctor', 'recent'];

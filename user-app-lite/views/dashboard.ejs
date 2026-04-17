@@ -247,11 +247,16 @@
                   <% } %>
                   <p class="font-semibold text-sm truncate"><%= m.name || m.title || m.id %></p>
                 </div>
-                <div class="flex flex-wrap gap-3 text-xs opacity-55 mt-1">
+                <div class="flex flex-wrap items-center gap-3 text-xs opacity-55 mt-1">
                   <span>📆 <%= formatDate(m.starttime) %></span>
                   <span>🕐 <%= formatTime(m.starttime) %> – <%= formatTime(m.endtime) %></span>
                   <% if (m.ownerId !== user.username && m.ownerDisplay) { %>
                     <span>👤 <%= m.ownerDisplay %></span>
+                  <% } %>
+                  <% if (m.type === 'exam') { %>
+                    <button class="btn btn-xs btn-outline btn-primary z-10" onclick="event.preventDefault();event.stopPropagation();openQueueModal('<%= m.id %>','<%= (m.name || m.id).replace(/'/g,"\\\'" ) %>')">
+                      👥 ดูคิว
+                    </button>
                   <% } %>
                 </div>
               </div>
@@ -277,6 +282,43 @@
   <% } %>
 
 </main>
+
+<!-- ── Queue View Modal ────────────────────────────────────────────────────── -->
+<dialog id="queue-modal" class="modal">
+  <div class="modal-box bg-white w-full max-w-sm">
+    <h3 class="font-bold text-lg mb-1">👥 คิวผู้ป่วย</h3>
+    <p id="queue-modal-room" class="text-sm text-base-content/60 mb-3"></p>
+    <div id="queue-modal-list" class="flex flex-col gap-2 min-h-[60px]">
+      <p class="text-center text-base-content/40 text-sm py-4">กำลังโหลด…</p>
+    </div>
+    <div class="modal-action"><button onclick="document.getElementById('queue-modal').close()" class="btn btn-sm">ปิด</button></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+<script>
+async function openQueueModal(roomId, roomName) {
+  const dlg = document.getElementById('queue-modal');
+  document.getElementById('queue-modal-room').textContent = roomName;
+  document.getElementById('queue-modal-list').innerHTML = '<p class="text-center text-base-content/40 text-sm py-4">กำลังโหลด…</p>';
+  dlg.showModal();
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/doctor', { credentials:'include' });
+    if (!r.ok) throw new Error('ไม่สามารถโหลดคิวได้');
+    const room = await r.json();
+    const q = room.queue || [];
+    const listEl = document.getElementById('queue-modal-list');
+    if (q.length === 0) { listEl.innerHTML = '<p class="text-center text-base-content/40 text-sm py-4">ยังไม่มีผู้ป่วยในคิว</p>'; return; }
+    listEl.innerHTML = '';
+    q.forEach((p, i) => {
+      const s = p.status === 'admitted' ? '<span class="badge badge-success badge-xs">กำลังตรวจ</span>'
+              : '<span class="badge badge-ghost badge-xs">รอ #' + (i+1) + '</span>';
+      listEl.innerHTML += '<div class="flex items-center gap-2 bg-base-100 rounded-lg px-3 py-2">' + s + '<span class="text-sm">' + (p.patientName||'ผู้ป่วย') + '</span><span class="text-xs text-base-content/40 ml-auto">' + (p.joinedAt ? new Date(p.joinedAt).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}) : '') + '</span></div>';
+    });
+  } catch(e) {
+    document.getElementById('queue-modal-list').innerHTML = '<p class="text-center text-error text-sm py-4">' + e.message + '</p>';
+  }
+}
+</script>
 
 <!-- ── Create Room Modal ──────────────────────────────────────────────────── -->
 <dialog id="create-room-modal" class="modal">
