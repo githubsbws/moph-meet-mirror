@@ -1,0 +1,181 @@
+{
+  "info": {
+    "name": "core API",
+    "_postman_id": "core-api-collection",
+    "description": "Auto-generated Postman collection for the `core` service.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "examId", "value": "", "type": "string" },
+    { "key": "patientId", "value": "", "type": "string" },
+    { "key": "deviceID", "value": "", "type": "string" },
+    { "key": "keyword", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "health"]
+        },
+        "description": "Check service health"
+      }
+    },
+    {
+      "name": "Create reserved meet",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sessionName\": \"Test Session\",\n  \"startTime\": \"2026-03-03T08:00:00Z\",\n  \"endTime\": \"2026-03-03T09:00:00Z\",\n  \"cid\": \"CID123\",\n  \"displayName\": \"Dr. Example\",\n  \"account_id\": \"acct-1\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": { "raw": "{{baseUrl}}/api/meet/reserved", "host": ["{{baseUrl}}"], "path": ["api", "meet", "reserved"] },
+        "description": "Create a reserved meeting (requires API key / token in Authorization header)"
+      }
+    },
+    {
+      "name": "Create reserved meet (member token)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{ \"sessionID\": \"<existingSessionID>\", \"displayName\": \"Nurse\", \"account_id\": \"acct-1\" }", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{baseUrl}}/api/meet/reserved/token", "host": ["{{baseUrl}}"], "path": ["api", "meet", "reserved", "token"] },
+        "description": "Exchange reserved session ID for a member token (requires API key / token in Authorization header)"
+      }
+    },
+    {
+      "name": "Auth - ProviderID (OAuth code)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{ \"code\": \"<oauth-code>\" }", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{baseUrl}}/api/auth/providerID", "host": ["{{baseUrl}}"], "path": ["api", "auth", "providerID"] },
+        "description": "Authenticate using external provider code; returns internal token and user info"
+      }
+    },
+    {
+      "name": "Auth - username/password",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{ \"username\": \"user1\", \"password\": \"secret\" }", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{baseUrl}}/api/auth", "host": ["{{baseUrl}}"], "path": ["api", "auth"] },
+        "description": "Login with username/password; response includes `token` to use in Authorization header as `Bearer {{token}}`"
+      }
+    },
+    {
+      "name": "Auth - check token",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{ \"token\": \"{{token}}\" }", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{baseUrl}}/api/auth/check", "host": ["{{baseUrl}}"], "path": ["api", "auth", "check"] },
+        "description": "Check token validity"
+      }
+    },
+    {
+      "name": "Logout",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{ \"token\": \"{{token}}\" }", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{baseUrl}}/api/logout", "host": ["{{baseUrl}}"], "path": ["api", "logout"] },
+        "description": "Logout user by token"
+      }
+    },
+    {
+      "name": "Get meets (current user)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/meets", "host": ["{{baseUrl}}"], "path": ["api", "meets"] },
+        "description": "List upcoming meets for the authenticated user"
+      }
+    },
+    {
+      "name": "Get exam by id",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/exam/{{examId}}", "host": ["{{baseUrl}}"], "path": ["api", "exam", "{{examId}}"] },
+        "description": "Get exam/meeting details by `examId`"
+      }
+    },
+    {
+      "name": "Search users by keyword",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/user/{{keyword}}", "host": ["{{baseUrl}}"], "path": ["api", "user", "{{keyword}}"] },
+        "description": "Search users whose display name matches `keyword`"
+      }
+    },
+    {
+      "name": "Get patient device realtime",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/patient/{{patientId}}/iot/{{deviceID}}/realtime", "host": ["{{baseUrl}}"], "path": ["api", "patient", "{{patientId}}", "iot", "{{deviceID}}", "realtime"] },
+        "description": "Get last realtime record for a patient-device pair"
+      }
+    },
+    {
+      "name": "List patient IOT records",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/patient/{{patientId}}/iot", "host": ["{{baseUrl}}"], "path": ["api", "patient", "{{patientId}}", "iot"] },
+        "description": "List IOT records for a patient"
+      }
+    },
+    {
+      "name": "Create patient IOT record",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{ \"deviceID\": \"dev-1\", \"type\": \"hr\", \"key\": \"hr\", \"value\": \"72\", \"organization\": \"org1\" }", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{baseUrl}}/api/patient/{{patientId}}/iot", "host": ["{{baseUrl}}"], "path": ["api", "patient", "{{patientId}}", "iot"] },
+        "description": "Create an IOT record for a patient"
+      }
+    },
+    {
+      "name": "List patient medical records",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+        "url": { "raw": "{{baseUrl}}/api/patient/{{patientId}}/med", "host": ["{{baseUrl}}"], "path": ["api", "patient", "{{patientId}}", "med"] },
+        "description": "List medical records for a patient"
+      }
+    },
+    {
+      "name": "Create patient medical record",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{token}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{ \n  \"recordDate\": \"2026-03-03\",\n  \"title\": \"Visit note\",\n  \"author\": \"Dr. Example\",\n  \"organization\": \"Hospital\",\n  \"content\": \"Patient presented with...\",\n  \"profile\": {},\n  \"healthcheck\": {},\n  \"analysis\": {},\n  \"labtest\": {},\n  \"xraycontent\": {}\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{baseUrl}}/api/patient/{{patientId}}/med", "host": ["{{baseUrl}}"], "path": ["api", "patient", "{{patientId}}", "med"] },
+        "description": "Create a medical record for a patient"
+      }
+    }
+  ]
+}

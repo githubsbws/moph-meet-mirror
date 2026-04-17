@@ -1,0 +1,456 @@
+{
+  "info": {
+    "name": "call API (MOPH Meet – Jitsi)",
+    "_postman_id": "call-api-collection",
+    "description": "Postman collection for the `call` service (MOPH Meet / Jitsi Meet).\n\nIncludes:\n- Core meeting reservation APIs (create room, get token)\n- Authentication APIs used before joining a call\n- Jitsi Prosody HTTP endpoints (room size, room participants, active sessions)\n- Jitsi External API / IFrame embedding helpers",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "coreBaseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "jitsiDomain", "value": "https://moph-meetingroom.moph.go.th", "type": "string" },
+    { "key": "prosodyHttpBase", "value": "https://moph-meetingroom.moph.go.th/http-bind", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "jwtToken", "value": "", "type": "string" },
+    { "key": "sessionID", "value": "", "type": "string" },
+    { "key": "roomName", "value": "", "type": "string" },
+    { "key": "domain", "value": "moph-meetingroom.moph.go.th", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Core – Meeting Reservation",
+      "description": "APIs on the core service for creating reserved meetings and generating JWT tokens for Jitsi.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/health",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Verify the core service is running."
+          },
+          "response": []
+        },
+        {
+          "name": "Create reserved meeting",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.sessionID) {",
+                  "    pm.collectionVariables.set('sessionID', json.sessionID);",
+                  "}",
+                  "if (json.meet) {",
+                  "    // extract JWT from the meet URL",
+                  "    var jwt = json.meet.split('jwt=')[1];",
+                  "    if (jwt) pm.collectionVariables.set('jwtToken', jwt);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionName\": \"Teleconsult Session\",\n  \"startTime\": \"2026-03-11T08:00:00Z\",\n  \"endTime\": \"2026-03-11T09:00:00Z\",\n  \"cid\": \"CID123456\",\n  \"displayName\": \"Dr. Somchai\",\n  \"account_id\": \"acct-doctor-1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/meet/reserved",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "meet", "reserved"]
+            },
+            "description": "Create a new reserved meeting room.\n\nReturns a `sessionID` and a full Jitsi meet URL with an embedded JWT (owner affiliation).\n\nThe JWT grants the caller **owner** privileges (livestreaming + recording enabled)."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"sessionID\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n  \"meet\": \"https://moph-meetingroom.moph.go.th/teleconsult-session?jwt=eyJhbGciOiJIUzI1NiIs...\"\n}",
+              "_postman_previewlanguage": "json"
+            }
+          ]
+        },
+        {
+          "name": "Get member token for reserved meeting",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.meet) {",
+                  "    var jwt = json.meet.split('jwt=')[1];",
+                  "    if (jwt) pm.collectionVariables.set('jwtToken', jwt);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionID\": \"{{sessionID}}\",\n  \"displayName\": \"Nurse Ploy\",\n  \"account_id\": \"acct-nurse-1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/meet/reserved/token",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "meet", "reserved", "token"]
+            },
+            "description": "Exchange an existing `sessionID` for a **member** JWT.\n\nThe member token has recording disabled and affiliation set to `member`."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"sessionID\": \"f7e8d9c0-b1a2-3456-7890-abcdef012345\",\n  \"meet\": \"https://moph-meetingroom.moph.go.th/teleconsult-session?jwt=eyJhbGciOiJIUzI1NiIs...\"\n}",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "Invalid session",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"status\": 400,\n  \"message\": \"invalidSessionID\"\n}",
+              "_postman_previewlanguage": "json"
+            }
+          ]
+        },
+        {
+          "name": "List meets (current user)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/meets",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "meets"]
+            },
+            "description": "List upcoming meetings for the authenticated user, sorted by nearest start time."
+          },
+          "response": []
+        },
+        {
+          "name": "Get meeting / exam by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/exam/{{sessionID}}",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "exam", "{{sessionID}}"]
+            },
+            "description": "Get full meeting details by exam/session ID, including invitees and patient data."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Core – Authentication",
+      "description": "Auth endpoints used to obtain a bearer token before calling meeting APIs.",
+      "item": [
+        {
+          "name": "Login (username / password)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"doctor1\",\n  \"password\": \"secret\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/auth",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "auth"]
+            },
+            "description": "Authenticate with username & password. The returned `token` is automatically saved to the collection variable `{{token}}`."
+          },
+          "response": []
+        },
+        {
+          "name": "Login (ProviderID OAuth code)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('token', json.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"<oauth-authorization-code>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/auth/providerID",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "auth", "providerID"]
+            },
+            "description": "Exchange a MOPH ProviderID OAuth authorization code for a session token."
+          },
+          "response": []
+        },
+        {
+          "name": "Check token validity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/auth/check",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "auth", "check"]
+            },
+            "description": "Check whether the given token is still valid."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{coreBaseUrl}}/api/logout",
+              "host": ["{{coreBaseUrl}}"],
+              "path": ["api", "logout"]
+            },
+            "description": "Logout and invalidate the token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jitsi Prosody – Room Info",
+      "description": "HTTP endpoints exposed by Prosody plugins (`mod_muc_size`). These hit the Jitsi server directly.",
+      "item": [
+        {
+          "name": "Get room size (participant count)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jitsiDomain}}/room-size?room={{roomName}}&domain={{domain}}",
+              "host": ["{{jitsiDomain}}"],
+              "path": ["room-size"],
+              "query": [
+                { "key": "room", "value": "{{roomName}}", "description": "Room name (the slug portion of the URL)" },
+                { "key": "domain", "value": "{{domain}}", "description": "Domain of the Jitsi server" },
+                { "key": "subdomain", "value": "", "description": "(Optional) Subdomain if using domain mapping", "disabled": true },
+                { "key": "token", "value": "{{jwtToken}}", "description": "(Optional) JWT for token-verified deployments", "disabled": true }
+              ]
+            },
+            "description": "Returns the number of participants currently in the room (excluding Ojicofo focus).\n\nResponse: `{\"participants\": 3}`"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "{\"participants\":3}",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "Room not found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "",
+              "_postman_previewlanguage": "text"
+            }
+          ]
+        },
+        {
+          "name": "Get room participants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jitsiDomain}}/room?room={{roomName}}&domain={{domain}}",
+              "host": ["{{jitsiDomain}}"],
+              "path": ["room"],
+              "query": [
+                { "key": "room", "value": "{{roomName}}", "description": "Room name" },
+                { "key": "domain", "value": "{{domain}}", "description": "Domain of the Jitsi server" },
+                { "key": "subdomain", "value": "", "description": "(Optional) Subdomain", "disabled": true },
+                { "key": "token", "value": "{{jwtToken}}", "description": "(Optional) JWT token", "disabled": true }
+              ]
+            },
+            "description": "Returns detailed info for each participant in the room (JID, display name, email)."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "[\n  {\n    \"jid\": \"conference.moph-meetingroom.moph.go.th/abc123\",\n    \"email\": \"doctor@example.com\",\n    \"display_name\": \"Dr. Somchai\"\n  }\n]",
+              "_postman_previewlanguage": "json"
+            }
+          ]
+        },
+        {
+          "name": "Get active sessions count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jitsiDomain}}/sessions",
+              "host": ["{{jitsiDomain}}"],
+              "path": ["sessions"]
+            },
+            "description": "Returns the total number of active XMPP sessions on the Prosody server (plain integer)."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "status": "OK",
+              "code": 200,
+              "body": "42",
+              "_postman_previewlanguage": "text"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Jitsi – Join Room (Browser)",
+      "description": "These are not true API calls – they are URLs you open in a browser or embed in an iframe to join a Jitsi meeting. Included here for quick reference and testing.",
+      "item": [
+        {
+          "name": "Join room (with JWT)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jitsiDomain}}/{{roomName}}?jwt={{jwtToken}}",
+              "host": ["{{jitsiDomain}}"],
+              "path": ["{{roomName}}"],
+              "query": [
+                { "key": "jwt", "value": "{{jwtToken}}", "description": "Jitsi JWT token (HS256)" }
+              ]
+            },
+            "description": "Open this URL in a browser to join the meeting room with the given JWT.\n\nThe JWT payload contains user identity, room, and expiry."
+          },
+          "response": []
+        },
+        {
+          "name": "Join room (anonymous / guest)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jitsiDomain}}/{{roomName}}",
+              "host": ["{{jitsiDomain}}"],
+              "path": ["{{roomName}}"]
+            },
+            "description": "Open this URL to join a room as a guest (only works if anonymous access is enabled)."
+          },
+          "response": []
+        },
+        {
+          "name": "Join room with config overrides",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jitsiDomain}}/{{roomName}}?jwt={{jwtToken}}#config.startWithAudioMuted=true&config.startWithVideoMuted=true&config.prejoinConfig.enabled=false",
+              "host": ["{{jitsiDomain}}"],
+              "path": ["{{roomName}}"],
+              "query": [
+                { "key": "jwt", "value": "{{jwtToken}}" }
+              ]
+            },
+            "description": "Join a room with inline config overrides via URL hash parameters.\n\nCommon overrides:\n- `config.startWithAudioMuted=true`\n- `config.startWithVideoMuted=true`\n- `config.prejoinConfig.enabled=false`\n- `config.disableDeepLinking=true`"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jitsi – IFrame API (Embed)",
+      "description": "Code snippets and example payloads for embedding Jitsi via the IFrame API (`external_api.min.js`).",
+      "item": [
+        {
+          "name": "IFrame API embed example (docs)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{jitsiDomain}}/libs/external_api.min.js",
+              "host": ["{{jitsiDomain}}"],
+              "path": ["libs", "external_api.min.js"]
+            },
+            "description": "Fetch the Jitsi IFrame API JS library.\n\nEmbed example:\n```html\n<script src='https://moph-meetingroom.moph.go.th/libs/external_api.min.js'></script>\n<script>\n  const api = new JitsiMeetExternalAPI('moph-meetingroom.moph.go.th', {\n    roomName: 'teleconsult-session',\n    jwt: '<your-jwt-token>',\n    width: '100%',\n    height: 600,\n    parentNode: document.getElementById('meet-container'),\n    configOverwrite: {\n      startWithAudioMuted: true,\n      startWithVideoMuted: true,\n      prejoinConfig: { enabled: false }\n    },\n    interfaceConfigOverwrite: {\n      SHOW_JITSI_WATERMARK: false,\n      SHOW_BRAND_WATERMARK: false\n    }\n  });\n</script>\n```"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
