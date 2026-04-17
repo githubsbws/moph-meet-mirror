@@ -215,6 +215,52 @@ const roomStore = {
     keys() { return _roomKeys.all(Date.now()).map(r => r.id); },
 };
 
+// ── Usage log (persistent SQLite) ─────────────────────────────────────────────
+const _logDb = new (require('better-sqlite3'))(_path.join(process.env.DATA_DIR || _path.join(__dirname, '../../data'), 'usage_logs.db'));
+_logDb.pragma('journal_mode = WAL');
+_logDb.exec(`
+  CREATE TABLE IF NOT EXISTS usage_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+    event       TEXT    NOT NULL,
+    room_id     TEXT,
+    room_type   TEXT,
+    room_name   TEXT,
+    doctor_id   TEXT,
+    doctor_name TEXT,
+    patient_name TEXT,
+    patient_cid TEXT,
+    meta        TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_logs_ts        ON usage_logs(ts);
+  CREATE INDEX IF NOT EXISTS idx_logs_doctor    ON usage_logs(doctor_id);
+  CREATE INDEX IF NOT EXISTS idx_logs_event     ON usage_logs(event);
+`);
+
+const _logInsert = _logDb.prepare(`
+  INSERT INTO usage_logs (ts, event, room_id, room_type, room_name, doctor_id, doctor_name, patient_name, patient_cid, meta)
+  VALUES (datetime(?,'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+function logEvent(event, data = {}) {
+    try {
+        _logInsert.run(
+            new Date().toISOString(),
+            event,
+            data.roomId    || null,
+            data.roomType  || null,
+            data.roomName  || null,
+            data.doctorId  || null,
+            data.doctorName || null,
+            data.patientName || null,
+            data.patientCid  || null,
+            data.meta ? JSON.stringify(data.meta) : null
+        );
+    } catch (e) {
+        console.error('[logEvent]', e.message);
+    }
+}
+
 // ── Helper: generate a short room ID ──────────────────────────────────────────
 function makeRoomId() {
     return createHash('sha256')
@@ -275,16 +321,18 @@ app.post('/api/rooms', auth(), (req, res) => {
         recording:           type === 'exam',
     };
 
-    roomStore.set(id, room);
+    // Room TTL = endtime + 25 hr buffer (so room stays alive until well after session ends)
+    const roomTtlMs = Math.max(ROOM_TTL_MS, new Date(room.endtime).getTime() - Date.now() + 25 * 60 * 60 * 1000);
+    roomStore.set(id, room, roomTtlMs / 1000);
     console.log(`[rooms] created ${type} room ${id} for ${user.display}`);
+    logEvent('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display });
 
-    // Build patient join URL for exam rooms (JWT, 8h TTL)
+    // Build patient join URL for exam rooms (JWT, no expiry)
     let patientJoinUrl = null;
     if (type === 'exam') {
         const jwt_token = jwt.sign(
             { roomId: id, role: 'patient', ownerId: user.username },
-            JWT_SECRET,
-            { expiresIn: '8h' }
+            JWT_SECRET
         );
         patientJoinUrl = `/queue/${id}?jwt=${jwt_token}`;
     }
@@ -337,6 +385,7 @@ app.get('/api/exam/:id/queue', (req, res) => {
         room.queue.push({ token: jwtToken, patientName, joinedAt: new Date().toISOString(), status: 'waiting' });
         roomStore.set(req.params.id, room);
         console.log(`[exam] patient "${patientName}" joined queue for room ${req.params.id}`);
+        logEvent('patient_joined_queue', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName, patientCid: payload.cid || '' });
     }
 
     const myEntry = room.queue.find(q => q.token === jwtToken);
@@ -390,6 +439,7 @@ app.post('/api/exam/:id/next', auth(), (req, res) => {
     roomStore.set(req.params.id, room);
 
     console.log(`[exam] admitted patient "${next.patientName}" for room ${req.params.id}`);
+    logEvent('patient_admitted', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName: next.patientName });
     res.json({
         admitted:    next.patientName,
         queueLength: room.queue.filter(q => q.status === 'waiting').length,
@@ -432,12 +482,12 @@ app.post('/api/exam/:id/invite', auth(), (req, res) => {
 
     const queue_token = jwt.sign(
         { roomId: req.params.id, role: 'patient', ownerId: room.ownerId, patientName, cid },
-        JWT_SECRET,
-        { expiresIn: '8h' }
+        JWT_SECRET
     );
     const patientJoinUrl = `/queue/${req.params.id}?jwt=${queue_token}`;
 
     console.log(`[exam] invite generated for "${patientName}"${cid ? ` (${cid})` : ''} in room ${req.params.id}`);
+    logEvent('invite_generated', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName, patientCid: cid });
     res.json({ patientJoinUrl, patientName, cid });
 });
 
@@ -472,22 +522,15 @@ app.post('/api/rooms/:id/join', auth(), (req, res) => {
 
 // ── POST /api/meet/reserved – backward-compat: create exam room via API key ───
 // Called by appointment system to pre-create a room for a specific doctor.
-// Body: { sessionName?, startTime, endTime, cid, displayName, account_id }
-//   cid / account_id  — doctor's CID; becomes the room owner so only that doctor
-//                       can open the exam room with their ProviderID session.
+// Body: { sessionName?, startTime, endTime, cid?, displayName?, account_id? }
 // Returns: { sessionID, meet: <full doctor URL>, patientJoinUrl: <full patient URL> }
 // Auth: open temporarily (no key required) for 3rd-party onboarding
 app.post('/api/meet/reserved', (req, res) => {
     const { sessionName, startTime, endTime, cid, displayName, account_id } = req.body;
 
-    // Doctor identity MUST come from the request body (CID from appointment),
-    // not from the API-key caller's session which has no meaningful user context.
-    const doctorId      = account_id || cid;
-    const doctorDisplay = displayName || doctorId || 'แพทย์';
-
-    if (!doctorId) {
-        return res.status(400).json({ error: 400, message: 'cid or account_id required' });
-    }
+    // Doctor identity is optional for lite — fallback to anonymous room
+    const doctorId      = account_id || cid || `anon_${Date.now()}`;
+    const doctorDisplay = displayName || (account_id || cid ? doctorId : 'แพทย์');
 
     const id   = makeRoomId();
     const name = sessionName || autoRoomName('exam', doctorDisplay);
@@ -507,7 +550,9 @@ app.post('/api/meet/reserved', (req, res) => {
         recording:           true,
     };
 
-    roomStore.set(id, room);
+    // Room TTL = endtime + 25 hr buffer (so room stays alive until well after session ends)
+    const roomTtlMs = Math.max(ROOM_TTL_MS, new Date(room.endtime).getTime() - Date.now() + 25 * 60 * 60 * 1000);
+    roomStore.set(id, room, roomTtlMs / 1000);
 
     // Mint a session token for the doctor so /exam/:id works immediately
     // (same shape as ProviderID login — checked by auth() middleware)
@@ -523,15 +568,17 @@ app.post('/api/meet/reserved', (req, res) => {
     tokenStorage.set(doctorToken, doctorUser);
 
     console.log(`[reserved] created exam room ${id} owner=${doctorId} (${doctorDisplay})`);
+    logEvent('reserved_room_created', { roomId: id, roomType: 'exam', roomName: name, doctorId, doctorName: doctorDisplay, meta: { startTime: room.starttime, endTime: room.endtime } });
 
     // Full absolute URLs – include token so 3rd-party apps that only use the
     // `meet` URL can auto-authenticate the doctor without a separate login step.
     const doctorUrl = `${APP_BASE_URL}/exam/${id}?token=${doctorToken}`;
 
+    // exp = 24 hr after session end (iat = now, so token is valid immediately)
+    const reservedExp = Math.floor(new Date(room.endtime).getTime() / 1000) + 86400;
     const queue_token = jwt.sign(
-        { roomId: id, role: 'patient', ownerId: doctorId, patientName: 'ผู้ป่วย', cid: '' },
-        JWT_SECRET,
-        { expiresIn: '8h' }
+        { roomId: id, role: 'patient', ownerId: doctorId, patientName: 'ผู้ป่วย', cid: '', exp: reservedExp },
+        JWT_SECRET
     );
     const patientJoinUrl = `${APP_BASE_URL}/queue/${id}?jwt=${queue_token}`;
 
@@ -542,6 +589,7 @@ app.post('/api/meet/reserved', (req, res) => {
 // Body: { sessionID, displayName?, patientName?, cid? }
 // Returns: { sessionID, meet: patientJoinUrl, patientJoinUrl }
 // Auth: open – called from 3rd-party appointment systems (no session required)
+// Note: cid is optional — works without it
 app.post('/api/meet/reserved/token', (req, res) => {
     const { sessionID, displayName, patientName, cid } = req.body;
     if (!sessionID) return res.status(400).json({ error: 400, message: 'sessionID required' });
@@ -552,14 +600,16 @@ app.post('/api/meet/reserved/token', (req, res) => {
     const name       = (displayName || patientName || '').trim() || 'ผู้ป่วย';
     const patientCid = (cid || '').trim();
 
+    // exp = 24 hr after session end (iat = now, so token is valid immediately)
+    const reservedExp = Math.floor(new Date(room.endtime).getTime() / 1000) + 86400;
     const queue_token = jwt.sign(
-        { roomId: sessionID, role: 'patient', ownerId: room.ownerId, patientName: name, cid: patientCid },
-        JWT_SECRET,
-        { expiresIn: '8h' }
+        { roomId: sessionID, role: 'patient', ownerId: room.ownerId, patientName: name, cid: patientCid, exp: reservedExp },
+        JWT_SECRET
     );
     const patientJoinUrl = `${APP_BASE_URL}/queue/${sessionID}?jwt=${queue_token}`;
 
     console.log(`[reserved/token] queue link issued for "${name}"${patientCid ? ` (${patientCid})` : ''} in room ${sessionID}`);
+    logEvent('reserved_token_issued', { roomId: sessionID, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName: name, patientCid });
     res.json({ sessionID, meet: patientJoinUrl, patientJoinUrl });
 });
 
@@ -595,6 +645,86 @@ app.post('/api/jwt/verify', (req, res) => {
     } catch (e) {
         res.status(401).json({ valid: false, message: e.message });
     }
+});
+
+// ── Usage Log API (public – for transparency dashboard) ────────────────────────
+
+// GET /api/logs/summary – overall stats
+app.get('/api/logs/summary', (_req, res) => {
+    const total      = _logDb.prepare('SELECT COUNT(*) as c FROM usage_logs').get().c;
+    const rooms      = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE event IN ('room_created','reserved_room_created')").get().c;
+    const patients   = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE event = 'patient_joined_queue'").get().c;
+    const admitted   = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE event = 'patient_admitted'").get().c;
+    const doctors    = _logDb.prepare("SELECT COUNT(DISTINCT doctor_id) as c FROM usage_logs WHERE doctor_id IS NOT NULL").get().c;
+    const today      = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE date(ts) = date('now','localtime')").get().c;
+    const thisMonth  = _logDb.prepare("SELECT COUNT(*) as c FROM usage_logs WHERE strftime('%Y-%m', ts) = strftime('%Y-%m', 'now','localtime')").get().c;
+    res.json({ total, rooms, patients, admitted, doctors, today, thisMonth });
+});
+
+// GET /api/logs/daily?days=30 – events per day
+app.get('/api/logs/daily', (req, res) => {
+    const days = Math.min(parseInt(req.query.days) || 30, 365);
+    const rows = _logDb.prepare(`
+        SELECT date(ts) as day,
+               SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
+               SUM(CASE WHEN event = 'patient_joined_queue' THEN 1 ELSE 0 END) as patients,
+               SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted
+        FROM usage_logs
+        WHERE ts >= datetime('now', '-' || ? || ' days', 'localtime')
+        GROUP BY date(ts)
+        ORDER BY day
+    `).all(days);
+    res.json(rows);
+});
+
+// GET /api/logs/monthly?months=12 – events per month
+app.get('/api/logs/monthly', (req, res) => {
+    const months = Math.min(parseInt(req.query.months) || 12, 60);
+    const rows = _logDb.prepare(`
+        SELECT strftime('%Y-%m', ts) as month,
+               SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
+               SUM(CASE WHEN event = 'patient_joined_queue' THEN 1 ELSE 0 END) as patients,
+               SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted,
+               COUNT(DISTINCT doctor_id) as doctors
+        FROM usage_logs
+        WHERE ts >= datetime('now', '-' || ? || ' months', 'localtime')
+        GROUP BY strftime('%Y-%m', ts)
+        ORDER BY month
+    `).all(months);
+    res.json(rows);
+});
+
+// GET /api/logs/by-doctor?months=3 – usage grouped by doctor
+app.get('/api/logs/by-doctor', (req, res) => {
+    const months = Math.min(parseInt(req.query.months) || 3, 24);
+    const rows = _logDb.prepare(`
+        SELECT doctor_id, doctor_name,
+               SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
+               SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted,
+               SUM(CASE WHEN event = 'invite_generated' THEN 1 ELSE 0 END) as invites,
+               COUNT(*) as total_events,
+               MIN(ts) as first_seen,
+               MAX(ts) as last_seen
+        FROM usage_logs
+        WHERE doctor_id IS NOT NULL
+          AND ts >= datetime('now', '-' || ? || ' months', 'localtime')
+        GROUP BY doctor_id
+        ORDER BY total_events DESC
+    `).all(months);
+    res.json(rows);
+});
+
+// GET /api/logs/recent?limit=50 – recent event log
+app.get('/api/logs/recent', (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 500);
+    const rows = _logDb.prepare(`
+        SELECT id, ts, event, room_id, room_type, room_name,
+               doctor_id, doctor_name, patient_name, patient_cid
+        FROM usage_logs
+        ORDER BY id DESC
+        LIMIT ?
+    `).all(limit);
+    res.json(rows);
 });
 
 // ── Error handler ──────────────────────────────────────────────────────────────

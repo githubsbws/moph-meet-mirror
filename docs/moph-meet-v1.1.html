@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOPH Meet v1.1 — Documentation</title>
+<style>
+  :root{--g:#1b7a43;--g2:#15633a;--g3:#e8f5ee;--bg:#f9fafb;--tx:#1e293b;--tx2:#475569;--bd:#e2e8f0;--r:10px;--shadow:0 1px 3px rgba(0,0,0,.08)}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Sarabun','Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--tx);line-height:1.7}
+  a{color:var(--g);text-decoration:none}a:hover{text-decoration:underline}
+
+  /* Header */
+  header{background:linear-gradient(135deg,var(--g) 0%,var(--g2) 100%);color:#fff;padding:2rem 0;text-align:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  header h1{font-size:1.6rem;font-weight:700;letter-spacing:.5px}
+  header p{opacity:.85;font-size:.9rem;margin-top:.2rem}
+  .lang-switch{position:absolute;right:1.5rem;top:50%;transform:translateY(-50%);display:flex;gap:.4rem}
+  .lang-switch button{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:.3rem .7rem;border-radius:6px;cursor:pointer;font-size:.8rem;transition:.2s}
+  .lang-switch button:hover,.lang-switch button.active{background:#fff;color:var(--g);font-weight:600}
+
+  /* Nav */
+  nav{background:#fff;border-bottom:1px solid var(--bd);padding:.6rem 0;position:sticky;top:68px;z-index:99;overflow-x:auto;white-space:nowrap;box-shadow:var(--shadow)}
+  nav .inner{max-width:1100px;margin:auto;display:flex;gap:.5rem;padding:0 1.5rem}
+  nav a{font-size:.82rem;padding:.35rem .7rem;border-radius:6px;color:var(--tx2);transition:.15s}
+  nav a:hover{background:var(--g3);color:var(--g);text-decoration:none}
+
+  /* Main */
+  main{max-width:1100px;margin:2rem auto;padding:0 1.5rem}
+  section{background:#fff;border:1px solid var(--bd);border-radius:var(--r);padding:2rem;margin-bottom:1.5rem;box-shadow:var(--shadow)}
+  section h2{color:var(--g);font-size:1.25rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:2px solid var(--g3)}
+  section h3{font-size:1rem;color:var(--g2);margin:1.2rem 0 .5rem}
+  p,li{font-size:.92rem;color:var(--tx2)}
+  ul,ol{padding-left:1.4rem;margin:.5rem 0}
+  li{margin:.3rem 0}
+
+  /* Cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin:1rem 0}
+  .card{background:var(--g3);border-radius:8px;padding:1.2rem;text-align:center}
+  .card .icon{font-size:2rem;margin-bottom:.4rem}
+  .card h4{font-size:.95rem;color:var(--g);margin-bottom:.3rem}
+  .card p{font-size:.82rem}
+
+  /* Table */
+  table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.88rem}
+  th,td{border:1px solid var(--bd);padding:.6rem .8rem;text-align:left}
+  th{background:var(--g);color:#fff;font-weight:600}
+  tr:nth-child(even){background:#f8fafc}
+  .yes{color:var(--g);font-weight:700}.no{color:#94a3b8}.patch{color:#f59e0b;font-weight:600}
+
+  /* Flow diagram */
+  .flow{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin:1rem 0;padding:1rem;background:#f1f5f9;border-radius:8px}
+  .flow .step{background:var(--g);color:#fff;padding:.5rem 1rem;border-radius:8px;font-size:.82rem;font-weight:600;white-space:nowrap}
+  .flow .arrow{color:var(--g);font-weight:700;font-size:1.1rem}
+
+  /* Timeline */
+  .timeline{position:relative;padding-left:2rem;margin:1rem 0}
+  .timeline::before{content:'';position:absolute;left:.7rem;top:0;bottom:0;width:2px;background:var(--g3)}
+  .tl-item{position:relative;margin-bottom:1.2rem}
+  .tl-item::before{content:'';position:absolute;left:-1.55rem;top:.4rem;width:12px;height:12px;border-radius:50%;background:var(--g);border:2px solid #fff;box-shadow:0 0 0 2px var(--g3)}
+  .tl-item.future::before{background:#f59e0b}
+  .tl-item .date{font-size:.78rem;color:var(--g);font-weight:700}
+  .tl-item .desc{font-size:.88rem;color:var(--tx2)}
+
+  /* Badge */
+  .badge{display:inline-block;padding:.15rem .5rem;border-radius:4px;font-size:.72rem;font-weight:700;vertical-align:middle}
+  .badge-green{background:var(--g3);color:var(--g)}.badge-amber{background:#fef3c7;color:#b45309}.badge-blue{background:#dbeafe;color:#1d4ed8}
+
+  /* Footer */
+  footer{text-align:center;padding:2rem;color:var(--tx2);font-size:.8rem;border-top:1px solid var(--bd);margin-top:2rem}
+
+  /* Responsive */
+  @media(max-width:768px){header h1{font-size:1.2rem}section{padding:1.2rem}nav .inner{gap:.3rem}.cards{grid-template-columns:1fr}}
+
+  /* Language toggle */
+  [lang-content="en"]{display:none}
+  html[lang="en"] [lang-content="th"]{display:none}
+  html[lang="en"] [lang-content="en"]{display:block}
+  html[lang="en"] span[lang-content="en"],html[lang="en"] a[lang-content="en"]{display:inline}
+  html[lang="th"] span[lang-content="th"],html[lang="th"] a[lang-content="th"]{display:inline}
+  span[lang-content]{display:none}
+  html[lang="th"] span[lang-content="th"]{display:inline}
+  html[lang="en"] span[lang-content="en"]{display:inline}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ─── Header ──────────────────────────────────────────────────────── -->
+<header>
+  <h1>🏥 MOPH Meet v1.1</h1>
+  <p lang-content="th">ระบบแพทย์ทางไกล กระทรวงสาธารณสุข</p>
+  <p lang-content="en">Telemedicine Platform — Ministry of Public Health, Thailand</p>
+  <div class="lang-switch">
+    <button onclick="setLang('th')" id="btn-th" class="active">TH</button>
+    <button onclick="setLang('en')" id="btn-en">EN</button>
+  </div>
+</header>
+
+<!-- ─── Nav ──────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="inner">
+    <a href="#overview"><span lang-content="th">ภาพรวม</span><span lang-content="en">Overview</span></a>
+    <a href="#features"><span lang-content="th">ฟีเจอร์</span><span lang-content="en">Features</span></a>
+    <a href="#flow"><span lang-content="th">ขั้นตอนการใช้งาน</span><span lang-content="en">User Flow</span></a>
+    <a href="#architecture"><span lang-content="th">สถาปัตยกรรม</span><span lang-content="en">Architecture</span></a>
+    <a href="#comparison"><span lang-content="th">เปรียบเทียบเวอร์ชัน</span><span lang-content="en">Version Comparison</span></a>
+    <a href="#security"><span lang-content="th">ความปลอดภัย</span><span lang-content="en">Security</span></a>
+    <a href="#timeline"><span lang-content="th">แผนพัฒนา</span><span lang-content="en">Timeline</span></a>
+    <a href="#contact"><span lang-content="th">ติดต่อ</span><span lang-content="en">Contact</span></a>
+  </div>
+</nav>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- OVERVIEW                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="overview">
+  <div lang-content="th">
+    <h2>📋 ภาพรวมระบบ</h2>
+    <p><strong>MOPH Meet</strong> คือแพลตฟอร์มแพทย์ทางไกล (Telemedicine) ของกระทรวงสาธารณสุข ออกแบบมาเพื่อให้บุคลากรทางการแพทย์สามารถ <strong>ตรวจรักษาผู้ป่วยผ่านวิดีโอคอล</strong> ได้อย่างปลอดภัยและสะดวก โดยรองรับการยืนยันตัวตนผ่าน <strong>ProviderID (Health ID)</strong> ของ สธ.</p>
+    <div class="cards">
+      <div class="card"><div class="icon">🩺</div><h4>ห้องตรวจออนไลน์</h4><p>แพทย์สร้างห้องตรวจ ส่งลิงก์ให้ผู้ป่วยเข้าคิว รอตรวจตามลำดับ</p></div>
+      <div class="card"><div class="icon">🔗</div><h4>เชื่อมต่อ HIS</h4><p>ระบบนัดหมาย/HIS เรียก API สร้างห้องตรวจล่วงหน้าได้ทันที</p></div>
+      <div class="card"><div class="icon">📊</div><h4>Dashboard สถิติ</h4><p>แสดงข้อมูลการใช้งานแบบเรียลไทม์ เปิดเผยต่อสาธารณะ</p></div>
+      <div class="card"><div class="icon">📱</div><h4>รองรับทุกอุปกรณ์</h4><p>ใช้งานผ่านเว็บเบราว์เซอร์ + แอปมือถือ (เร็วๆ นี้)</p></div>
+    </div>
+    <h3>จุดเด่น</h3>
+    <ul>
+      <li>ผู้ป่วย <strong>ไม่ต้อง</strong> ติดตั้งแอป หรือสมัครสมาชิก — คลิกลิงก์เข้าได้ทันที</li>
+      <li>วิดีโอคอลผ่านระบบ <strong>self-hosted</strong> (open-source) ข้อมูลไม่ผ่าน third party</li>
+      <li>ยืนยันตัวตนแพทย์ผ่าน <strong>ProviderID</strong> ระบบกลาง สธ.</li>
+      <li>รองรับการทำงานแบบ <strong>คิวผู้ป่วย</strong> (Queue System) เหมาะกับ OPD ออนไลน์</li>
+      <li>เชื่อมต่อระบบ HIS ผ่าน REST API มาตรฐาน</li>
+    </ul>
+  </div>
+  <div lang-content="en">
+    <h2>📋 Overview</h2>
+    <p><strong>MOPH Meet</strong> is the official telemedicine platform of Thailand's Ministry of Public Health (MOPH), enabling healthcare providers to <strong>consult patients via secure video calls</strong>. Providers authenticate through <strong>ProviderID (Health ID)</strong>, the MOPH's centralized identity system.</p>
+    <div class="cards">
+      <div class="card"><div class="icon">🩺</div><h4>Online Exam Rooms</h4><p>Doctors create rooms, share invite links, and manage patient queues</p></div>
+      <div class="card"><div class="icon">🔗</div><h4>HIS Integration</h4><p>Appointment systems call the API to pre-create rooms automatically</p></div>
+      <div class="card"><div class="icon">📊</div><h4>Usage Dashboard</h4><p>Real-time usage statistics, publicly accessible for transparency</p></div>
+      <div class="card"><div class="icon">📱</div><h4>Multi-device</h4><p>Works on any browser + mobile app (coming soon)</p></div>
+    </div>
+    <h3>Key Highlights</h3>
+    <ul>
+      <li>Patients require <strong>no app install or registration</strong> — one click to join</li>
+      <li>Video via <strong>self-hosted open-source</strong> platform — data stays within MOPH infrastructure</li>
+      <li>Provider authentication through <strong>ProviderID</strong>, MOPH's central identity</li>
+      <li>Built-in <strong>patient queue system</strong> for online OPD workflows</li>
+      <li>HIS integration via standard REST API</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- FEATURES                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="features">
+  <div lang-content="th">
+    <h2>✨ ฟีเจอร์หลัก</h2>
+    <h3>สำหรับแพทย์ / บุคลากร</h3>
+    <ul>
+      <li>🔐 เข้าสู่ระบบด้วย <strong>ProviderID</strong> (OAuth 2.0)</li>
+      <li>🏥 สร้างห้องตรวจ (Exam Room) พร้อมลิงก์เชิญผู้ป่วย</li>
+      <li>👥 ระบบคิว — เรียกผู้ป่วยเข้าตรวจทีละราย</li>
+      <li>📋 Dashboard แสดงห้องตรวจทั้งหมดของตนเอง</li>
+      <li>🤝 แพทย์หลายคนร่วมห้องเดียวกันได้ (Co-provider)</li>
+      <li>🤖 สรุปผลตรวจอัตโนมัติด้วย AI <span class="badge badge-amber">Beta</span></li>
+    </ul>
+    <h3>สำหรับผู้ป่วย</h3>
+    <ul>
+      <li>📎 คลิกลิงก์เข้าคิวรอตรวจ — ไม่ต้องสมัครหรือติดตั้ง</li>
+      <li>📺 หน้าคิวแสดงลำดับ + แจ้งเตือนเมื่อถึงคิว</li>
+      <li>🎥 วิดีโอคอลคุณภาพสูง ปรับตามแบนด์วิดท์</li>
+    </ul>
+    <h3>สำหรับระบบ HIS / ผู้บูรณาการ</h3>
+    <ul>
+      <li>📡 REST API สร้างห้องตรวจล่วงหน้า (<code>POST /api/meet/reserved</code>)</li>
+      <li>🎫 สร้างลิงก์ผู้ป่วยเพิ่มเติม (<code>POST /api/meet/reserved/token</code>)</li>
+      <li>⏳ ลิงก์มีอายุถึง 24 ชม. หลังเวลานัด — ไม่หมดอายุก่อนเวลา</li>
+    </ul>
+  </div>
+  <div lang-content="en">
+    <h2>✨ Core Features</h2>
+    <h3>For Providers (Doctors / Staff)</h3>
+    <ul>
+      <li>🔐 Sign in with <strong>ProviderID</strong> (OAuth 2.0)</li>
+      <li>🏥 Create exam rooms with instant patient invite links</li>
+      <li>👥 Queue system — call patients in one at a time</li>
+      <li>📋 Personal dashboard showing all active rooms</li>
+      <li>🤝 Multiple providers can join the same room (co-provider)</li>
+      <li>🤖 AI-powered consultation summary <span class="badge badge-amber">Beta</span></li>
+    </ul>
+    <h3>For Patients</h3>
+    <ul>
+      <li>📎 Click a link to join the queue — no signup or install needed</li>
+      <li>📺 Queue screen shows position + notification when it's your turn</li>
+      <li>🎥 High-quality adaptive video calling</li>
+    </ul>
+    <h3>For HIS / Integrators</h3>
+    <ul>
+      <li>📡 REST API to pre-create exam rooms (<code>POST /api/meet/reserved</code>)</li>
+      <li>🎫 Generate additional patient links (<code>POST /api/meet/reserved/token</code>)</li>
+      <li>⏳ Links valid until 24 hours after scheduled end time</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- FLOW                                                              -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="flow">
+  <div lang-content="th">
+    <h2>🔄 ขั้นตอนการใช้งาน</h2>
+    <h3>กรณีที่ 1: แพทย์สร้างห้องตรวจเอง</h3>
+    <div class="flow">
+      <div class="step">🔑 แพทย์ Login (ProviderID)</div><div class="arrow">→</div>
+      <div class="step">🏥 สร้างห้องตรวจ</div><div class="arrow">→</div>
+      <div class="step">📎 ส่งลิงก์ให้ผู้ป่วย</div><div class="arrow">→</div>
+      <div class="step">⏳ ผู้ป่วยเข้าคิว</div><div class="arrow">→</div>
+      <div class="step">📞 แพทย์เรียกตรวจ</div><div class="arrow">→</div>
+      <div class="step">🎥 วิดีโอคอล</div>
+    </div>
+    <h3>กรณีที่ 2: ระบบ HIS สร้างห้องล่วงหน้า</h3>
+    <div class="flow">
+      <div class="step">🖥️ HIS เรียก API</div><div class="arrow">→</div>
+      <div class="step">🏥 ได้ลิงก์แพทย์ + ผู้ป่วย</div><div class="arrow">→</div>
+      <div class="step">📩 ส่ง SMS/LINE ให้ผู้ป่วย</div><div class="arrow">→</div>
+      <div class="step">⏰ ถึงเวลานัด</div><div class="arrow">→</div>
+      <div class="step">📞 แพทย์ + ผู้ป่วยเข้าห้อง</div><div class="arrow">→</div>
+      <div class="step">🎥 วิดีโอคอล</div>
+    </div>
+    <h3>กรณีที่ 3: ประชุมทางไกล</h3>
+    <div class="flow">
+      <div class="step">🔑 Login</div><div class="arrow">→</div>
+      <div class="step">📹 สร้างห้องประชุม</div><div class="arrow">→</div>
+      <div class="step">🔗 แชร์ลิงก์</div><div class="arrow">→</div>
+      <div class="step">👥 ผู้ร่วมประชุมเข้าร่วม</div>
+    </div>
+  </div>
+  <div lang-content="en">
+    <h2>🔄 User Flow</h2>
+    <h3>Scenario 1: Doctor Creates Exam Room</h3>
+    <div class="flow">
+      <div class="step">🔑 Doctor Login (ProviderID)</div><div class="arrow">→</div>
+      <div class="step">🏥 Create Exam Room</div><div class="arrow">→</div>
+      <div class="step">📎 Share Link to Patient</div><div class="arrow">→</div>
+      <div class="step">⏳ Patient Joins Queue</div><div class="arrow">→</div>
+      <div class="step">📞 Doctor Calls Next</div><div class="arrow">→</div>
+      <div class="step">🎥 Video Call</div>
+    </div>
+    <h3>Scenario 2: HIS Pre-creates Room</h3>
+    <div class="flow">
+      <div class="step">🖥️ HIS Calls API</div><div class="arrow">→</div>
+      <div class="step">🏥 Gets Doctor + Patient URLs</div><div class="arrow">→</div>
+      <div class="step">📩 Send SMS/LINE to Patient</div><div class="arrow">→</div>
+      <div class="step">⏰ Appointment Time</div><div class="arrow">→</div>
+      <div class="step">📞 Both Join Room</div><div class="arrow">→</div>
+      <div class="step">🎥 Video Call</div>
+    </div>
+    <h3>Scenario 3: Meeting Room</h3>
+    <div class="flow">
+      <div class="step">🔑 Login</div><div class="arrow">→</div>
+      <div class="step">📹 Create Meeting</div><div class="arrow">→</div>
+      <div class="step">🔗 Share Link</div><div class="arrow">→</div>
+      <div class="step">👥 Participants Join</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- ARCHITECTURE                                                      -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="architecture">
+  <div lang-content="th">
+    <h2>🏗️ สถาปัตยกรรมระบบ</h2>
+    <p>ระบบประกอบด้วย 3 ส่วนหลัก ทำงานร่วมกันผ่าน REST API:</p>
+    <table>
+      <tr><th>ส่วนประกอบ</th><th>หน้าที่</th><th>เทคโนโลยี</th></tr>
+      <tr><td><strong>Frontend</strong></td><td>หน้าเว็บสำหรับแพทย์และผู้ป่วย</td><td>Server-Side Rendering, DaisyUI, TailwindCSS</td></tr>
+      <tr><td><strong>Core API</strong></td><td>จัดการห้องตรวจ, คิว, JWT, ล็อก</td><td>Node.js, Express, SQLite</td></tr>
+      <tr><td><strong>Media Server</strong></td><td>วิดีโอคอล</td><td>Self-hosted, Open-source</td></tr>
+    </table>
+    <h3>โครงสร้างพื้นฐาน</h3>
+    <div class="flow">
+      <div class="step">ผู้ใช้</div><div class="arrow">→</div>
+      <div class="step">Cloudflare CDN/WAF</div><div class="arrow">→</div>
+      <div class="step">Nginx Reverse Proxy</div><div class="arrow">→</div>
+      <div class="step">Application Server</div><div class="arrow">→</div>
+      <div class="step">Media Server</div>
+    </div>
+    <ul>
+      <li>ข้อมูลเก็บบนเซิร์ฟเวอร์ภายใน สธ. — ไม่ส่งข้อมูลไปต่างประเทศ</li>
+      <li>ใช้ <strong>Cloudflare</strong> เป็น CDN + Web Application Firewall</li>
+      <li>ห้องตรวจมีอายุ <strong>25 ชั่วโมง</strong> หลังเวลาสิ้นสุดนัดหมาย จากนั้นลบอัตโนมัติ</li>
+    </ul>
+  </div>
+  <div lang-content="en">
+    <h2>🏗️ Architecture</h2>
+    <p>The system consists of 3 main components communicating via REST API:</p>
+    <table>
+      <tr><th>Component</th><th>Role</th><th>Technology</th></tr>
+      <tr><td><strong>Frontend</strong></td><td>Web UI for doctors and patients</td><td>Server-Side Rendering, DaisyUI, TailwindCSS</td></tr>
+      <tr><td><strong>Core API</strong></td><td>Room management, queue, JWT, logging</td><td>Node.js, Express, SQLite</td></tr>
+      <tr><td><strong>Media Server</strong></td><td>Video conferencing</td><td>Self-hosted, Open-source</td></tr>
+    </table>
+    <h3>Infrastructure</h3>
+    <div class="flow">
+      <div class="step">Users</div><div class="arrow">→</div>
+      <div class="step">Cloudflare CDN/WAF</div><div class="arrow">→</div>
+      <div class="step">Nginx Reverse Proxy</div><div class="arrow">→</div>
+      <div class="step">Application Server</div><div class="arrow">→</div>
+      <div class="step">Media Server</div>
+    </div>
+    <ul>
+      <li>All data stored on MOPH internal servers — no data leaves Thailand</li>
+      <li><strong>Cloudflare</strong> for CDN + Web Application Firewall</li>
+      <li>Rooms auto-expire <strong>25 hours</strong> after scheduled end time</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- COMPARISON                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="comparison">
+  <div lang-content="th">
+    <h2>📊 ความสามารถของระบบ</h2>
+    <p>MOPH Meet v1.1 รองรับทั้ง Web, API Integration และ Mobile App ในแพลตฟอร์มเดียว:</p>
+    <table>
+      <tr><th>หมวด</th><th>ฟีเจอร์</th><th>สถานะ</th></tr>
+      <tr><td rowspan="3"><strong>🎥 การสื่อสาร</strong></td><td>วิดีโอคอล (Self-hosted)</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td>ห้องตรวจ + คิวผู้ป่วย</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td>ห้องประชุมทางไกล</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td rowspan="2"><strong>🔐 ยืนยันตัวตน</strong></td><td>ProviderID / Health ID Login</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td>ผู้ป่วยเข้าผ่านลิงก์ (ไม่ต้องสมัคร)</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td rowspan="2"><strong>🔗 เชื่อมต่อ</strong></td><td>HIS REST API (สร้างห้อง/ออกลิงก์ล่วงหน้า)</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td>รองรับ CID / Account ID แบบ optional</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td rowspan="2"><strong>📊 รายงาน</strong></td><td>Usage Dashboard (สาธารณะ)</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td>AI Summary สรุปผลตรวจ</td><td class="yes">✅ เชื่อมต่อ ABS แล้ว <span class="badge badge-amber">รอปรับแสดงผล</span></td></tr>
+      <tr><td rowspan="3"><strong>💾 ฐานข้อมูล</strong></td><td>SQLite (ค่าเริ่มต้น — zero config)</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td>PostgreSQL, MySQL, MariaDB, MSSQL</td><td class="yes">✅ รองรับผ่าน ORM</td></tr>
+      <tr><td>ข้อมูลชั่วคราว (auto-expire 25 ชม.)</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td rowspan="3"><strong>📱 แพลตฟอร์ม</strong></td><td>Web App (ทุกเบราว์เซอร์)</td><td class="yes">✅ พร้อมใช้</td></tr>
+      <tr><td>Mobile App (iOS + Android)</td><td class="patch">รอ Patch API → นำส่งศูนย์คอมฯ ขึ้น Store</td></tr>
+      <tr><td>PWA / Offline</td><td class="patch">รอ Patch</td></tr>
+      <tr><td rowspan="4"><strong>🔧 รอพัฒนา</strong></td><td>ระบบการจัดห้องตรวจใหม่</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>Dynamic User Data</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>เชื่อมต่อ IOT และ PHR</td><td class="patch">รอ Patch (ปรับเป็นใช้งานผ่าน MOPH กลาง — รอ user data พร้อม)</td></tr>
+      <tr><td>AI Summary ปรับระบบแสดงผล</td><td class="patch">รอ Patch</td></tr>
+    </table>
+    <p style="margin-top:.8rem;font-size:.82rem;color:var(--tx2)">
+      <span class="badge badge-amber">รอ Patch</span> = อยู่ในแผนพัฒนา จะอัปเดตในเวอร์ชันถัดไป
+    </p>
+  </div>
+  <div lang-content="en">
+    <h2>📊 Platform Capabilities</h2>
+    <p>MOPH Meet v1.1 supports Web, API Integration, and Mobile App in a single platform:</p>
+    <table>
+      <tr><th>Category</th><th>Feature</th><th>Status</th></tr>
+      <tr><td rowspan="3"><strong>🎥 Communication</strong></td><td>Video Call (Self-hosted)</td><td class="yes">✅ Available</td></tr>
+      <tr><td>Exam Room + Patient Queue</td><td class="yes">✅ Available</td></tr>
+      <tr><td>Meeting Room</td><td class="yes">✅ Available</td></tr>
+      <tr><td rowspan="2"><strong>🔐 Authentication</strong></td><td>ProviderID / Health ID Login</td><td class="yes">✅ Available</td></tr>
+      <tr><td>Patient joins via link (no signup)</td><td class="yes">✅ Available</td></tr>
+      <tr><td rowspan="2"><strong>🔗 Integration</strong></td><td>HIS REST API (pre-create rooms / issue links)</td><td class="yes">✅ Available</td></tr>
+      <tr><td>Optional CID / Account ID support</td><td class="yes">✅ Available</td></tr>
+      <tr><td rowspan="2"><strong>📊 Reporting</strong></td><td>Public Usage Dashboard</td><td class="yes">✅ Available</td></tr>
+      <tr><td>AI Consultation Summary</td><td class="yes">✅ ABS Connected <span class="badge badge-amber">UI Pending</span></td></tr>
+      <tr><td rowspan="3"><strong>💾 Database</strong></td><td>SQLite (default — zero config)</td><td class="yes">✅ Available</td></tr>
+      <tr><td>PostgreSQL, MySQL, MariaDB, MSSQL</td><td class="yes">✅ Supported via ORM</td></tr>
+      <tr><td>Ephemeral data (auto-expire 25 hrs)</td><td class="yes">✅ Available</td></tr>
+      <tr><td rowspan="3"><strong>📱 Platforms</strong></td><td>Web App (all browsers)</td><td class="yes">✅ Available</td></tr>
+      <tr><td>Mobile App (iOS + Android)</td><td class="patch">Pending API patch → submit to App Store / Play Store</td></tr>
+      <tr><td>PWA / Offline</td><td class="patch">Pending</td></tr>
+      <tr><td rowspan="4"><strong>🔧 Upcoming</strong></td><td>New Room Management System</td><td class="patch">Pending</td></tr>
+      <tr><td>Dynamic User Data</td><td class="patch">Pending</td></tr>
+      <tr><td>IOT & PHR Integration</td><td class="patch">Pending (via MOPH central — after user data ready)</td></tr>
+      <tr><td>AI Summary UI Improvements</td><td class="patch">Pending</td></tr>
+    </table>
+    <p style="margin-top:.8rem;font-size:.82rem;color:var(--tx2)">
+      <span class="badge badge-amber">Pending</span> = Planned for upcoming patch release
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SECURITY                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="security">
+  <div lang-content="th">
+    <h2>🔒 ความปลอดภัยและความเป็นส่วนตัว</h2>
+    <ul>
+      <li><strong>การเข้ารหัส:</strong> วิดีโอคอลเข้ารหัสแบบ End-to-End (SRTP)</li>
+      <li><strong>การยืนยันตัวตน:</strong> แพทย์ยืนยันผ่าน ProviderID (OAuth 2.0) — ไม่เก็บรหัสผ่าน</li>
+      <li><strong>Token ผู้ป่วย:</strong> ใช้ JWT ที่มีอายุจำกัด ผูกกับห้องตรวจเฉพาะ</li>
+      <li><strong>ข้อมูลชั่วคราว:</strong> ห้องตรวจและข้อมูลเซสชันลบอัตโนมัติหลัง 25 ชม.</li>
+      <li><strong>ข้อมูลอยู่ในไทย:</strong> เซิร์ฟเวอร์ตั้งอยู่ภายในโครงสร้าง สธ. ผ่าน Cloudflare WAF</li>
+      <li><strong>ไม่เก็บวิดีโอ:</strong> ระบบไม่บันทึกวิดีโอคอลโดยค่าเริ่มต้น</li>
+    </ul>
+  </div>
+  <div lang-content="en">
+    <h2>🔒 Security & Privacy</h2>
+    <ul>
+      <li><strong>Encryption:</strong> Video calls encrypted via SRTP through self-hosted media server</li>
+      <li><strong>Authentication:</strong> Providers authenticate via ProviderID (OAuth 2.0) — no passwords stored</li>
+      <li><strong>Patient Tokens:</strong> JWT with limited lifetime, bound to specific rooms</li>
+      <li><strong>Ephemeral Data:</strong> Rooms and session data auto-deleted after 25 hours</li>
+      <li><strong>Data Residency:</strong> Servers hosted within MOPH infrastructure, protected by Cloudflare WAF</li>
+      <li><strong>No Recording:</strong> Video calls are not recorded by default</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- TIMELINE                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="timeline">
+  <div lang-content="th">
+    <h2>📅 แผนพัฒนาและ Timeline</h2>
+    <div class="timeline">
+      <div class="tl-item"><div class="date">มี.ค. 2569</div><div class="desc"><strong>v1.0</strong> — เปิดใช้งานระบบ: ห้องตรวจ, คิวผู้ป่วย, ProviderID Login, HIS API</div></div>
+      <div class="tl-item"><div class="date">เม.ย. 2569</div><div class="desc"><strong>v1.1</strong> — ปรับปรุง JWT (ลิงก์ไม่หมดอายุก่อนเวลานัด), Dashboard สถิติ, AI Summary (Beta), แก้ไข Room TTL</div></div>
+      <div class="tl-item future"><div class="date">เม.ย. 2569 (สัปดาห์หน้า)</div><div class="desc"><strong>v1.2</strong> — เปิดตัว Mobile App (iOS + Android) ผ่าน App Store / Play Store <span class="badge badge-amber">เร็วๆ นี้</span></div></div>
+      <div class="tl-item future"><div class="date">27–30 เม.ย. 2569</div><div class="desc"><strong>📦 ส่งมอบ MA</strong> — ส่งมอบระบบตามสัญญา MA พร้อม Source Code Archive</div></div>
+    </div>
+    <h3>การปรับปรุงใน v1.1</h3>
+    <table>
+      <tr><th>รายการ</th><th>รายละเอียด</th><th>สถานะ</th></tr>
+      <tr><td>JWT Token Policy</td><td>ลิงก์ผู้ป่วย/แพทย์จากห้องตรวจปกติไม่มีวันหมดอายุ, ลิงก์จาก HIS หมดอายุ 24 ชม. หลังเวลานัด</td><td class="yes">✅ เสร็จ</td></tr>
+      <tr><td>Room TTL</td><td>ห้องตรวจอยู่ในระบบจนถึง endtime + 25 ชม.</td><td class="yes">✅ เสร็จ</td></tr>
+      <tr><td>Usage Logging</td><td>บันทึกเหตุการณ์ลง SQLite พร้อม Dashboard สาธารณะ</td><td class="yes">✅ เสร็จ</td></tr>
+      <tr><td>AI Summary</td><td>เชื่อมต่อ ABS แล้ว — รอปรับระบบแสดงผล</td><td class="yes">✅ Backend เสร็จ</td></tr>
+      <tr><td>HIS API ยืดหยุ่น</td><td>ไม่บังคับส่ง CID/Account ID — รองรับระบบที่ยังไม่มี</td><td class="yes">✅ เสร็จ</td></tr>
+      <tr><td>Mobile App</td><td>รอ Patch API → นำส่งศูนย์คอมฯ ขึ้น Store</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>ระบบจัดห้องตรวจใหม่</td><td>ปรับโครงสร้างการสร้างและจัดการห้องตรวจ</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>Dynamic User Data</td><td>ข้อมูลผู้ใช้แบบ dynamic</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>IOT & PHR</td><td>ปรับเป็นใช้งานผ่าน MOPH กลาง — รอ user data เปลี่ยนก่อน</td><td class="patch">รอ Patch</td></tr>
+    </table>
+  </div>
+  <div lang-content="en">
+    <h2>📅 Development Timeline</h2>
+    <div class="timeline">
+      <div class="tl-item"><div class="date">Mar 2026</div><div class="desc"><strong>v1.0</strong> — Initial launch: Exam rooms, patient queue, ProviderID login, HIS API</div></div>
+      <div class="tl-item"><div class="date">Apr 2026</div><div class="desc"><strong>v1.1</strong> — JWT improvements (links valid until appointment ends), usage dashboard, AI summary (Beta), Room TTL fix</div></div>
+      <div class="tl-item future"><div class="date">Apr 2026 (Next week)</div><div class="desc"><strong>v1.2</strong> — Mobile App launch (iOS + Android) via App Store / Play Store <span class="badge badge-amber">Coming Soon</span></div></div>
+      <div class="tl-item future"><div class="date">27–30 Apr 2026</div><div class="desc"><strong>📦 MA Delivery</strong> — System handover per MA contract with source code archive</div></div>
+    </div>
+    <h3>What's New in v1.1</h3>
+    <table>
+      <tr><th>Item</th><th>Details</th><th>Status</th></tr>
+      <tr><td>JWT Token Policy</td><td>Patient/doctor links from normal rooms never expire; HIS links expire 24h after appointment end</td><td class="yes">✅ Done</td></tr>
+      <tr><td>Room TTL</td><td>Rooms persist until endtime + 25 hours</td><td class="yes">✅ Done</td></tr>
+      <tr><td>Usage Logging</td><td>Event logging to SQLite with public transparency dashboard</td><td class="yes">✅ Done</td></tr>
+      <tr><td>AI Summary</td><td>ABS backend connected — UI improvements pending</td><td class="yes">✅ Backend Done</td></tr>
+      <tr><td>Flexible HIS API</td><td>CID/Account ID no longer required — supports systems without it</td><td class="yes">✅ Done</td></tr>
+      <tr><td>Mobile App</td><td>Pending API patch → submit to App Store / Play Store</td><td class="patch">Pending</td></tr>
+      <tr><td>New Room Management</td><td>Restructured room creation and management</td><td class="patch">Pending</td></tr>
+      <tr><td>Dynamic User Data</td><td>Dynamic user data system</td><td class="patch">Pending</td></tr>
+      <tr><td>IOT & PHR</td><td>Via MOPH central platform — after user data migration</td><td class="patch">Pending</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CONTACT                                                           -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section id="contact">
+  <div lang-content="th">
+    <h2>📞 ติดต่อ</h2>
+    <p>สำหรับข้อมูลเพิ่มเติมหรือขอเชื่อมต่อระบบ กรุณาติดต่อทีมพัฒนา MOPH Meet</p>
+    <ul>
+      <li>🌐 <strong>เว็บไซต์:</strong> moph-meet.moph.go.th</li>
+      <li>🏛️ <strong>หน่วยงาน:</strong> กระทรวงสาธารณสุข</li>
+    </ul>
+  </div>
+  <div lang-content="en">
+    <h2>📞 Contact</h2>
+    <p>For more information or integration requests, please contact the MOPH Meet development team.</p>
+    <ul>
+      <li>🌐 <strong>Website:</strong> moph-meet.moph.go.th</li>
+      <li>🏛️ <strong>Organization:</strong> Ministry of Public Health, Thailand</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <span lang-content="th">© 2026 กระทรวงสาธารณสุข — MOPH Meet v1.1 | เอกสารนี้สร้างอัตโนมัติ อัปเดตล่าสุด: เมษายน 2569</span>
+  <span lang-content="en">© 2026 Ministry of Public Health, Thailand — MOPH Meet v1.1 | Last updated: April 2026</span>
+</footer>
+
+<script>
+function setLang(lang) {
+  document.documentElement.lang = lang;
+  document.getElementById('btn-th').classList.toggle('active', lang === 'th');
+  document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+  localStorage.setItem('moph-meet-lang', lang);
+}
+// Restore saved language
+const saved = localStorage.getItem('moph-meet-lang');
+if (saved) setLang(saved);
+</script>
+</body>
+</html>
