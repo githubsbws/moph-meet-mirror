@@ -1,0 +1,72 @@
+/* ── DaisyUI v5 custom theme ─────────────────────────────────────────────── */
+/* Force light theme – ignore OS dark-mode preference */
+@media (prefers-color-scheme: dark) {
+  :root { color-scheme: light; }
+}
+
+/* Login page background – primary darkened (~17% lightness)
+.login-bg { background-color: oklch(22% 0.1 156); } */
+
+/* CDN custom theme: selector matches data-theme attribute */
+:root:has(input.theme-controller[value=mytheme]:checked),
+[data-theme="mytheme"] {
+  color-scheme: light;
+  --color-primary:          oklch(38% 0.12 156);   /* #056839 */
+  --color-primary-content:  oklch(98% 0.01 156);
+  --color-secondary:        oklch(93% 0.17 98);    /* #ffee53 */
+  --color-secondary-content:oklch(20% 0.05 98);
+  --color-accent:           oklch(53% 0.12 156);   /* #288d5c */
+  --color-accent-content:   oklch(98% 0.01 156);
+  --color-neutral:          oklch(40% 0.05 156);
+  --color-neutral-content:  oklch(98% 0.01 156);
+  --color-base-100:         oklch(96% 0.02 156);   /* #edf5f2 */
+  --color-base-200:         oklch(93% 0.03 156);
+  --color-base-300:         oklch(89% 0.04 156);
+  --color-base-content:     oklch(20% 0.03 156);
+  --color-info:             oklch(65% 0.15 230);
+  --color-info-content:     oklch(98% 0.01 230);
+  --color-success:          oklch(65% 0.2 140);
+  --color-success-content:  oklch(98% 0.01 140);
+  --color-warning:          oklch(75% 0.2 80);
+  --color-warning-content:  oklch(20% 0.05 80);
+  --color-error:            oklch(55% 0.25 30);    /* #dc2626 */
+  --color-error-content:    oklch(98% 0.01 30);
+  --radius-selector:        1rem;
+  --radius-field:           0.375rem;
+  --radius-box:             0.5rem;
+  --border:                 1px;
+  --depth:                  1;
+  --noise:                  0;
+}
+
+/* ── Font ───────────────────────────────────────────────────────────────── */
+body, html { font-family: 'Sarabun', sans-serif; }
+
+
+
+/* ── Meet cards ─────────────────────────────────────────────────────────── */
+.meet-card[hidden] { display: none !important; }
+
+/* ── Mini calendar ───────────────────────────────────────────────────────── */
+#mini-calendar table { width: 100%; border-collapse: collapse; }
+#mini-calendar th, #mini-calendar td {
+  text-align: center; padding: .35rem; font-size: .85rem;
+}
+#mini-calendar td { cursor: pointer; border-radius: 9999px; }
+#mini-calendar td:hover { background: var(--color-base-200); }
+#mini-calendar td.today { background: var(--color-primary); color: var(--color-primary-content); }
+#mini-calendar td.has-meet { font-weight: 700; text-decoration: underline dotted; }
+#mini-calendar td.selected { outline: 2px solid var(--color-accent); background: color-mix(in oklch, var(--color-accent) 15%, transparent); }
+#mini-calendar .cal-nav {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: .5rem;
+}
+#mini-calendar .cal-nav button {
+  background: none; border: none; cursor: pointer; font-size: 1.1rem;
+  color: var(--color-base-content);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .grid[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+}

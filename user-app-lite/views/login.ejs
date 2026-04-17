@@ -1,0 +1,36 @@
+<%- include('partials/head', { title: 'Login – MOPH Meet' }) %>
+
+<div class="min-h-screen flex flex-col items-center justify-center p-4 login-bg">
+  <div class="card bg-white shadow-xl w-full max-w-sm">
+    <div class="card-body items-center gap-4">
+
+      <img src="/images/logo.png" alt="MOPH Meet" class="h-28" onerror="this.style.display='none'" />
+
+      <% if (error) { %>
+      <div role="alert" class="alert bg-error text-error-content w-full py-2 text-sm border-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <span>
+          <% if (error === 'invalid')           { %>ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง<% }
+          else if (error === 'invalid_token')   { %>ลิงก์ไม่ถูกต้องหรือหมดอายุ<% }
+          else if (error === 'providerid_fail') { %>เข้าสู่ระบบด้วย Provider ID ล้มเหลว<% }
+          else                                  { %>เกิดข้อผิดพลาด กรุณาลองใหม่<% } %>
+        </span>
+      </div>
+      <% } %>
+
+      <a
+        href="https://moph.id.th/oauth/redirect?client_id=<%= providerIdClientId %>&redirect_uri=<%= encodeURIComponent(providerIdRedirectUri) %>&response_type=code"
+        class="btn btn-primary w-full p-1 h-auto bg-primary text-primary-content border-primary hover:bg-primary-focus hover:border-primary-focus"
+      >
+        <img src="/images/provider-id-1.png" alt="เข้าสู่ระบบด้วย Provider ID" class="h-12" onerror="this.style.display='none'" />
+      </a>
+
+      <p class="text-xs text-base-content/50 text-center">
+        ผู้ป่วยสามารถใช้ลิงก์นัดหมายที่ได้รับจากเจ้าหน้าที่
+      </p>
+
+    </div>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

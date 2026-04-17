@@ -1,0 +1,778 @@
+<%- include('partials/head', { title: (meet.name || meet.title || 'Meeting') + ' – MOPH Meet' }) %>
+
+<style>
+  body, html { margin: 0; padding: 0; overflow: hidden; }
+  #jitsi-wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+  /* Doctor exam: sidebar on right */
+  #jitsi-wrap.with-sidebar { right: 320px; }
+  #exam-sidebar {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 320px;
+    background: #fff; border-left: 1px solid #e5e7eb;
+    display: flex; flex-direction: column; z-index: 50;
+    font-family: 'Sarabun', sans-serif;
+  }
+  .sidebar-header {
+    background: #056839; color: #fff;
+    padding: 1rem; font-weight: 600; font-size: 1rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .queue-list { flex: 1; overflow-y: auto; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; }
+  .queue-item {
+    background: #f3f4f6; border-radius: .5rem; padding: .6rem .75rem;
+    display: flex; align-items: center; justify-content: space-between; font-size: .875rem;
+  }
+  .queue-item.current { background: #d1fae5; border: 1px solid #056839; }
+  .queue-num { font-weight: 700; color: #056839; min-width: 1.5rem; }
+  .sidebar-footer { padding: .75rem; border-top: 1px solid #e5e7eb; }
+  .btn-next {
+    width: 100%; padding: .75rem; background: #056839; color: #fff;
+    border: none; border-radius: .5rem; font-size: 1rem; font-weight: 600;
+    cursor: pointer; font-family: 'Sarabun', sans-serif;
+  }
+  .btn-next:hover { background: #044d2b; }
+  .btn-next:disabled { background: #9ca3af; cursor: default; }
+  .meet-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 44px; background: #fff;
+    display: flex; align-items: center; padding: 0 1rem; gap: 1rem;
+    box-shadow: 0 -1px 4px rgba(0,0,0,.08); z-index: 99;
+  }
+  .meet-bar.with-sidebar { right: 320px; }
+  /* Doc-record buttons in meet-bar */
+  #btn-rec-start, #btn-rec-stop {
+    border: none; border-radius: 1.5rem; padding: .3rem .85rem;
+    font-size: .8rem; font-weight: 600; cursor: pointer;
+    font-family: 'Sarabun', sans-serif; transition: background .15s; white-space: nowrap;
+  }
+  #btn-rec-start { background: #ef4444; color: #fff; }
+  #btn-rec-start:hover { background: #dc2626; }
+  #btn-rec-stop  { background: #fbbf24; color: #111; display: none; }
+  #btn-rec-stop:hover  { background: #f59e0b; }
+  #rec-dot   { color: #ef4444; font-size: .8rem; display: none; animation: blink 1s step-start infinite; }
+  #rec-timer { color: #374151; font-size: .78rem; min-width: 3rem; display: none; }
+  @keyframes blink { 50% { opacity: 0; } }
+  /* AI Summary toast */
+  #summary-toast {
+    display:none; position:fixed; bottom:60px; left:50%; transform:translateX(-50%);
+    background:#056839; color:#fff; border-radius:.75rem; padding:.65rem 1.25rem;
+    font-family:'Sarabun',sans-serif; font-size:.9rem; font-weight:600;
+    box-shadow:0 4px 16px rgba(0,0,0,.2); z-index:300; white-space:nowrap;
+    transition:opacity .3s;
+  }
+
+  /* ── Collapsible Sidebar & Meet-bar → Bubble ──────────────────────────── */
+  /* Toggle bubble button */
+  #sidebar-bubble {
+    display: none; position: fixed; z-index: 200; cursor: pointer;
+    width: 56px; height: 56px; border-radius: 50%; border: none;
+    background: #056839; color: #fff; font-size: 1.5rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    transition: transform .2s, box-shadow .2s;
+    bottom: 24px; right: 24px;
+    font-family: 'Sarabun', sans-serif;
+  }
+  #sidebar-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  #sidebar-bubble .bubble-badge {
+    position: absolute; top: -2px; right: -2px;
+    background: #ef4444; color: #fff; font-size: .65rem; font-weight: 700;
+    min-width: 18px; height: 18px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 4px; line-height: 1;
+  }
+
+  /* Collapse button inside sidebar header */
+  #btn-collapse-sidebar {
+    margin-left: auto; background: none; border: none; color: #fff;
+    cursor: pointer; font-size: 1.1rem; padding: 0 .25rem; opacity: .85;
+    transition: opacity .15s;
+  }
+  #btn-collapse-sidebar:hover { opacity: 1; }
+
+  /* Meet-bar collapse button */
+  #btn-collapse-bar {
+    background: none; border: none; cursor: pointer; font-size: .9rem;
+    color: #999; padding: .15rem .35rem; transition: color .15s;
+  }
+  #btn-collapse-bar:hover { color: #333; }
+
+  /* Collapsed state: sidebar + meet-bar hidden, jitsi full-screen */
+  body.panel-collapsed #exam-sidebar   { display: none !important; }
+  body.panel-collapsed .meet-bar       { display: none !important; }
+  body.panel-collapsed #jitsi-wrap     { right: 0 !important; }
+  body.panel-collapsed #sidebar-bubble { display: flex; align-items: center; justify-content: center; }
+
+  /* Non-exam rooms: bubble bottom-right with less offset */
+  body.panel-collapsed:not(.has-exam) #sidebar-bubble { bottom: 24px; right: 24px; }
+
+  /* Transition for smooth collapse/expand */
+  #exam-sidebar, .meet-bar, #jitsi-wrap {
+    transition: all .25s ease;
+  }
+</style>
+
+<div id="jitsi-wrap" class="<%= isExam ? 'with-sidebar' : '' %>"></div>
+
+<!-- ── Floating Bubble (visible when collapsed) ──────────────────────────── -->
+<button id="sidebar-bubble" onclick="togglePanelCollapse()" title="แสดงเมนู">
+  <%= isExam ? '🩺' : '📹' %>
+  <% if (isExam) { %><span class="bubble-badge" id="bubble-queue-count">0</span><% } %>
+</button>
+
+<% if (isExam) { %>
+<!-- ── Doctor Exam Sidebar ──────────────────────────────────────────────────── -->
+<div id="exam-sidebar">
+  <div class="sidebar-header">
+    🩺 ห้องตรวจ · <span id="queue-count" class="opacity-80 text-sm font-normal">รอโหลดคิว…</span>
+    <button id="btn-collapse-sidebar" onclick="togglePanelCollapse()" title="ย่อเมนู">✕</button>
+  </div>
+
+  <div class="queue-list" id="queue-list">
+    <p class="text-center text-gray-400 text-sm mt-4">ยังไม่มีผู้ป่วยในคิว</p>
+  </div>
+
+  <div class="sidebar-footer">
+    <button class="btn-next" id="btn-add-patient" onclick="openAddPatient()"
+      style="background:#fff;color:#056839;border:2px solid #056839;margin-bottom:.5rem">
+      ➕ เพิ่มผู้ป่วย
+    </button>
+    <button class="btn-next" id="btn-next-patient" onclick="callNextPatient()">
+      ▶ เรียกผู้ป่วยคนถัดไป
+    </button>
+    <p style="font-size:.75rem;text-align:center;color:#9ca3af;margin:.5rem 0 0" id="last-called"></p>
+  </div>
+</div>
+
+<!-- ── Add Patient Modal ──────────────────────────────────────────────────────── -->
+<div id="add-patient-modal" style="
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.45);align-items:center;justify-content:center;
+">
+  <div style="
+    background:#fff;border-radius:1rem;padding:1.75rem 1.5rem;
+    width:340px;max-width:calc(100vw - 2rem);font-family:'Sarabun',sans-serif;
+    box-shadow:0 8px 32px rgba(0,0,0,.2);
+  ">
+    <h3 style="margin:0 0 1rem;font-size:1.1rem;font-weight:700;color:#056839">➕ เพิ่มผู้ป่วย</h3>
+    <label style="font-size:.875rem;color:#374151;display:block;margin-bottom:.35rem">ชื่อผู้ป่วย (ไม่บังคับ)</label>
+    <input id="invite-name" type="text" placeholder="เช่น นายสมชาย ใจดี"
+      style="width:100%;box-sizing:border-box;padding:.65rem .75rem;border:1px solid #d1d5db;
+             border-radius:.5rem;font-size:1rem;font-family:'Sarabun',sans-serif;outline:none;margin-bottom:.6rem"
+      onkeydown="if(event.key==='Enter')doAddPatient()"
+    />
+    <label style="font-size:.875rem;color:#374151;display:block;margin-bottom:.35rem">เลขบัตรประชาชน (CID, ไม่บังคับ)</label>
+    <input id="invite-cid" type="text" placeholder="เช่น 1234567890123" maxlength="13"
+      style="width:100%;box-sizing:border-box;padding:.65rem .75rem;border:1px solid #d1d5db;
+             border-radius:.5rem;font-size:1rem;font-family:'Sarabun',sans-serif;outline:none"
+      onkeydown="if(event.key==='Enter')doAddPatient()"
+    />
+    <div id="invite-result" style="display:none;margin-top:1rem">
+      <p style="font-size:.8rem;color:#6b7280;margin:0 0 .35rem">ลิงก์คิวสำหรับผู้ป่วย:</p>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input id="invite-link" readonly style="
+          flex:1;padding:.5rem .6rem;border:1px solid #d1d5db;border-radius:.5rem;
+          font-size:.75rem;background:#f9fafb;font-family:monospace;
+        "/>
+        <button onclick="copyLink('invite-link','invite-copy-note')" style="
+          padding:.5rem .75rem;background:#056839;color:#fff;border:none;
+          border-radius:.5rem;cursor:pointer;font-size:.8rem;white-space:nowrap
+        ">คัดลอก</button>
+      </div>
+      <p id="invite-copy-note" style="font-size:.75rem;color:#056839;margin:.35rem 0 0;min-height:1rem"></p>
+    </div>
+    <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+      <button onclick="doAddPatient()" id="btn-do-invite"
+        style="flex:1;padding:.7rem;background:#056839;color:#fff;border:none;
+               border-radius:.5rem;font-size:1rem;cursor:pointer;font-family:'Sarabun',sans-serif">
+        สร้างลิงก์
+      </button>
+      <button onclick="closeAddPatient()"
+        style="padding:.7rem 1rem;background:#f3f4f6;color:#374151;border:none;
+               border-radius:.5rem;font-size:1rem;cursor:pointer;font-family:'Sarabun',sans-serif">
+        ปิด
+      </button>
+    </div>
+  </div>
+</div>
+<% } %>
+
+
+
+<!-- ── AI Summary Result Modal ────────────────────────────────────────────── -->
+<div id="summary-modal">
+  <div class="summary-box">
+    <h3>🧠 สรุปการตรวจ (AI)</h3>
+    <div id="summary-loading" style="text-align:center;padding:1.5rem;color:#6b7280">
+      <div style="font-size:1.5rem;margin-bottom:.5rem">⏳</div>
+      กำลังส่งวิดีโอและสรุปผล…
+    </div>
+    <div id="summary-result" style="display:none">
+      <div class="summary-content" id="summary-text"></div>
+      <div class="summary-meta" id="summary-meta"></div>
+    </div>
+    <div id="summary-error" style="display:none;color:#dc2626;font-size:.875rem;padding:.5rem"></div>
+    <div style="margin-top:1rem;text-align:right">
+      <button onclick="document.getElementById('summary-modal').classList.remove('open')"
+        style="padding:.55rem 1.25rem;background:#056839;color:#fff;border:none;
+               border-radius:.5rem;cursor:pointer;font-family:'Sarabun',sans-serif;font-size:.9rem">
+        ปิด
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="meet-bar <%= isExam ? 'with-sidebar' : '' %>">
+  <button id="btn-collapse-bar" onclick="togglePanelCollapse()" title="ย่อเมนู">⬇</button>
+  <span style="font-size:.9rem;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+    <%= isExam ? '🩺' : '📹' %> <%= meet.name || meet.title || 'ห้องประชุม' %>
+  </span>
+  <span id="rec-dot">⏺</span>
+  <span id="rec-timer">00:00</span>
+  <button id="btn-rec-start" onclick="startDocRecord()">🎙 อัดบันทึก</button>
+  <button id="btn-rec-stop"  onclick="stopDocRecord()">⏹ หยุด &amp; <%= isExam ? 'สรุป AI' : 'บันทึก' %></button>
+  <a href="/" style="font-size:.85rem;color:#056839;white-space:nowrap">← กลับ</a>
+</div>
+
+<script>
+// ── Panel Collapse / Bubble Toggle ─────────────────────────────────────────
+(function() {
+  // Add body class for exam detection in CSS
+  if (<%= isExam ? 'true' : 'false' %>) document.body.classList.add('has-exam');
+
+  // Restore collapsed state from localStorage
+  if (localStorage.getItem('panelCollapsed') === '1') {
+    document.body.classList.add('panel-collapsed');
+  }
+})();
+
+function togglePanelCollapse() {
+  const collapsed = document.body.classList.toggle('panel-collapsed');
+  localStorage.setItem('panelCollapsed', collapsed ? '1' : '0');
+  // Trigger Jitsi resize
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
+}
+</script>
+
+<script src="https://<%= meetingDomain %>/external_api.js"></script>
+<script>
+  const domain   = <%- JSON.stringify(meetingDomain) %>;
+  const roomId   = <%- JSON.stringify(meet.id) %>;
+  const roomName = <%- JSON.stringify(meet.name || meet.title || '') %>;
+  const display  = <%- JSON.stringify(user.display || user.username || 'Guest') %>;
+  const isExam   = <%- isExam ? 'true' : 'false' %>;
+
+  const jitsiOptions = {
+    roomName  : roomId,
+    width     : '100%',
+    height    : '100%',
+    parentNode: document.getElementById('jitsi-wrap'),
+    userInfo  : { displayName: display },
+    configOverwrite: {
+      startWithAudioMuted: false,
+      startWithVideoMuted: false,
+    },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS: isExam
+        ? ['microphone','camera','hangup','chat','tileview','participants-pane','recording']
+        : ['microphone','camera','hangup','chat','tileview','participants-pane','fullscreen'],
+      SHOW_JITSI_WATERMARK: false,
+    }
+  };
+
+  const api = new JitsiMeetExternalAPI(domain, jitsiOptions);
+
+  <% if (isExam) { %>
+  // ── Queue management ────────────────────────────────────────────────────────
+  let queueData = [];
+
+  async function refreshQueue() {
+    try {
+      const r = await fetch('/api/exam/<%= meet.id %>/doctor', {
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (!r.ok) { console.warn('[queue] doctor fetch failed', r.status); return; }
+      const room = await r.json();
+      queueData = room.queue || [];
+      renderQueue(queueData, room.currentPatientToken);
+    } catch (_) {}
+  }
+
+  function renderQueue(queue, currentToken) {
+    const waiting  = queue.filter(q => q.status === 'waiting');
+    const admitted = queue.find(q => q.status === 'admitted');
+    const listEl   = document.getElementById('queue-list');
+    const countEl  = document.getElementById('queue-count');
+    const nextBtn  = document.getElementById('btn-next-patient');
+
+    countEl.textContent = `คิวรอ: ${waiting.length} คน`;
+    nextBtn.disabled    = waiting.length === 0;
+
+    // Update bubble badge
+    const bubbleBadge = document.getElementById('bubble-queue-count');
+    if (bubbleBadge) bubbleBadge.textContent = waiting.length;
+
+    if (queue.length === 0) {
+      listEl.innerHTML = '<p class="text-center text-gray-400 text-sm mt-4">ยังไม่มีผู้ป่วยในคิว</p>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+
+    if (admitted) {
+      const div = document.createElement('div');
+      div.className = 'queue-item current';
+      div.innerHTML = `<span class="queue-num">✅</span><span style="flex:1">${admitted.patientName}</span><span class="text-xs text-green-700">กำลังตรวจ</span>`;
+      listEl.appendChild(div);
+    }
+
+    waiting.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'queue-item';
+      div.innerHTML = `<span class="queue-num">${i + 1}</span><span style="flex:1">${p.patientName}</span><span class="text-xs text-gray-400">รอ</span>`;
+      listEl.appendChild(div);
+    });
+  }
+
+  // ── Auto video recording for exam rooms ─────────────────────────────────────
+  let _examStream    = null;
+  let _examRecorder  = null;
+  let _examChunks    = [];
+  let _examRecording = false;
+
+  async function startExamRecord() {
+    if (_examRecording) return;
+    _examChunks = [];
+    try {
+      _examStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 25, width: { ideal: 1280 }, height: { ideal: 720 }, displaySurface: 'browser' },
+        audio: true,
+        selfBrowserSurface: 'include'
+      });
+    } catch (e) {
+      console.warn('[exam-rec] getDisplayMedia failed:', e.message);
+      // Fallback: try camera + mic
+      try {
+        _examStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch (e2) {
+        console.warn('[exam-rec] getUserMedia also failed:', e2.message);
+        return;
+      }
+    }
+
+    const mime = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+    _examRecorder = new MediaRecorder(_examStream, mime ? { mimeType: mime } : {});
+    _examRecorder.ondataavailable = e => { if (e.data.size > 0) _examChunks.push(e.data); };
+    _examRecorder.onstop = _uploadExamRecording;
+    _examRecorder.start(1000);
+    _examRecording = true;
+
+    // Show recording indicator (reuse existing rec-dot / rec-timer)
+    _recSeconds  = 0;
+    clearInterval(_recTimerInt);
+    _recTimerInt = setInterval(_recTick, 1000);
+    document.getElementById('rec-dot').style.display   = '';
+    document.getElementById('rec-timer').style.display = '';
+
+    _examStream.getVideoTracks()[0]?.addEventListener('ended', () => {
+      if (_examRecording) stopExamRecord();
+    });
+
+    console.log('[exam-rec] recording started');
+  }
+
+  function stopExamRecord() {
+    if (!_examRecorder || !_examRecording) return;
+    _examRecording = false;
+    _examRecorder.stop();
+    _examStream?.getTracks().forEach(t => t.stop());
+    _examRecorder = null;
+    _examStream   = null;
+
+    clearInterval(_recTimerInt);
+    document.getElementById('rec-dot').style.display   = 'none';
+    document.getElementById('rec-timer').style.display = 'none';
+
+    console.log('[exam-rec] recording stopped, uploading…');
+  }
+
+  async function _uploadExamRecording() {
+    if (!_examChunks.length) { console.warn('[exam-rec] no chunks to upload'); return; }
+
+    const mime = _examChunks[0].type || 'video/webm';
+    const ext  = mime.includes('mp4') ? 'mp4' : 'webm';
+    const blob = new Blob(_examChunks, { type: mime });
+    _examChunks = [];
+
+    // Build filename: room-<roomId>_<ISO timestamp>.<ext>
+    const now = new Date();
+    const ts  = now.toISOString().replace(/:/g, '-').replace(/\..+/, '') + '-' +
+                String(now.getMilliseconds()).padStart(3, '0') + 'Z';
+    const filename = `room-<%= meet.id %>_${ts}.${ext}`;
+
+    console.log('[exam-rec] uploading', filename, 'size:', blob.size);
+
+    // Show uploading state in last-called
+    const lastCalled = document.getElementById('last-called');
+    const prevText   = lastCalled.textContent;
+    lastCalled.textContent = '⬆️ กำลังอัปโหลดวิดีโอ…';
+
+    try {
+      const form = new FormData();
+      form.append('files', blob, filename);
+
+      const r = await fetch('/api/media-upload', {
+        method      : 'POST',
+        credentials : 'include',
+        body        : form,
+      });
+
+      if (r.ok) {
+        console.log('[exam-rec] upload success');
+        lastCalled.textContent = prevText + ' · ✅ อัปโหลดวิดีโอแล้ว';
+      } else {
+        const err = await r.text();
+        console.warn('[exam-rec] upload failed', r.status, err);
+        lastCalled.textContent = prevText + ' · ⚠️ อัปโหลดวิดีโอล้มเหลว';
+      }
+    } catch (e) {
+      console.error('[exam-rec] upload error:', e.message);
+      lastCalled.textContent = prevText + ' · ⚠️ อัปโหลดวิดีโอล้มเหลว';
+    }
+  }
+
+  async function callNextPatient() {
+    const btn = document.getElementById('btn-next-patient');
+    btn.disabled = true;
+    btn.textContent = 'กำลังเรียก…';
+
+    // If recording for AI summary, stop now (uploads current patient) then restart after admit
+    const wasRecording = !!_recRecorder;
+    if (wasRecording) stopDocRecord();
+
+    try {
+      const r = await fetch('/api/exam/<%= meet.id %>/next', { method: 'POST', credentials: 'include' });
+      const d = await r.json();
+      document.getElementById('last-called').textContent =
+        d.admitted ? `เรียก: ${d.admitted}` : 'ไม่มีผู้ป่วยในคิว';
+      await refreshQueue();
+
+      // Auto-restart recording for the next patient if we were recording before
+      if (wasRecording && d.admitted) {
+        startDocRecord();
+      }
+    } catch (e) {
+      btn.disabled = false;
+    }
+    btn.textContent = '▶ เรียกผู้ป่วยคนถัดไป';
+  }
+
+  refreshQueue();
+  setInterval(refreshQueue, 8000);
+
+  // ── Add Patient modal ────────────────────────────────────────────────────────
+  function openAddPatient() {
+    document.getElementById('invite-name').value = '';
+    document.getElementById('invite-cid').value  = '';
+    document.getElementById('invite-result').style.display = 'none';
+    document.getElementById('invite-copy-note').textContent = '';
+    document.getElementById('btn-do-invite').textContent = 'สร้างลิงก์';
+    const modal = document.getElementById('add-patient-modal');
+    modal.style.display = 'flex';
+    setTimeout(() => document.getElementById('invite-name').focus(), 50);
+  }
+
+  function closeAddPatient() {
+    document.getElementById('add-patient-modal').style.display = 'none';
+  }
+
+  async function doAddPatient() {
+    const btn  = document.getElementById('btn-do-invite');
+    const name = document.getElementById('invite-name').value.trim();
+    const cid  = document.getElementById('invite-cid').value.trim();
+    btn.disabled = true;
+    btn.textContent = 'กำลังสร้าง…';
+    try {
+      const r = await fetch('/api/exam/<%= meet.id %>/invite', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patientName: name, displayName: name, cid })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.message || 'error');
+      document.getElementById('invite-link').value = location.origin + d.patientJoinUrl;
+      document.getElementById('invite-result').style.display = 'block';
+      copyLink('invite-link', 'invite-copy-note');
+    } catch (e) {
+      alert('เกิดข้อผิดพลาด: ' + e.message);
+    }
+    btn.disabled = false;
+    btn.textContent = 'สร้างลิงก์ใหม่';
+  }
+
+  function copyLink(inputId, noteId) {
+    const el = document.getElementById(inputId);
+    navigator.clipboard.writeText(el.value).then(() => {
+      document.getElementById(noteId).textContent = '✅ คัดลอกแล้ว!';
+      setTimeout(() => document.getElementById(noteId).textContent = '', 2500);
+    }).catch(() => { el.select(); document.execCommand('copy'); });
+  }
+
+  // Close modal on backdrop click
+  document.getElementById('add-patient-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeAddPatient();
+  });
+  <% } %>
+</script>
+
+<script>
+// ── Doctor Screen Recorder ───────────────────────────────────────────────────
+const _isExam     = <%- isExam ? 'true' : 'false' %>;
+const _examRoomId = <%- JSON.stringify(meet.id) %>;
+
+let _recStream    = null;
+let _recRecorder  = null;
+let _recChunks    = [];
+let _recTimerInt  = null;
+let _recSeconds   = 0;
+let _recStartTime = null; // ISO string of when recording started
+
+function _recTick() {
+  _recSeconds++;
+  const m = String(Math.floor(_recSeconds / 60)).padStart(2, '0');
+  const s = String(_recSeconds % 60).padStart(2, '0');
+  document.getElementById('rec-timer').textContent = `${m}:${s}`;
+}
+
+async function startDocRecord() {
+  if (_recRecorder) return;
+  try {
+    _recStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 25, width: { ideal: 1280 }, height: { ideal: 720 }, displaySurface: 'browser' },
+      audio: true,
+      selfBrowserSurface: 'include'
+    });
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') alert('ไม่สามารถจับภาพหน้าจอได้: ' + e.message);
+    return;
+  }
+
+  _recChunks    = [];
+  _recSeconds   = 0;
+  _recStartTime = new Date().toISOString();
+
+  // Prefer MP4/H264 for broadest compatibility; fall back to VP9/VP8 WebM
+  const mime = [
+    'video/mp4;codecs=avc1,mp4a.40.2',   // Safari native MP4
+    'video/mp4',                           // Safari fallback
+    'video/webm;codecs=h264,opus',         // Chrome H264 (remuxable to MP4)
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ].find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+  _recRecorder = new MediaRecorder(_recStream, mime ? { mimeType: mime } : {});
+  _recRecorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+  _recRecorder.onstop = _isExam ? _submitForAISummary : _saveRecordingOnly;
+  _recRecorder.start(1000);
+
+  document.getElementById('btn-rec-start').style.display = 'none';
+  document.getElementById('btn-rec-stop').style.display  = '';
+  document.getElementById('rec-dot').style.display        = '';
+  document.getElementById('rec-timer').style.display      = '';
+  _recTimerInt = setInterval(_recTick, 1000);
+
+  _recStream.getVideoTracks()[0].addEventListener('ended', stopDocRecord);
+}
+
+function stopDocRecord() {
+  if (!_recRecorder) return;
+  _recRecorder.stop();
+  _recStream?.getTracks().forEach(t => t.stop());
+  clearInterval(_recTimerInt);
+  _recRecorder = null;
+  _recStream   = null;
+
+  document.getElementById('btn-rec-start').style.display = '';
+  document.getElementById('btn-rec-stop').style.display  = 'none';
+  document.getElementById('rec-dot').style.display        = 'none';
+  document.getElementById('rec-timer').style.display      = 'none';
+}
+
+// ── For exam rooms: submit to AI Summary API and show result modal ────────────
+async function _submitForAISummary() {
+  if (!_recChunks.length) return;
+
+  // Build blob + filename (strip codec params — MinIO only accepts base MIME per RFC 2045)
+  const mimeRaw = _recChunks[0].type || 'video/webm';
+  const mime = mimeRaw.split(';')[0].trim();
+  const ext  = (mime.includes('mp4') || mime.includes('h264') || mime.includes('avc1')) ? 'mp4' : 'webm';
+  const blob = new Blob(_recChunks, { type: mime });
+  _recChunks = [];
+
+  const now = new Date();
+  const ts  = now.toISOString().replace(/:/g, '-').replace(/\..+/, '') + 'Z';
+  const filename = `room-${_examRoomId}_${ts}.${ext}`;
+
+  // Show modal in loading state
+  const modal = document.getElementById('summary-modal');
+  document.getElementById('summary-loading').style.display = '';
+  document.getElementById('summary-result').style.display  = 'none';
+  document.getElementById('summary-error').style.display   = 'none';
+  modal.classList.add('open');
+
+  // Also trigger a local download as backup
+  const dlUrl = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href      = dlUrl;
+  a.download  = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(dlUrl), 30000);
+
+  // Pull current admitted patient info from queue if available
+  let patientName = '';
+  let patientCid  = '';
+  let visitNumber = '';
+  if (typeof queueData !== 'undefined') {
+    const admitted = queueData.find(q => q.status === 'admitted');
+    if (admitted) {
+      patientName = admitted.patientName || '';
+      patientCid  = admitted.cid || '';
+      // visit number = 1-based position of this patient in the full queue
+      const idx = queueData.findIndex(q => q.token === admitted.token);
+      visitNumber = idx >= 0 ? String(idx + 1) : '';
+    }
+  }
+
+  const serviceStartTime = _recStartTime || '';
+  const serviceEndTime   = new Date().toISOString();
+
+  try {
+    // 1️⃣  Get ABS upload credentials from server (session-gated)
+    const credRes = await fetch('/api/media-upload/credentials', { credentials: 'include' });
+    const creds   = await credRes.json();
+
+    console.log('[ai-summary] ABS credentials obtained, uploading video…', creds);
+
+    // 2️⃣  POST video directly to ABS from the browser
+    const absForm = new FormData();
+    absForm.append('files',              blob, filename);
+    absForm.append('service_start_time', serviceStartTime);
+    absForm.append('service_end_time',   serviceEndTime);
+    absForm.append('provider_ids',       creds.providerCid || '');
+    absForm.append('patient_cid',        patientCid);        // exam only
+    absForm.append('appointment_id',     _examRoomId || ''); // meeting room id
+    absForm.append('visit_number',       visitNumber);       // queue number
+
+    fetch(creds.url, {
+      method : 'POST',
+      headers: { Authorization: `Bearer ${creds.token}` },
+      body   : absForm,
+    }).then(r => {
+        console.log('[abs-upload] status:', r.status);
+        if (r.ok) {
+          alert('✅ อัปโหลดวิดีโอสำเร็จแล้ว');
+        } else {
+          alert('⚠️ อัปโหลดวิดีโอไม่สำเร็จ (HTTP ' + r.status + ')');
+        }
+      })
+      .catch(e => {
+        console.warn('[abs-upload] error:', e.message);
+        alert('❌ อัปโหลดวิดีโอล้มเหลว: ' + e.message);
+      });
+
+    // 3️⃣  Send metadata (no video) to our server for AI summary text
+    const summaryForm = new FormData();
+    summaryForm.append('patientName',        patientName);
+    summaryForm.append('patientCid',         patientCid);
+    summaryForm.append('roomName',           roomName || roomId);
+    summaryForm.append('service_start_time', serviceStartTime);
+    summaryForm.append('service_end_time',   serviceEndTime);
+
+    const r = await fetch(`/api/exam/${_examRoomId}/submit-summary`, {
+      method      : 'POST',
+      credentials : 'include',
+      body        : summaryForm,
+    });
+    const data = await r.json();
+
+    if (r.ok && data.summary) {
+      document.getElementById('summary-text').textContent = data.summary;
+      document.getElementById('summary-meta').textContent =
+        `ผู้ป่วย: ${patientName || '-'}  ·  ห้อง: ${roomName || roomId}  ·  ${new Date().toLocaleString('th-TH')}`;
+      document.getElementById('summary-loading').style.display = 'none';
+      document.getElementById('summary-result').style.display  = '';
+    } else {
+      throw new Error(data.error || data.message || 'ไม่ได้รับผลสรุป');
+    }
+  } catch (e) {
+    document.getElementById('summary-loading').style.display = 'none';
+    document.getElementById('summary-error').style.display   = '';
+    document.getElementById('summary-error').textContent     = '⚠️ ส่งไม่สำเร็จ: ' + e.message;
+    console.error('[ai-summary] error:', e.message);
+  }
+}
+
+// ── For plain meet rooms: save file only (download) ──────────────────────────
+function _saveRecordingOnly() {
+  if (!_recChunks.length) return;
+  // Strip codec params — MinIO only accepts base MIME per RFC 2045
+  const mimeRaw = _recChunks[0].type || 'video/webm';
+  const mime = mimeRaw.split(';')[0].trim();
+  const ext  = (mime.includes('mp4') || mime.includes('h264') || mime.includes('avc1')) ? 'mp4' : 'webm';
+  const blob = new Blob(_recChunks, { type: mime });
+  _recChunks = [];
+
+  const now = new Date();
+  const ts  = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}` +
+              `_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+
+  // Download locally
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href    = url;
+  a.download = `moph-meet-record_${ts}.${ext}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+  // Upload directly to ABS from the browser
+  const endTime = new Date().toISOString();
+  fetch('/api/media-upload/credentials', { credentials: 'include' })
+    .then(r => r.json())
+    .then(creds => {
+      const form = new FormData();
+      form.append('files',               blob, `moph-meet-record_${ts}.${ext}`);
+      form.append('service_start_time',  _recStartTime || '');
+      form.append('service_end_time',    endTime);
+      form.append('provider_ids',        creds.providerCid || '');
+      form.append('appointment_id',      roomId || '');     // meeting room id
+      form.append('visit_number',        '0');               // no queue in plain meet
+      return fetch(creds.url, {
+        method : 'POST',
+        headers: { Authorization: `Bearer ${creds.token}` },
+        body   : form,
+      });
+    })
+    .then(r => {
+      console.log('[abs-upload] status:', r.status);
+      if (r.ok) {
+        alert('✅ อัปโหลดวิดีโอสำเร็จแล้ว');
+      } else {
+        alert('⚠️ อัปโหลดวิดีโอไม่สำเร็จ (HTTP ' + r.status + ')');
+      }
+    })
+    .catch(e => {
+      console.warn('[abs-upload] error:', e.message);
+      alert('❌ อัปโหลดวิดีโอล้มเหลว: ' + e.message);
+    });
+}
+
+// Auto-stop on page unload
+window.addEventListener('beforeunload', () => {
+  if (_recRecorder) _recRecorder.stop();
+});
+</script>
+
+<%- include('partials/foot') %>

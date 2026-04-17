@@ -1,0 +1,387 @@
+<%- include('partials/head', { title: 'Dashboard – MOPH Meet' }) %>
+
+<!-- Navbar -->
+<div class="navbar bg-primary text-primary-content shadow px-4 gap-2">
+  <div class="flex-1">
+    <img src="/images/logo.png" alt="MOPH Meet" class="h-9 bg-white/90 p-1 rounded" onerror="this.style.display='none'" />
+  </div>
+  <div class="flex-none gap-3 items-center">
+    <a href="/usage-logs" class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary">📊 สถิติ</a>
+    <form method="POST" action="/logout" style="margin:0">
+      <button class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary">ออกจากระบบ</button>
+    </form>
+  </div>
+</div>
+
+<main class="container mx-auto p-4 flex flex-col gap-4">
+
+  <!-- ── User Card ─────────────────────────────────────────────────────── -->
+  <% const org = user.organization?.[0] || {}; const pid = user.providerIDProfile || {}; %>
+  <div class="card bg-white shadow-sm border border-base-200">
+    <div class="card-body py-4 px-5">
+      <div class="flex flex-row items-start gap-4">
+
+        <!-- Avatar -->
+        <div class="avatar placeholder shrink-0">
+          <div class="bg-primary text-primary-content rounded-full w-14" style="display: flex;align-content: center;align-items: center;justify-content: center;">
+            <span class="text-2xl"><%= (user.display || user.username || 'U')[0].toUpperCase() %></span>
+          </div>
+        </div>
+
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <!-- Name + provider badge -->
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="font-bold text-lg leading-tight">
+              <%= pid.title_th || '' %> <%= user.display || user.username || 'ผู้ใช้' %>
+            </p>
+            <% if (isProvider) { %>
+              <span class="badge badge-success badge-sm gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Provider
+              </span>
+            <% } %>
+            <% if (user.roles?.length) { %>
+              <% for (const r of user.roles) { %>
+                <span class="badge badge-primary badge-outline badge-sm"><%= r %></span>
+              <% } %>
+            <% } %>
+          </div>
+
+          <!-- Position & org -->
+          <% if (org.position || org.hname_th) { %>
+            <p class="text-sm text-base-content/70 mt-0.5">
+              <% if (org.position) { %><span class="font-medium"><%= org.position %></span><% } %>
+              <% if (org.position && org.hname_th) { %> · <% } %>
+              <% if (org.hname_th) { %><%= org.hname_th %><% } %>
+            </p>
+          <% } %>
+
+          <!-- Detail chips -->
+          <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-base-content/55">
+            <% if (org.hcode) { %>
+              <span class="flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                รหัสหน่วยงาน <%= org.hcode %>
+              </span>
+            <% } %>
+            <% if (org.department) { %>
+              <span class="flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"/></svg>
+                <%= org.department %>
+              </span>
+            <% } %>
+            <% if (pid.email || org.email) { %>
+              <span class="flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <%= pid.email || org.email %>
+              </span>
+            <% } %>
+            <% if (pid.provider_id) { %>
+              <span class="flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c0 1.657-1.343 3-3 3s-3-1.343-3-3"/></svg>
+                Provider ID: <%= pid.provider_id %>
+              </span>
+            <% } %>
+            <% if (pid.cid || user.username) { %>
+              <span class="flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15A2.25 2.25 0 002.25 6.75v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm-1.875 6.375a4.5 4.5 0 00-4.125-2.063"/></svg>
+                CID: <%= pid.cid || user.username %>
+              </span>
+            <% } %>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <% if (isProvider) { %>
+
+  <!-- ── Create Room Cards ──────────────────────────────────────────────── -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+    <!-- Meet Room -->
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-primary text-base">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+          สร้างห้องประชุม
+        </h2>
+        <p class="text-sm text-base-content/60">ห้องสำหรับประชุมทั่วไป กลุ่ม หรือสัมมนา</p>
+        <div class="card-actions mt-3">
+          <button onclick="openCreateModal('meet')" class="btn btn-primary btn-sm w-full">+ สร้างห้องประชุม</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Exam Room -->
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-accent text-base">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          สร้างห้องตรวจ
+        </h2>
+        <p class="text-sm text-base-content/60">ห้องตรวจโรคทางไกล สำหรับแพทย์และผู้ป่วย</p>
+        <div class="card-actions mt-3">
+          <button onclick="openCreateModal('exam')" class="btn btn-accent btn-sm w-full text-white">+ สร้างห้องตรวจ</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Calendar + Meeting list ───────────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+    <!-- Calendar -->
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-primary text-lg">📅 ปฏิทินนัดหมาย</h2>
+        <div id="mini-calendar"></div>
+      </div>
+    </div>
+
+    <!-- Meeting list -->
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="card-title text-primary text-lg">รายการนัดหมาย</h2>
+          <input
+            type="search"
+            id="meet-search"
+            placeholder="ค้นหา…"
+            class="input input-bordered input-sm w-36"
+            oninput="filterMeets(this.value)"
+          />
+        </div>
+
+        <div id="meet-list" class="flex flex-col gap-2 overflow-y-auto" style="max-height:480px">
+          <% if (meets.length === 0) { %>
+            <p class="text-base-content/50 text-sm py-4 text-center">ไม่มีนัดหมาย</p>
+          <% } else { %>
+            <% for (const m of meets) { %>
+            <a
+              class="meet-card card card-compact border-2 transition-all no-underline
+                     <%- (m.type === 'exam' || m.patientId)
+                       ? 'border-primary bg-white hover:bg-primary hover:text-primary-content'
+                       : 'border-yellow-400 bg-white hover:bg-yellow-400 hover:text-yellow-900' %>"
+              href="<%- m.type === 'exam' ? '/exam/' + m.id : '/room/' + m.id %>"
+              data-title="<%- (m.name || m.title || '').toLowerCase() %>"
+              data-desc="<%- (m.description || '').toLowerCase() %>"
+              data-date="<%- m.starttime ? m.starttime.slice(0,10) : '' %>"
+            >
+              <div class="card-body py-3 px-4">
+                <div class="flex items-center gap-2">
+                  <span class="badge badge-sm font-semibold shrink-0
+                    <%- (m.type === 'exam' || m.patientId) ? 'badge-primary' : 'bg-yellow-400 text-yellow-900 border-yellow-400' %>">
+                    <%= (m.type === 'exam' || m.patientId) ? '🩺 ตรวจ' : '📹 ประชุม' %>
+                  </span>
+                  <% if (m.ownerId !== user.username) { %>
+                    <span class="badge badge-sm badge-outline badge-info shrink-0">🔗 เข้าร่วม</span>
+                  <% } %>
+                  <p class="font-semibold text-sm truncate"><%= m.name || m.title || m.id %></p>
+                </div>
+                <div class="flex flex-wrap gap-3 text-xs opacity-55 mt-1">
+                  <span>📆 <%= formatDate(m.starttime) %></span>
+                  <span>🕐 <%= formatTime(m.starttime) %> – <%= formatTime(m.endtime) %></span>
+                  <% if (m.ownerId !== user.username && m.ownerDisplay) { %>
+                    <span>👤 <%= m.ownerDisplay %></span>
+                  <% } %>
+                </div>
+              </div>
+            </a>
+            <% } %>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <% } else { %>
+  <!-- ── Guest view ─────────────────────────────────────────────────────── -->
+  <div class="flex justify-center mt-8">
+    <div class="card bg-white shadow-sm border border-base-200 max-w-sm w-full">
+      <div class="card-body items-center text-center">
+        <h2 class="card-title">ยินดีต้อนรับ</h2>
+        <p class="text-base-content/60">กรุณาใช้ลิงก์นัดหมายที่ได้รับเพื่อเข้าห้องประชุม</p>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+</main>
+
+<!-- ── Create Room Modal ──────────────────────────────────────────────────── -->
+<dialog id="create-room-modal" class="modal">
+  <div class="modal-box bg-white w-full max-w-md">
+    <h3 id="modal-title" class="font-bold text-lg mb-1">สร้างห้อง</h3>
+    <p id="modal-desc" class="text-sm text-base-content/60 mb-4"></p>
+
+    <!-- Form panel -->
+    <div id="modal-form-panel">
+      <form id="create-room-form" class="flex flex-col gap-3">
+        <input type="hidden" id="room-type" name="type" value="meet" />
+
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control w-full">
+            <div class="label"><span class="label-text">วันที่ <span class="text-error">*</span></span></div>
+            <input type="date" name="date" required class="input input-bordered w-full" />
+          </label>
+          <label class="form-control w-full">
+            <div class="label"><span class="label-text">เวลาเริ่ม <span class="text-error">*</span></span></div>
+            <input type="time" name="starttime" required class="input input-bordered w-full" />
+          </label>
+        </div>
+
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">เวลาสิ้นสุด <span class="text-error">*</span></span></div>
+          <input type="time" name="endtime" required class="input input-bordered w-full" />
+        </label>
+
+        <div id="modal-error" class="alert alert-error hidden text-sm py-2"></div>
+
+        <div class="modal-action mt-2">
+          <button type="button" onclick="document.getElementById('create-room-modal').close()" class="btn btn-ghost">ยกเลิก</button>
+          <button type="submit" id="modal-submit-btn" class="btn btn-primary">สร้างห้อง</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Result panel (shown after creation) -->
+    <div id="modal-result-panel" class="hidden flex flex-col gap-3">
+      <div class="alert alert-success text-sm">สร้างห้องสำเร็จแล้ว!</div>
+
+      <div class="bg-base-100 rounded-lg p-3 flex flex-col gap-2">
+        <p class="font-semibold text-sm" id="result-room-name"></p>
+
+        <!-- Meet join link -->
+        <div id="result-meet-link-wrap" class="hidden">
+          <p class="text-xs text-base-content/60 mb-1">🔗 ลิงก์เข้าห้อง (ต้องล็อกอินด้วย Provider ID)</p>
+          <div class="flex gap-2">
+            <input type="text" id="result-meet-link" readonly class="input input-bordered input-sm flex-1 text-xs" />
+            <button onclick="copyLink('result-meet-link')" class="btn btn-sm btn-outline">คัดลอก</button>
+          </div>
+        </div>
+
+        <!-- Exam patient queue link -->
+        <div id="result-patient-link-wrap" class="hidden">
+          <p class="text-xs text-base-content/60 mb-1">🧑‍⚕️ ลิงก์คิวสำหรับผู้ป่วย (JWT, ไม่มีวันหมดอายุ)</p>
+          <div class="flex gap-2">
+            <input type="text" id="result-patient-link" readonly class="input input-bordered input-sm flex-1 text-xs" />
+            <button onclick="copyLink('result-patient-link')" class="btn btn-sm btn-outline">คัดลอก</button>
+          </div>
+          <a id="result-doctor-link" href="#" class="btn btn-accent btn-sm w-full mt-2 text-white">👨‍⚕️ เข้าห้องตรวจ</a>
+        </div>
+      </div>
+
+      <div class="modal-action">
+        <button onclick="document.getElementById('create-room-modal').close();window.location.reload()" class="btn btn-primary w-full">เสร็จ</button>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>const CAL_DATES = <%- calendarDates %>;</script>
+<script src="/js/dashboard.js"></script>
+<script>
+function openCreateModal(type) {
+  const modal    = document.getElementById('create-room-modal');
+  const titleEl  = document.getElementById('modal-title');
+  const descEl   = document.getElementById('modal-desc');
+  const submitBtn = document.getElementById('modal-submit-btn');
+  const roomTypeInput = document.getElementById('room-type');
+  const errorEl  = document.getElementById('modal-error');
+
+  // Reset to form panel
+  document.getElementById('modal-form-panel').classList.remove('hidden');
+  document.getElementById('modal-result-panel').classList.add('hidden');
+
+  roomTypeInput.value = type;
+  errorEl.classList.add('hidden');
+  errorEl.textContent = '';
+
+  if (type === 'exam') {
+    titleEl.textContent  = '🦷 สร้างห้องตรวจ';
+    descEl.textContent   = 'ชื่อห้องสร้างอัตโนมัติ ระบบจะบันทึกวิดีโออัตโนมัติ';
+    submitBtn.className  = 'btn btn-accent text-white';
+    submitBtn.textContent = 'สร้างห้องตรวจ';
+  } else {
+    titleEl.textContent  = '📡 สร้างห้องประชุม';
+    descEl.textContent   = 'ชื่อห้องสร้างอัตโนมัติ ผู้เข้าร่วมต้องล็อกอินด้วย Provider ID';
+    submitBtn.className  = 'btn btn-primary';
+    submitBtn.textContent = 'สร้างห้องประชุม';
+  }
+
+  const dateInput = document.querySelector('#create-room-form [name="date"]');
+  if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+
+  modal.showModal();
+}
+
+function copyLink(inputId) {
+  const el = document.getElementById(inputId);
+  navigator.clipboard.writeText(el.value).then(() => {
+    const orig = event.target.textContent;
+    event.target.textContent = 'คัดลอกแล้ว!';
+    setTimeout(() => { event.target.textContent = orig; }, 1500);
+  });
+}
+
+document.getElementById('create-room-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const btn     = document.getElementById('modal-submit-btn');
+  const errorEl = document.getElementById('modal-error');
+  const fd      = new FormData(this);
+  const type    = fd.get('type');
+
+  const body = {
+    type,
+    starttime: fd.get('date') + 'T' + fd.get('starttime') + ':00',
+    endtime:   fd.get('date') + 'T' + fd.get('endtime')   + ':00',
+  };
+
+  btn.disabled = true;
+  btn.textContent = 'กำลังสร้าง…';
+  errorEl.classList.add('hidden');
+
+  try {
+    const res  = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'เกิดข้อผิดพลาด');
+
+    const origin = window.location.origin;
+    document.getElementById('result-room-name').textContent = '🏠 ' + data.room.name;
+
+    if (type === 'meet') {
+      const meetLink = document.getElementById('result-meet-link');
+      meetLink.value = origin + data.meetJoinUrl;
+      document.getElementById('result-meet-link-wrap').classList.remove('hidden');
+      document.getElementById('result-patient-link-wrap').classList.add('hidden');
+    } else {
+      const patLink = document.getElementById('result-patient-link');
+      patLink.value = origin + data.patientJoinUrl;
+      const docLink = document.getElementById('result-doctor-link');
+      docLink.href  = '/exam/' + data.room.id;
+      document.getElementById('result-patient-link-wrap').classList.remove('hidden');
+      document.getElementById('result-meet-link-wrap').classList.add('hidden');
+    }
+
+    document.getElementById('modal-form-panel').classList.add('hidden');
+    document.getElementById('modal-result-panel').classList.remove('hidden');
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = type === 'exam' ? 'สร้างห้องตรวจ' : 'สร้างห้องประชุม';
+  }
+});
+</script>
+
+<%- include('partials/foot') %>
