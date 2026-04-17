@@ -281,7 +281,7 @@
     <table>
       <tr><th>ส่วนประกอบ</th><th>หน้าที่</th><th>เทคโนโลยี</th></tr>
       <tr><td><strong>Frontend</strong></td><td>หน้าเว็บสำหรับแพทย์และผู้ป่วย</td><td>Server-Side Rendering, DaisyUI, TailwindCSS</td></tr>
-      <tr><td><strong>Core API</strong></td><td>จัดการห้องตรวจ, คิว, JWT, ล็อก</td><td>Node.js, Express, SQLite</td></tr>
+      <tr><td><strong>Core API</strong></td><td>จัดการห้องตรวจ, คิว, JWT, ล็อก</td><td>Node.js, Express, SQLite / PostgreSQL</td></tr>
       <tr><td><strong>Media Server</strong></td><td>วิดีโอคอล</td><td>Self-hosted, Open-source</td></tr>
     </table>
     <h3>โครงสร้างพื้นฐาน</h3>
@@ -304,7 +304,7 @@
     <table>
       <tr><th>Component</th><th>Role</th><th>Technology</th></tr>
       <tr><td><strong>Frontend</strong></td><td>Web UI for doctors and patients</td><td>Server-Side Rendering, DaisyUI, TailwindCSS</td></tr>
-      <tr><td><strong>Core API</strong></td><td>Room management, queue, JWT, logging</td><td>Node.js, Express, SQLite</td></tr>
+      <tr><td><strong>Core API</strong></td><td>Room management, queue, JWT, logging</td><td>Node.js, Express, SQLite / PostgreSQL</td></tr>
       <tr><td><strong>Media Server</strong></td><td>Video conferencing</td><td>Self-hosted, Open-source</td></tr>
     </table>
     <h3>Infrastructure</h3>
@@ -342,13 +342,13 @@
       <tr><td rowspan="2"><strong>📊 รายงาน</strong></td><td>Usage Dashboard (สาธารณะ)</td><td class="yes">✅ พร้อมใช้</td></tr>
       <tr><td>AI Summary สรุปผลตรวจ</td><td class="yes">✅ เชื่อมต่อ ABS แล้ว <span class="badge badge-amber">รอปรับแสดงผล</span></td></tr>
       <tr><td rowspan="3"><strong>💾 ฐานข้อมูล</strong></td><td>SQLite (ค่าเริ่มต้น — zero config)</td><td class="yes">✅ พร้อมใช้</td></tr>
-      <tr><td>PostgreSQL, MySQL, MariaDB, MSSQL</td><td class="yes">✅ รองรับผ่าน ORM</td></tr>
+      <tr><td>PostgreSQL (Store Abstraction)</td><td class="yes">✅ พร้อมใช้</td></tr>
       <tr><td>ข้อมูลชั่วคราว (auto-expire 25 ชม.)</td><td class="yes">✅ พร้อมใช้</td></tr>
       <tr><td rowspan="3"><strong>📱 แพลตฟอร์ม</strong></td><td>Web App (ทุกเบราว์เซอร์)</td><td class="yes">✅ พร้อมใช้</td></tr>
       <tr><td>Mobile App (iOS + Android)</td><td class="patch">รอ Patch API → นำส่งศูนย์คอมฯ ขึ้น Store</td></tr>
-      <tr><td>PWA / Offline</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>PWA / Offline</td><td class="yes">✅ พร้อมใช้</td></tr>
       <tr><td rowspan="4"><strong>🔧 รอพัฒนา</strong></td><td>ระบบการจัดห้องตรวจใหม่</td><td class="patch">รอ Patch</td></tr>
-      <tr><td>Dynamic User Data</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>Dynamic User Data (hcode5, hcode9, clinicCode, DOB, gender)</td><td class="yes">✅ พร้อมใช้</td></tr>
       <tr><td>เชื่อมต่อ IOT และ PHR</td><td class="patch">รอ Patch (ปรับเป็นใช้งานผ่าน MOPH กลาง — รอ user data พร้อม)</td></tr>
       <tr><td>AI Summary ปรับระบบแสดงผล</td><td class="patch">รอ Patch</td></tr>
     </table>
@@ -371,13 +371,13 @@
       <tr><td rowspan="2"><strong>📊 Reporting</strong></td><td>Public Usage Dashboard</td><td class="yes">✅ Available</td></tr>
       <tr><td>AI Consultation Summary</td><td class="yes">✅ ABS Connected <span class="badge badge-amber">UI Pending</span></td></tr>
       <tr><td rowspan="3"><strong>💾 Database</strong></td><td>SQLite (default — zero config)</td><td class="yes">✅ Available</td></tr>
-      <tr><td>PostgreSQL, MySQL, MariaDB, MSSQL</td><td class="yes">✅ Supported via ORM</td></tr>
+      <tr><td>PostgreSQL (Store Abstraction)</td><td class="yes">✅ Available</td></tr>
       <tr><td>Ephemeral data (auto-expire 25 hrs)</td><td class="yes">✅ Available</td></tr>
       <tr><td rowspan="3"><strong>📱 Platforms</strong></td><td>Web App (all browsers)</td><td class="yes">✅ Available</td></tr>
       <tr><td>Mobile App (iOS + Android)</td><td class="patch">Pending API patch → submit to App Store / Play Store</td></tr>
-      <tr><td>PWA / Offline</td><td class="patch">Pending</td></tr>
+      <tr><td>PWA / Offline</td><td class="yes">✅ Available</td></tr>
       <tr><td rowspan="4"><strong>🔧 Upcoming</strong></td><td>New Room Management System</td><td class="patch">Pending</td></tr>
-      <tr><td>Dynamic User Data</td><td class="patch">Pending</td></tr>
+      <tr><td>Dynamic User Data (hcode5, hcode9, clinicCode, DOB, gender)</td><td class="yes">✅ Available</td></tr>
       <tr><td>IOT & PHR Integration</td><td class="patch">Pending (via MOPH central — after user data ready)</td></tr>
       <tr><td>AI Summary UI Improvements</td><td class="patch">Pending</td></tr>
     </table>
@@ -423,7 +423,7 @@
     <h2>📅 แผนพัฒนาและ Timeline</h2>
     <div class="timeline">
       <div class="tl-item"><div class="date">มี.ค. 2569</div><div class="desc"><strong>v1.0</strong> — เปิดใช้งานระบบ: ห้องตรวจ, คิวผู้ป่วย, ProviderID Login, HIS API</div></div>
-      <div class="tl-item"><div class="date">เม.ย. 2569</div><div class="desc"><strong>v1.1</strong> — ปรับปรุง JWT (ลิงก์ไม่หมดอายุก่อนเวลานัด), Dashboard สถิติ, AI Summary (Beta), แก้ไข Room TTL</div></div>
+      <div class="tl-item"><div class="date">เม.ย. 2569</div><div class="desc"><strong>v1.1</strong> — ปรับปรุง JWT, Dashboard สถิติ, AI Summary (Beta), Room TTL, Storage Abstraction (SQLite/PG), Dynamic User Data, PWA</div></div>
       <div class="tl-item future"><div class="date">เม.ย. 2569 (สัปดาห์หน้า)</div><div class="desc"><strong>v1.2</strong> — เปิดตัว Mobile App (iOS + Android) ผ่าน App Store / Play Store <span class="badge badge-amber">เร็วๆ นี้</span></div></div>
       <div class="tl-item future"><div class="date">27–30 เม.ย. 2569</div><div class="desc"><strong>📦 ส่งมอบ MA</strong> — ส่งมอบระบบตามสัญญา MA พร้อม Source Code Archive</div></div>
     </div>
@@ -437,7 +437,9 @@
       <tr><td>HIS API ยืดหยุ่น</td><td>ไม่บังคับส่ง CID/Account ID — รองรับระบบที่ยังไม่มี</td><td class="yes">✅ เสร็จ</td></tr>
       <tr><td>Mobile App</td><td>รอ Patch API → นำส่งศูนย์คอมฯ ขึ้น Store</td><td class="patch">รอ Patch</td></tr>
       <tr><td>ระบบจัดห้องตรวจใหม่</td><td>ปรับโครงสร้างการสร้างและจัดการห้องตรวจ</td><td class="patch">รอ Patch</td></tr>
-      <tr><td>Dynamic User Data</td><td>ข้อมูลผู้ใช้แบบ dynamic</td><td class="patch">รอ Patch</td></tr>
+      <tr><td>Dynamic User Data</td><td>รองรับ hcode5, hcode9, clinicCode, dateOfBirth, gender พร้อม UI แก้ไขใน Dashboard</td><td class="yes">✅ เสร็จ</td></tr>
+      <tr><td>Storage Abstraction</td><td>รองรับ Memory / SQLite / PostgreSQL ผ่านตัวแปร STORAGE</td><td class="yes">✅ เสร็จ</td></tr>
+      <tr><td>PWA</td><td>Service Worker + manifest.json สำหรับ user-app-lite</td><td class="yes">✅ เสร็จ</td></tr>
       <tr><td>IOT & PHR</td><td>ปรับเป็นใช้งานผ่าน MOPH กลาง — รอ user data เปลี่ยนก่อน</td><td class="patch">รอ Patch</td></tr>
     </table>
   </div>
@@ -445,7 +447,7 @@
     <h2>📅 Development Timeline</h2>
     <div class="timeline">
       <div class="tl-item"><div class="date">Mar 2026</div><div class="desc"><strong>v1.0</strong> — Initial launch: Exam rooms, patient queue, ProviderID login, HIS API</div></div>
-      <div class="tl-item"><div class="date">Apr 2026</div><div class="desc"><strong>v1.1</strong> — JWT improvements (links valid until appointment ends), usage dashboard, AI summary (Beta), Room TTL fix</div></div>
+      <div class="tl-item"><div class="date">Apr 2026</div><div class="desc"><strong>v1.1</strong> — JWT improvements, usage dashboard, AI summary (Beta), Room TTL fix, Storage Abstraction (SQLite/PG), Dynamic User Data, PWA</div></div>
       <div class="tl-item future"><div class="date">Apr 2026 (Next week)</div><div class="desc"><strong>v1.2</strong> — Mobile App launch (iOS + Android) via App Store / Play Store <span class="badge badge-amber">Coming Soon</span></div></div>
       <div class="tl-item future"><div class="date">27–30 Apr 2026</div><div class="desc"><strong>📦 MA Delivery</strong> — System handover per MA contract with source code archive</div></div>
     </div>
@@ -459,7 +461,9 @@
       <tr><td>Flexible HIS API</td><td>CID/Account ID no longer required — supports systems without it</td><td class="yes">✅ Done</td></tr>
       <tr><td>Mobile App</td><td>Pending API patch → submit to App Store / Play Store</td><td class="patch">Pending</td></tr>
       <tr><td>New Room Management</td><td>Restructured room creation and management</td><td class="patch">Pending</td></tr>
-      <tr><td>Dynamic User Data</td><td>Dynamic user data system</td><td class="patch">Pending</td></tr>
+      <tr><td>Dynamic User Data</td><td>Supports hcode5, hcode9, clinicCode, dateOfBirth, gender with edit UI in Dashboard</td><td class="yes">✅ Done</td></tr>
+      <tr><td>Storage Abstraction</td><td>Memory / SQLite / PostgreSQL backends via STORAGE env var</td><td class="yes">✅ Done</td></tr>
+      <tr><td>PWA</td><td>Service Worker + manifest.json for user-app-lite</td><td class="yes">✅ Done</td></tr>
       <tr><td>IOT & PHR</td><td>Via MOPH central platform — after user data migration</td><td class="patch">Pending</td></tr>
     </table>
   </div>

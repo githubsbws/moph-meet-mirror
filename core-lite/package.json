@@ -1,6 +1,6 @@
 {
   "name": "core-lite",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lightweight API for user-app-lite (no TypeScript build step)",
   "main": "src/index.js",
   "scripts": {
