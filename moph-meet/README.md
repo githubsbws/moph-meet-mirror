@@ -1,50 +1,63 @@
-# Welcome to your Expo app 👋
+# MOPH Meet — Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> แอปมือถือสำหรับระบบแพทย์ทางไกล กระทรวงสาธารณสุข (iOS + Android)
 
-## Get started
+## ภาพรวม
 
-1. Install dependencies
+Native mobile wrapper สำหรับ MOPH Meet Web Application โดยใช้ WebView เปิดระบบแพทย์ทางไกลภายในแอป พร้อมรองรับ:
 
-   ```bash
-   npm install
-   ```
+- 📸 กล้องและไมโครโฟนสำหรับวิดีโอคอล
+- 🔙 ปุ่ม Back ของ Android ทำงานร่วมกับ WebView
+- 📡 หน้า offline/error เมื่อไม่มีอินเทอร์เน็ต
+- 🔒 จำกัดการเข้าถึงเฉพาะโดเมน MOPH เท่านั้น
 
-2. Start the app
+## ความต้องการ
 
-   ```bash
-    npx expo start
-   ```
+- **Node.js** 18+
+- **Expo CLI** (`npm install -g expo-cli`)
+- **Xcode** (สำหรับ iOS build)
+- **Android Studio** (สำหรับ Android build)
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## การติดตั้ง
 
 ```bash
-npm run reset-project
+cd moph-meet
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## การรัน
 
-## Learn more
+```bash
+# Development
+npx expo start
 
-To learn more about developing your project with Expo, look at the following resources:
+# iOS
+npx expo run:ios
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+# Android
+npx expo run:android
+```
 
-## Join the community
+## Configuration
 
-Join our community of developers creating universal apps.
+แก้ไข URL ใน `app/_layout.tsx`:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```typescript
+const APP_URL = __DEV__
+  ? 'http://192.168.1.100:3001'    // dev — ใส่ IP เครื่องตัวเอง
+  : 'https://moph-meet.moph.go.th'; // production
+```
+
+## Build สำหรับ Store
+
+```bash
+# iOS
+eas build --platform ios
+
+# Android
+eas build --platform android
+```
+
+## License
+
+© 2026 กระทรวงสาธารณสุข — Ministry of Public Health, Thailand
