@@ -307,8 +307,28 @@ app.get('/api/exam/:id/queue', async (req, res) => {
     try { payload = jwt.verify(jwtToken, JWT_SECRET); }
     catch (e) { return res.status(401).json({ error: 401, message: 'invalid jwt' }); }
 
-    const room = await roomStore.get(req.params.id);
-    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+    let room = await roomStore.get(req.params.id);
+
+    // Auto-recover room from JWT when store lost it (TTL / restart)
+    if (!room) {
+        console.log(`[exam] room ${req.params.id} not in store — auto-recovering from JWT`);
+        room = {
+            id:           req.params.id,
+            name:         req.params.id,
+            type:         'exam',
+            ownerId:      payload.ownerId || 'unknown',
+            ownerDisplay: payload.ownerId || 'unknown',
+            queue:        [],
+            starttime:    new Date(payload.iat * 1000).toISOString(),
+            endtime:      payload.exp ? new Date(payload.exp * 1000).toISOString() : null,
+            createdAt:    new Date().toISOString(),
+            recovered:    true,
+        };
+        const ttl = payload.exp ? Math.max(payload.exp - Math.floor(Date.now() / 1000), 3600) + 90000 : 90000;
+        await roomStore.set(req.params.id, room, ttl);
+    }
+
+    if (!room.queue) room.queue = [];
 
     if (!room.queue.find(q => q.token === jwtToken)) {
         const patientName = payload.patientName || 'ผู้ป่วย';
