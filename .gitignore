@@ -3,3 +3,7 @@ sonarqube/sonar*/*
 devserverlist.mddata/*.db
 data/*.db-shm
 data/*.db-wal
+moph-meet-debug.apk
+screen*.png
+test-results/
+data/*.db

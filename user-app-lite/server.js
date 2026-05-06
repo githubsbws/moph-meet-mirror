@@ -388,9 +388,11 @@ app.get('/api/usage-logs/:endpoint', async (req, res) => {
 });
 
 // GET /auth/providerid/callback  (ProviderID OAuth2 callback)
+// state=mobile → redirect to mophmeet:// deep-link with JWT instead of creating a web session
 app.get('/auth/providerid/callback', async (req, res) => {
-  const { code } = req.query;
-  console.log('[ProviderID] callback received, code:', code);
+  const { code, state } = req.query;
+  const isMobile = state === 'mobile';
+  console.log('[ProviderID] callback received, code:', code, 'isMobile:', isMobile);
   if (!code) {
     console.warn('[ProviderID] no code in query');
     return res.redirect('/login?error=no_code');
@@ -426,6 +428,13 @@ app.get('/auth/providerid/callback', async (req, res) => {
 
     console.log('[ProviderID] token:', data.data.token);
     console.log('[ProviderID] user:', JSON.stringify(data.data.user));
+
+    // Mobile OAuth flow: redirect back to native app with JWT
+    if (isMobile) {
+      const token = encodeURIComponent(data.data.token);
+      const user  = encodeURIComponent(JSON.stringify(data.data.user));
+      return res.redirect(`mophmeet://auth?token=${token}&user=${user}`);
+    }
 
     req.session.token = data.data.token;
     req.session.user  = { ...data.data.user, roles: ['admin', 'staff'] };

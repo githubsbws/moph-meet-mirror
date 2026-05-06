@@ -22,7 +22,11 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#1b7a43"
       },
-      "permissions": ["CAMERA", "RECORD_AUDIO", "INTERNET"]
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "INTERNET"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -39,10 +43,11 @@
           "resizeMode": "contain",
           "backgroundColor": "#1b7a43"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
     }
   }
-}}
+}

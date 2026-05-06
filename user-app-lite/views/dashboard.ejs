@@ -1,14 +1,13 @@
 <%- include('partials/head', { title: 'Dashboard – MOPH Meet' }) %>
 
 <!-- Navbar -->
-<div class="navbar bg-primary text-primary-content shadow px-4 gap-2">
-  <div class="flex-1">
-    <img src="/images/logo.png" alt="MOPH Meet" class="h-9 bg-white/90 p-1 rounded" onerror="this.style.display='none'" />
-  </div>
-  <div class="flex-none gap-3 items-center">
-    <a href="/usage-logs" class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary">📊 สถิติ</a>
+<div class="bg-primary text-primary-content shadow">
+  <div class="navbar container mx-auto px-4 min-h-0 py-2 flex items-center gap-3">
+    <img src="/images/logo.png" alt="MOPH Meet" class="h-9 bg-white/90 p-1 rounded shrink-0" onerror="this.style.display='none'" />
+    <div class="flex-1"></div>
+    <a href="/usage-logs" class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary shrink-0">📊 สถิติ</a>
     <form method="POST" action="/logout" style="margin:0">
-      <button class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary">ออกจากระบบ</button>
+      <button class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary shrink-0">ออกจากระบบ</button>
     </form>
   </div>
 </div>
@@ -331,21 +330,21 @@ async function openQueueModal(roomId, roomName) {
       <form id="create-room-form" class="flex flex-col gap-3">
         <input type="hidden" id="room-type" name="type" value="meet" />
 
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">วันที่ <span class="text-error">*</span></span></div>
+          <input type="date" name="date" required class="input input-bordered w-full" />
+        </label>
+
         <div class="grid grid-cols-2 gap-3">
-          <label class="form-control w-full">
-            <div class="label"><span class="label-text">วันที่ <span class="text-error">*</span></span></div>
-            <input type="date" name="date" required class="input input-bordered w-full" />
-          </label>
           <label class="form-control w-full">
             <div class="label"><span class="label-text">เวลาเริ่ม <span class="text-error">*</span></span></div>
             <input type="time" name="starttime" required class="input input-bordered w-full" />
           </label>
+          <label class="form-control w-full">
+            <div class="label"><span class="label-text">เวลาสิ้นสุด <span class="text-error">*</span></span></div>
+            <input type="time" name="endtime" required class="input input-bordered w-full" />
+          </label>
         </div>
-
-        <label class="form-control w-full">
-          <div class="label"><span class="label-text">เวลาสิ้นสุด <span class="text-error">*</span></span></div>
-          <input type="time" name="endtime" required class="input input-bordered w-full" />
-        </label>
 
         <div id="modal-error" class="alert alert-error hidden text-sm py-2"></div>
 
