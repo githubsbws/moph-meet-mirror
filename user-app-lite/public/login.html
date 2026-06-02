@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="mytheme">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login – MOPH Meet</title>
+  <meta name="theme-color" content="#1b7a43" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/images/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="bg-base-100 min-h-screen">
+
+<div class="min-h-screen flex flex-col items-center justify-center p-4 login-bg">
+  <div class="card bg-white shadow-xl w-full max-w-sm">
+    <div class="card-body items-center gap-4">
+
+      <img src="/images/logo.png" alt="MOPH Meet" class="h-28" onerror="this.style.display='none'" />
+
+      <div id="error-alert" style="display:none" role="alert" class="alert bg-error text-error-content w-full py-2 text-sm border-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        <span id="error-text"></span>
+      </div>
+
+      <a id="provider-id-link" href="#"
+        class="btn btn-primary w-full p-1 h-auto bg-primary text-primary-content border-primary hover:bg-primary-focus hover:border-primary-focus"
+      >
+        <img src="/images/provider-id-1.png" alt="เข้าสู่ระบบด้วย Provider ID" class="h-12" onerror="this.style.display='none'" />
+      </a>
+
+      <div id="manual-section" style="display:none;width:100%">
+        <div class="divider text-xs text-base-content/50 my-1">หรือ</div>
+        <form method="POST" action="/login/manual" class="flex flex-col gap-3 w-full">
+          <label class="form-control w-full">
+            <div class="label"><span class="label-text text-sm">Username</span></div>
+            <input name="username" type="text" placeholder="เช่น Admin หรือ test"
+              class="input input-bordered w-full" required autocomplete="username" />
+          </label>
+          <label class="form-control w-full">
+            <div class="label"><span class="label-text text-sm">Password</span></div>
+            <input name="password" type="password" placeholder="กรอกรหัสผ่าน"
+              class="input input-bordered w-full" required autocomplete="current-password" />
+          </label>
+          <button type="submit" class="btn btn-outline btn-primary w-full">
+            เข้าสู่ระบบด้วย Username / Password
+          </button>
+        </form>
+      </div>
+
+      <p class="text-xs text-base-content/50 text-center mt-2">
+        ผู้ป่วยสามารถใช้ลิงก์นัดหมายที่ได้รับจากเจ้าหน้าที่
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(async function () {
+  // Show error from URL
+  const params = new URLSearchParams(location.search);
+  const error  = params.get('error');
+  if (error) {
+    const msgs = {
+      invalid:          'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+      invalid_token:    'ลิงก์ไม่ถูกต้องหรือหมดอายุ',
+      providerid_fail:  'เข้าสู่ระบบด้วย Provider ID ล้มเหลว',
+      providerid_no_data: 'ไม่ได้รับข้อมูลจาก Provider ID',
+      manual_disabled:  'การเข้าสู่ระบบด้วย Username/Password ถูกปิดใช้งาน',
+    };
+    document.getElementById('error-text').textContent = msgs[error] || 'เกิดข้อผิดพลาด กรุณาลองใหม่';
+    document.getElementById('error-alert').style.display = '';
+  }
+
+  // Already logged in? Verify with server (avoids stale-cookie redirect loop)
+  const token = document.cookie.split(';').map(c => c.trim())
+    .find(c => c.startsWith('token='))?.split('=').slice(1).join('=') || '';
+  if (token) {
+    try {
+      const r = await fetch('/api/auth/me', { credentials: 'include' });
+      if (r.ok) { location.href = '/'; return; }
+      // Token is stale — clear it so form shows clean
+      document.cookie = 'token=; Max-Age=0; Path=/';
+      document.cookie = 'user_json=; Max-Age=0; Path=/';
+    } catch (_) { /* network error — show login form */ }
+  }
+
+  // Load public config
+  try {
+    const r   = await fetch('/config');
+    const cfg = await r.json();
+    const link = 'https://moph.id.th/oauth/redirect'
+      + '?client_id='    + encodeURIComponent(cfg.providerIdClientId    || '')
+      + '&redirect_uri=' + encodeURIComponent(cfg.providerIdRedirectUri || '')
+      + '&response_type=code';
+    document.getElementById('provider-id-link').href = link;
+    if (cfg.manualLoginEnabled) {
+      document.getElementById('manual-section').style.display = '';
+    }
+  } catch (e) {
+    console.error('config load failed:', e.message);
+  }
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
+</script>
+</body>
+</html>

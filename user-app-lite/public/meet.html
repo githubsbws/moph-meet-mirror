@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="mytheme">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MOPH Meet</title>
+  <meta name="theme-color" content="#1b7a43" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/images/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/app.css" />
+<style>
+  body, html { margin: 0; padding: 0; overflow: hidden; }
+  #jitsi-wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; }
+  #jitsi-wrap.with-sidebar { right: 370px; }
+  #exam-sidebar {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 370px;
+    background: #fff; border-left: 1px solid #e5e7eb;
+    display: flex; flex-direction: column; z-index: 50;
+    font-family: 'Sarabun', sans-serif;
+  }
+  .sidebar-header {
+    background: #056839; color: #fff;
+    padding: .75rem 1rem; font-weight: 600; font-size: 1rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .sidebar-tabs {
+    display: flex; border-bottom: 2px solid #e5e7eb; background: #f9fafb;
+  }
+  .sidebar-tabs button {
+    flex: 1; padding: .55rem .25rem; font-size: .78rem; font-weight: 600;
+    border: none; background: none; cursor: pointer; color: #6b7280;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    font-family: 'Sarabun', sans-serif; transition: all .15s;
+  }
+  .sidebar-tabs button.active { color: #056839; border-bottom-color: #056839; background: #fff; }
+  .sidebar-tabs button:hover:not(.active) { background: #f3f4f6; }
+  .tab-panel { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
+  .tab-panel.active { display: flex; }
+  .queue-item {
+    background: #f3f4f6; border-radius: .5rem; padding: .6rem .75rem;
+    display: flex; align-items: center; justify-content: space-between; font-size: .875rem;
+  }
+  .queue-item.current { background: #d1fae5; border: 1px solid #056839; }
+  .queue-num { font-weight: 700; color: #056839; min-width: 1.5rem; }
+  .sidebar-footer { padding: .75rem; border-top: 1px solid #e5e7eb; }
+  .btn-next {
+    width: 100%; padding: .75rem; background: #056839; color: #fff;
+    border: none; border-radius: .5rem; font-size: 1rem; font-weight: 600;
+    cursor: pointer; font-family: 'Sarabun', sans-serif;
+  }
+  .btn-next:hover { background: #044d2b; }
+  .btn-next:disabled { background: #9ca3af; cursor: default; }
+  .meet-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 44px; background: #fff;
+    display: flex; align-items: center; padding: 0 1rem; gap: 1rem;
+    box-shadow: 0 -1px 4px rgba(0,0,0,.08); z-index: 99;
+  }
+  .queue-list { flex: 1; overflow-y: auto; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; }
+  .meet-bar.with-sidebar { right: 370px; }
+  #btn-rec-start, #btn-rec-stop {
+    border: none; border-radius: 1.5rem; padding: .3rem .85rem;
+    font-size: .8rem; font-weight: 600; cursor: pointer;
+    font-family: 'Sarabun', sans-serif; transition: background .15s; white-space: nowrap;
+  }
+  #btn-rec-start { background: #ef4444; color: #fff; }
+  #btn-rec-start:hover { background: #dc2626; }
+  #btn-rec-stop  { background: #fbbf24; color: #111; display: none; }
+  #btn-rec-stop:hover  { background: #f59e0b; }
+  #rec-dot   { color: #ef4444; font-size: .8rem; display: none; animation: blink 1s step-start infinite; }
+  #rec-timer { color: #374151; font-size: .78rem; min-width: 3rem; display: none; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #summary-toast {
+    display:none; position:fixed; bottom:60px; left:50%; transform:translateX(-50%);
+    background:#056839; color:#fff; border-radius:.75rem; padding:.65rem 1.25rem;
+    font-family:'Sarabun',sans-serif; font-size:.9rem; font-weight:600;
+    box-shadow:0 4px 16px rgba(0,0,0,.2); z-index:300; white-space:nowrap;
+    transition:opacity .3s;
+  }
+  #sidebar-bubble {
+    display: none; position: fixed; z-index: 200; cursor: pointer;
+    width: 56px; height: 56px; border-radius: 50%; border: none;
+    background: #056839; color: #fff; font-size: 1.5rem;
+    box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    transition: transform .2s, box-shadow .2s;
+    bottom: 24px; right: 24px;
+    font-family: 'Sarabun', sans-serif;
+  }
+  #sidebar-bubble:hover { transform: scale(1.08); box-shadow: 0 6px 24px rgba(0,0,0,.35); }
+  #sidebar-bubble .bubble-badge {
+    position: absolute; top: -2px; right: -2px;
+    background: #ef4444; color: #fff; font-size: .65rem; font-weight: 700;
+    min-width: 18px; height: 18px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 4px; line-height: 1;
+  }
+  #btn-collapse-sidebar {
+    margin-left: auto; background: none; border: none; color: #fff;
+    cursor: pointer; font-size: 1.1rem; padding: 0 .25rem; opacity: .85;
+    transition: opacity .15s;
+  }
+  #btn-collapse-sidebar:hover { opacity: 1; }
+  #btn-collapse-bar {
+    background: none; border: none; cursor: pointer; font-size: .9rem;
+    color: #999; padding: .15rem .35rem; transition: color .15s;
+  }
+  #btn-collapse-bar:hover { color: #333; }
+  body.panel-collapsed #exam-sidebar   { display: none !important; }
+  body.panel-collapsed .meet-bar       { display: none !important; }
+  body.panel-collapsed #jitsi-wrap     { right: 0 !important; }
+  body.panel-collapsed #sidebar-bubble { display: flex; align-items: center; justify-content: center; }
+  #exam-sidebar, .meet-bar, #jitsi-wrap { transition: all .25s ease; }
+</style>
+</head>
+<body class="bg-base-100 min-h-screen">
+
+<div id="jitsi-wrap"></div>
+
+<!-- Floating Bubble -->
+<button id="sidebar-bubble" onclick="togglePanelCollapse()" title="แสดงเมนู">
+  <span id="bubble-icon">📹</span>
+  <span class="bubble-badge" id="bubble-queue-count" style="display:none">0</span>
+</button>
+
+<!-- Doctor Exam Sidebar (always in DOM, shown/hidden by JS) -->
+<div id="exam-sidebar" style="display:none">
+  <div class="sidebar-header">
+    🩺 ห้องตรวจ · <span id="queue-count" class="opacity-80 text-sm font-normal">รอโหลดคิว…</span>
+    <button id="btn-collapse-sidebar" onclick="togglePanelCollapse()" title="ย่อเมนู">✕</button>
+  </div>
+  <div class="sidebar-tabs">
+    <button class="active" onclick="switchTab('queue',this)">🩺 คิว</button>
+    <button onclick="switchTab('phr',this)">📋 PHR</button>
+    <button onclick="switchTab('iot',this)">📡 IOT</button>
+  </div>
+  <!-- Tab: Queue -->
+  <div id="tab-queue" class="tab-panel active" style="flex-direction:column">
+    <div class="queue-list" id="queue-list">
+      <p class="text-center text-gray-400 text-sm mt-4">ยังไม่มีผู้ป่วยในคิว</p>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn-next" id="btn-add-patient" onclick="openAddPatient()"
+        style="background:#fff;color:#056839;border:2px solid #056839;margin-bottom:.5rem">
+        ➕ เพิ่มผู้ป่วย
+      </button>
+      <button class="btn-next" id="btn-next-patient" onclick="callNextPatient()">
+        ▶ เรียกผู้ป่วยคนถัดไป
+      </button>
+      <p style="font-size:.75rem;text-align:center;color:#9ca3af;margin:.5rem 0 0" id="last-called"></p>
+    </div>
+  </div>
+  <!-- Tab: PHR -->
+  <div id="tab-phr" class="tab-panel" style="padding:.75rem;flex-direction:column;gap:.5rem">
+    <p class="text-sm text-gray-500 mb-2">ดึงข้อมูลสุขภาพจาก PHR กระทรวงสาธารณสุข</p>
+    <label class="text-xs font-semibold text-gray-600">เลข CID ผู้ป่วย</label>
+    <input id="phr-cid" type="text" maxlength="13" placeholder="เลข 13 หลัก" style="width:100%;padding:.5rem .6rem;border:1px solid #d1d5db;border-radius:.4rem;font-size:.9rem;box-sizing:border-box" />
+    <button onclick="phrRequestOTP()" style="width:100%;padding:.5rem;background:#056839;color:#fff;border:none;border-radius:.4rem;cursor:pointer;font-size:.85rem;font-weight:600;margin-top:.25rem">📲 ขอ OTP</button>
+    <label class="text-xs font-semibold text-gray-600 mt-2">OTP</label>
+    <input id="phr-otp" type="text" maxlength="6" placeholder="รหัส OTP" style="width:100%;padding:.5rem .6rem;border:1px solid #d1d5db;border-radius:.4rem;font-size:.9rem;box-sizing:border-box" />
+    <button onclick="phrLoadData()" style="width:100%;padding:.5rem;background:#056839;color:#fff;border:none;border-radius:.4rem;cursor:pointer;font-size:.85rem;font-weight:600;margin-top:.25rem">📥 ดึงข้อมูล PHR</button>
+    <div id="phr-result" style="margin-top:.5rem;overflow-y:auto;flex:1"></div>
+  </div>
+  <!-- Tab: IOT -->
+  <div id="tab-iot" class="tab-panel" style="padding:.75rem;flex-direction:column;gap:.5rem">
+    <p class="text-sm text-gray-500 mb-2">เชื่อมต่ออุปกรณ์ทางการแพทย์ (USB / Bluetooth / Network)</p>
+    <button onclick="iotScanDevices()" style="width:100%;padding:.55rem;background:#056839;color:#fff;border:none;border-radius:.4rem;cursor:pointer;font-size:.85rem;font-weight:600">🔍 สแกนอุปกรณ์</button>
+    <div id="iot-available" style="margin-top:.25rem"></div>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:.5rem 0">
+    <p class="text-xs font-semibold text-gray-600">อุปกรณ์ที่เชื่อมต่อแล้ว</p>
+    <div id="iot-active" style="display:flex;flex-direction:column;gap:.4rem;flex:1;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- Add Patient Modal -->
+<div id="add-patient-modal" style="
+  display:none;position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.45);align-items:center;justify-content:center;
+">
+  <div style="
+    background:#fff;border-radius:1rem;padding:1.75rem 1.5rem;
+    width:340px;max-width:calc(100vw - 2rem);font-family:'Sarabun',sans-serif;
+    box-shadow:0 8px 32px rgba(0,0,0,.2);
+  ">
+    <h3 style="margin:0 0 1rem;font-size:1.1rem;font-weight:700;color:#056839">➕ เพิ่มผู้ป่วย</h3>
+    <label style="font-size:.875rem;color:#374151;display:block;margin-bottom:.35rem">ชื่อผู้ป่วย (ไม่บังคับ)</label>
+    <input id="invite-name" type="text" placeholder="เช่น นายสมชาย ใจดี"
+      style="width:100%;box-sizing:border-box;padding:.65rem .75rem;border:1px solid #d1d5db;
+             border-radius:.5rem;font-size:1rem;font-family:'Sarabun',sans-serif;outline:none;margin-bottom:.6rem"
+      onkeydown="if(event.key==='Enter')doAddPatient()"
+    />
+    <label style="font-size:.875rem;color:#374151;display:block;margin-bottom:.35rem">เลขบัตรประชาชน (CID, ไม่บังคับ)</label>
+    <input id="invite-cid" type="text" placeholder="เช่น 1234567890123" maxlength="13"
+      style="width:100%;box-sizing:border-box;padding:.65rem .75rem;border:1px solid #d1d5db;
+             border-radius:.5rem;font-size:1rem;font-family:'Sarabun',sans-serif;outline:none"
+      onkeydown="if(event.key==='Enter')doAddPatient()"
+    />
+    <div id="invite-result" style="display:none;margin-top:1rem">
+      <p style="font-size:.8rem;color:#6b7280;margin:0 0 .35rem">ลิงก์คิวสำหรับผู้ป่วย:</p>
+      <div style="display:flex;gap:.5rem;align-items:center">
+        <input id="invite-link" readonly style="
+          flex:1;padding:.5rem .6rem;border:1px solid #d1d5db;border-radius:.5rem;
+          font-size:.75rem;background:#f9fafb;font-family:monospace;
+        "/>
+        <button onclick="copyInviteLink()" style="
+          padding:.5rem .75rem;background:#056839;color:#fff;border:none;
+          border-radius:.5rem;cursor:pointer;font-size:.8rem;white-space:nowrap
+        ">คัดลอก</button>
+      </div>
+      <p id="invite-copy-note" style="font-size:.75rem;color:#056839;margin:.35rem 0 0;min-height:1rem"></p>
+    </div>
+    <div style="display:flex;gap:.75rem;margin-top:1.25rem">
+      <button onclick="doAddPatient()" id="btn-do-invite"
+        style="flex:1;padding:.7rem;background:#056839;color:#fff;border:none;
+               border-radius:.5rem;font-size:1rem;cursor:pointer;font-family:'Sarabun',sans-serif">
+        สร้างลิงก์
+      </button>
+      <button onclick="closeAddPatient()"
+        style="padding:.7rem 1rem;background:#f3f4f6;color:#374151;border:none;
+               border-radius:.5rem;font-size:1rem;cursor:pointer;font-family:'Sarabun',sans-serif">
+        ปิด
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- AI Summary Result Modal -->
+<div id="summary-modal">
+  <div class="summary-box">
+    <h3>🧠 สรุปการตรวจ (AI)</h3>
+    <div id="summary-loading" style="text-align:center;padding:1.5rem;color:#6b7280">
+      <div style="font-size:1.5rem;margin-bottom:.5rem">⏳</div>
+      กำลังส่งวิดีโอและสรุปผล…
+    </div>
+    <div id="summary-result" style="display:none">
+      <div class="summary-content" id="summary-text"></div>
+      <div class="summary-meta" id="summary-meta"></div>
+    </div>
+    <div id="summary-error" style="display:none;color:#dc2626;font-size:.875rem;padding:.5rem"></div>
+    <div style="margin-top:1rem;text-align:right">
+      <button onclick="document.getElementById('summary-modal').classList.remove('open')"
+        style="padding:.55rem 1.25rem;background:#056839;color:#fff;border:none;
+               border-radius:.5rem;cursor:pointer;font-family:'Sarabun',sans-serif;font-size:.9rem">
+        ปิด
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="meet-bar" id="meet-bar">
+  <button id="btn-collapse-bar" onclick="togglePanelCollapse()" title="ย่อเมนู">⬇</button>
+  <span id="meet-bar-icon" style="font-size:.9rem">📹</span>
+  <span id="meet-bar-name" style="font-size:.9rem;color:#555;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">กำลังโหลด…</span>
+  <span id="rec-dot">⏺</span>
+  <span id="rec-timer">00:00</span>
+  <button id="btn-rec-start" onclick="startDocRecord()">🎙 อัดบันทึก</button>
+  <button id="btn-rec-stop"  onclick="stopDocRecord()">⏹ หยุด &amp; บันทึก</button>
+  <a href="/" style="font-size:.85rem;color:#056839;white-space:nowrap">← กลับ</a>
+</div>
+
+<script>
+// ── Parse URL → isExam, roomId ───────────────────────────────────────────────
+const pathParts = location.pathname.split('/');
+const isExam = pathParts[1] === 'exam';
+const roomId = pathParts[2] || '';
+
+let domain    = '';
+let roomName  = roomId;
+let display   = 'Guest';
+
+// ── Auth helper ───────────────────────────────────────────────────────────────
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|;)\\s*' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+// ── Collapse logic ────────────────────────────────────────────────────────────
+if (isExam) document.body.classList.add('has-exam');
+if (localStorage.getItem('panelCollapsed') === '1') {
+  document.body.classList.add('panel-collapsed');
+}
+
+function togglePanelCollapse() {
+  const collapsed = document.body.classList.toggle('panel-collapsed');
+  localStorage.setItem('panelCollapsed', collapsed ? '1' : '0');
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
+}
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── Apply isExam UI setup (after DOM) ─────────────────────────────────────────
+(function applyExamUI() {
+  if (isExam) {
+    document.getElementById('jitsi-wrap').classList.add('with-sidebar');
+    document.getElementById('meet-bar').classList.add('with-sidebar');
+    document.getElementById('exam-sidebar').style.display = 'flex';
+    document.getElementById('bubble-icon').textContent = '🩺';
+    document.getElementById('bubble-queue-count').style.display = '';
+    document.getElementById('meet-bar-icon').textContent = '🩺';
+    document.getElementById('btn-rec-stop').innerHTML = '⏹ หยุด &amp; สรุป AI';
+  }
+})();
+
+// ── Jitsi init (called after external_api.js loads) ──────────────────────────
+function initJitsi() {
+  const jitsiOptions = {
+    roomName  : roomId,
+    width     : '100%',
+    height    : '100%',
+    parentNode: document.getElementById('jitsi-wrap'),
+    userInfo  : { displayName: display },
+    configOverwrite: {
+      startWithAudioMuted: false,
+      startWithVideoMuted: false,
+    },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS: isExam
+        ? ['microphone','camera','hangup','chat','tileview','participants-pane','recording']
+        : ['microphone','camera','hangup','chat','tileview','participants-pane','fullscreen'],
+      SHOW_JITSI_WATERMARK: false,
+    }
+  };
+  window._jitsiApi = new JitsiMeetExternalAPI(domain, jitsiOptions);
+}
+
+// ── Main bootstrap ────────────────────────────────────────────────────────────
+(async function init() {
+  if (!getCookie('token')) { location.href = '/login.html'; return; }
+  try {
+    const [cfg, userResp] = await Promise.all([
+      fetch('/config').then(r => r.json()),
+      fetch('/api/auth/me', { credentials: 'include' }),
+    ]);
+
+    if (!userResp.ok) { location.href = '/login.html'; return; }
+    const user = await userResp.json();
+
+    domain  = cfg.meetingDomain || '';
+    display = user.display || user.username || 'Guest';
+
+    // Load room data
+    try {
+      const endpoint = isExam ? '/api/exam/' + roomId + '/doctor' : '/api/rooms/' + roomId;
+      const r = await fetch(endpoint, { credentials: 'include' });
+      if (r.ok) {
+        const room = await r.json();
+        roomName = room.name || room.title || roomId;
+      }
+    } catch (_) {}
+
+    // Auto-join
+    try {
+      await fetch('/api/rooms/' + roomId + '/join', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (_) {}
+
+    // Update page title and meet-bar
+    document.title = (roomName || roomId) + ' – MOPH Meet';
+    document.getElementById('meet-bar-name').textContent = (isExam ? '🩺' : '📹') + ' ' + roomName;
+
+    // Load Jitsi external API
+    const script = document.createElement('script');
+    script.src    = 'https://' + domain + '/external_api.js';
+    script.onload = initJitsi;
+    script.onerror = () => console.error('[jitsi] failed to load external_api.js from', domain);
+    document.head.appendChild(script);
+
+    // Start queue polling for exam rooms
+    if (isExam) {
+      refreshQueue();
+      setInterval(refreshQueue, 8000);
+    }
+  } catch (e) {
+    console.error('[init] error:', e);
+    location.href = '/login.html';
+  }
+})();
+
+// ── Queue management (exam only) ──────────────────────────────────────────────
+let queueData = [];
+
+async function refreshQueue() {
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/doctor', {
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!r.ok) { console.warn('[queue] doctor fetch failed', r.status); return; }
+    const room = await r.json();
+    queueData = room.queue || [];
+    renderQueue(queueData, room.currentPatientToken);
+  } catch (_) {}
+}
+
+function renderQueue(queue, currentToken) {
+  const waiting  = queue.filter(q => q.status === 'waiting');
+  const admitted = queue.find(q => q.status === 'admitted');
+  const listEl   = document.getElementById('queue-list');
+  const countEl  = document.getElementById('queue-count');
+  const nextBtn  = document.getElementById('btn-next-patient');
+
+  countEl.textContent = 'คิวรอ: ' + waiting.length + ' คน';
+  nextBtn.disabled    = waiting.length === 0;
+
+  const bubbleBadge = document.getElementById('bubble-queue-count');
+  if (bubbleBadge) bubbleBadge.textContent = waiting.length;
+
+  if (queue.length === 0) {
+    listEl.innerHTML = '<p class="text-center text-gray-400 text-sm mt-4">ยังไม่มีผู้ป่วยในคิว</p>';
+    return;
+  }
+  listEl.innerHTML = '';
+  if (admitted) {
+    const div = document.createElement('div');
+    div.className = 'queue-item current';
+    div.innerHTML = '<span class="queue-num">✅</span><span style="flex:1">' + (admitted.patientName||'') + '</span><span class="text-xs text-green-700">กำลังตรวจ</span>';
+    listEl.appendChild(div);
+  }
+  waiting.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'queue-item';
+    div.innerHTML = '<span class="queue-num">' + (i + 1) + '</span><span style="flex:1">' + (p.patientName||'') + '</span><span class="text-xs text-gray-400">รอ</span>';
+    listEl.appendChild(div);
+  });
+}
+
+async function callNextPatient() {
+  const btn = document.getElementById('btn-next-patient');
+  btn.disabled    = true;
+  btn.textContent = 'กำลังเรียก…';
+  const wasRecording = !!_recRecorder;
+  if (wasRecording) stopDocRecord();
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/next', { method: 'POST', credentials: 'include' });
+    const d = await r.json();
+    document.getElementById('last-called').textContent =
+      d.admitted ? ('เรียก: ' + d.admitted) : 'ไม่มีผู้ป่วยในคิว';
+    await refreshQueue();
+    if (wasRecording && d.admitted) startDocRecord();
+  } catch (e) { btn.disabled = false; }
+  btn.textContent = '▶ เรียกผู้ป่วยคนถัดไป';
+}
+
+// ── Add Patient modal ──────────────────────────────────────────────────────────
+function openAddPatient() {
+  document.getElementById('invite-name').value = '';
+  document.getElementById('invite-cid').value  = '';
+  document.getElementById('invite-result').style.display = 'none';
+  document.getElementById('invite-copy-note').textContent = '';
+  document.getElementById('btn-do-invite').textContent = 'สร้างลิงก์';
+  const modal = document.getElementById('add-patient-modal');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('invite-name').focus(), 50);
+}
+
+function closeAddPatient() {
+  document.getElementById('add-patient-modal').style.display = 'none';
+}
+
+async function doAddPatient() {
+  const btn  = document.getElementById('btn-do-invite');
+  const name = document.getElementById('invite-name').value.trim();
+  const cid  = document.getElementById('invite-cid').value.trim();
+  btn.disabled = true;
+  btn.textContent = 'กำลังสร้าง…';
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/invite', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patientName: name, displayName: name, cid })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || 'error');
+    document.getElementById('invite-link').value = location.origin + d.patientJoinUrl;
+    document.getElementById('invite-result').style.display = 'block';
+    copyInviteLink();
+  } catch (e) {
+    alert('เกิดข้อผิดพลาด: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = 'สร้างลิงก์ใหม่';
+}
+
+function copyInviteLink() {
+  const el = document.getElementById('invite-link');
+  const note = document.getElementById('invite-copy-note');
+  navigator.clipboard.writeText(el.value).then(() => {
+    note.textContent = '✅ คัดลอกแล้ว!';
+    setTimeout(() => note.textContent = '', 2500);
+  }).catch(() => { el.select(); document.execCommand('copy'); });
+}
+
+document.getElementById('add-patient-modal').addEventListener('click', function (e) {
+  if (e.target === this) closeAddPatient();
+});
+
+// ── PHR ───────────────────────────────────────────────────────────────────────
+async function phrRequestOTP() {
+  const cid = document.getElementById('phr-cid').value.trim();
+  if (!cid || cid.length !== 13) { alert('กรุณากรอกเลข CID 13 หลัก'); return; }
+  try {
+    const r = await fetch('/api/phr/request-otp', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cid })
+    });
+    const d = await r.json();
+    if (r.ok) alert('📲 ส่ง OTP ไปยังเบอร์โทรผู้ป่วยแล้ว');
+    else alert('⚠️ ' + (d.message || 'ไม่สามารถขอ OTP ได้'));
+  } catch (e) { alert('❌ ' + e.message); }
+}
+
+async function phrLoadData() {
+  const cid = document.getElementById('phr-cid').value.trim();
+  const otp = document.getElementById('phr-otp').value.trim();
+  if (!cid || !otp) { alert('กรุณากรอก CID และ OTP'); return; }
+  const el = document.getElementById('phr-result');
+  el.innerHTML = '<p class="text-center text-gray-400 text-sm py-3">กำลังโหลด…</p>';
+  try {
+    const r = await fetch('/api/phr/encounter', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cid, otp })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || 'error');
+    const rows = d.result || [];
+    if (!rows.length) { el.innerHTML = '<p class="text-center text-gray-400 text-sm py-3">ไม่พบข้อมูล</p>'; return; }
+    el.innerHTML = rows.reverse().map(row => `
+      <div style="background:#f9fafb;border-radius:.5rem;padding:.6rem .75rem;margin-bottom:.4rem;font-size:.8rem;border:1px solid #e5e7eb">
+        <div style="font-weight:600;color:#056839;margin-bottom:.25rem">${row.organization_name||'-'}</div>
+        <div style="color:#6b7280;font-size:.72rem;margin-bottom:.35rem">${(row.period_start||'').replace('T',' ')} – ${(row.period_end||'').replace('T',' ')}</div>
+        ${row.encounter_cc_text ? '<div>อาการ: '+row.encounter_cc_text+'</div>' : ''}
+        ${row.encounter_diagnosis_icd ? '<div>วินิจฉัย: '+row.encounter_diagnosis_icd+'</div>' : ''}
+        ${row.encounter_medication_text ? '<div>ยา: '+row.encounter_medication_text+'</div>' : ''}
+        <div style="margin-top:.25rem;color:#374151">
+          น้ำหนัก ${row.vital_sign_body_weight_kg||'-'} กก · สูง ${row.vital_sign_body_height_cm||'-'} ซม ·
+          อุณหภูมิ ${row.vital_sign_body_temp_cel||'-'} °C ·
+          ความดัน ${row.vital_sign_bp_systolic_mmhg||'-'}/${row.vital_sign_bp_diastolic_mmhg||'-'} mmHg
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<p class="text-center text-red-500 text-sm py-3">⚠️ ' + e.message + '</p>';
+  }
+}
+
+// ── IOT Devices ───────────────────────────────────────────────────────────────
+const _iotDeviceList = [
+  { name: 'Yuwell YG-990', connector: 'bluetooth', type: 'Blood Pressure', id: 'yg990-00001', organize: 'HJ Prototype' },
+  { name: 'vEKG', connector: 'network', type: 'ekg', id: 'ekg-v-demo', organize: 'ไทม์เมดดิคอลเซ็นเตอร์' },
+  { name: 'vThermometer', connector: 'usb', type: 'thermometer', id: 'thermo-v-demo', organize: 'ไทม์เมดดิคอลเซ็นเตอร์' },
+  { name: 'vPulseOximeter', connector: 'bluetooth', type: 'pulseOximeter', id: 'pulse-v-demo', organize: 'ไทม์เมดดิคอลเซ็นเตอร์' },
+  { name: 'vBGM', connector: 'bluetooth', type: 'bgm', id: 'bgm-v-demo', organize: 'ไทม์เมดดิคอลเซ็นเตอร์' },
+  { name: 'vBloodPressure', connector: 'bluetooth', type: 'Blood Pressure', id: 'bpm-v-demo', organize: 'ไทม์เมดดิคอลเซ็นเตอร์' },
+  { name: 'vNST', connector: 'network', type: 'nst', id: 'nst-v-demo', organize: 'ไทม์เมดดิคอลเซ็นเตอร์' },
+  { name: 'vScale', connector: 'serial', type: 'scale', id: 'scale-v-demo', organize: 'ไทม์เมดดิคอลเซ็นเตอร์' },
+];
+const _iotConnIcons = { bluetooth:'🔵', usb:'🔌', serial:'🔌', network:'📡' };
+let _iotActive = [];
+let _iotIntervals = [];
+
+function iotScanDevices() {
+  const el = document.getElementById('iot-available');
+  el.innerHTML = _iotDeviceList.filter(d => !_iotActive.find(a => a.id === d.id)).map(d => `
+    <div onclick="iotConnect('${d.id}')" style="display:flex;align-items:center;gap:.5rem;padding:.45rem .6rem;background:#f3f4f6;border-radius:.4rem;cursor:pointer;font-size:.82rem;margin-bottom:.3rem;border:1px solid #e5e7eb;transition:background .15s"
+         onmouseover="this.style.background='#d1fae5'" onmouseout="this.style.background='#f3f4f6'">
+      <span>${_iotConnIcons[d.connector]||'📟'}</span>
+      <span style="flex:1"><strong>${d.name}</strong><br><span style="font-size:.72rem;color:#6b7280">${d.organize} · ${d.connector}</span></span>
+    </div>
+  `).join('') || '<p class="text-xs text-gray-400">ไม่พบอุปกรณ์ใหม่</p>';
+}
+
+function _rnd(min,max) { return min + Math.floor(Math.random()*(max-min)); }
+const _iotDrivers = {
+  'vBloodPressure': () => ({ SYS: _rnd(100,120), DIA: _rnd(70,80), MAP: _rnd(70,100), PR: _rnd(60,100) }),
+  'vThermometer':   () => ({ 'อุณหภูมิ °C': (37 + Math.random()).toFixed(1) }),
+  'vPulseOximeter': () => ({ SpO2: (99 + Math.random()).toFixed(1) + '%' }),
+  'vBGM':           () => ({ 'Mg/dL': _rnd(70,103) }),
+  'vNST':           () => ({ FHR1: _rnd(110,160) + ' BPM', TOCO: _rnd(5,25) + ' mmHg' }),
+  'vScale':         () => ({ 'น้ำหนัก': '80 กก', 'ส่วนสูง': '170 ซม' }),
+  'vEKG':           () => ({ Connected: 'Yes', Alert: 'No' }),
+  'Yuwell YG-990':  () => ({ SYS: _rnd(100,130), DIA: _rnd(70,90), Pulse: _rnd(60,100) }),
+};
+
+function iotConnect(devId) {
+  const dev = _iotDeviceList.find(d => d.id === devId);
+  if (!dev || _iotActive.find(a => a.id === devId)) return;
+  const active = { ...dev, values: {} };
+  _iotActive.push(active);
+  const driver = _iotDrivers[dev.name] || (() => ({ value: 'N/A' }));
+  active.values = driver();
+  const intv = setInterval(() => { active.values = driver(); _iotRender(); }, 2000);
+  _iotIntervals.push({ id: devId, intv });
+  _iotRender();
+  document.getElementById('iot-available').innerHTML = '';
+}
+
+function iotDisconnect(devId) {
+  _iotActive = _iotActive.filter(a => a.id !== devId);
+  const idx = _iotIntervals.findIndex(i => i.id === devId);
+  if (idx >= 0) { clearInterval(_iotIntervals[idx].intv); _iotIntervals.splice(idx, 1); }
+  _iotRender();
+}
+
+function _iotRender() {
+  const el = document.getElementById('iot-active');
+  if (!_iotActive.length) { el.innerHTML = '<p class="text-xs text-gray-400 text-center py-2">ยังไม่มีอุปกรณ์</p>'; return; }
+  el.innerHTML = _iotActive.map(d => {
+    const vals = Object.entries(d.values).map(([k,v]) => `<span style="display:inline-block;margin-right:.6rem"><span style="color:#6b7280">${k}:</span> <strong>${v}</strong></span>`).join('');
+    return `<div style="background:#d1fae5;border:1px solid #056839;border-radius:.5rem;padding:.5rem .65rem;font-size:.8rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.2rem">
+        <span style="font-weight:700;color:#056839">${_iotConnIcons[d.connector]||'📟'} ${d.name}</span>
+        <button onclick="iotDisconnect('${d.id}')" style="border:none;background:none;cursor:pointer;color:#dc2626;font-size:.9rem" title="ยกเลิก">✕</button>
+      </div>
+      <div>${vals}</div>
+      <div style="font-size:.68rem;color:#6b7280;margin-top:.15rem">${d.organize} · ${d.connector} · ${d.id}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Doctor Screen Recorder ────────────────────────────────────────────────────
+let _recStream    = null;
+let _recRecorder  = null;
+let _recChunks    = [];
+let _recTimerInt  = null;
+let _recSeconds   = 0;
+let _recStartTime = null;
+
+function _recTick() {
+  _recSeconds++;
+  const m = String(Math.floor(_recSeconds / 60)).padStart(2, '0');
+  const s = String(_recSeconds % 60).padStart(2, '0');
+  document.getElementById('rec-timer').textContent = m + ':' + s;
+}
+
+async function startDocRecord() {
+  if (_recRecorder) return;
+  try {
+    _recStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 25, width: { ideal: 1280 }, height: { ideal: 720 }, displaySurface: 'browser' },
+      audio: true,
+      selfBrowserSurface: 'include'
+    });
+  } catch (e) {
+    if (e.name !== 'NotAllowedError') alert('ไม่สามารถจับภาพหน้าจอได้: ' + e.message);
+    return;
+  }
+  _recChunks    = [];
+  _recSeconds   = 0;
+  _recStartTime = new Date().toISOString();
+  const mime = [
+    'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4',
+    'video/webm;codecs=h264,opus', 'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus', 'video/webm',
+  ].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  _recRecorder = new MediaRecorder(_recStream, mime ? { mimeType: mime } : {});
+  _recRecorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+  _recRecorder.onstop = isExam ? _submitForAISummary : _saveRecordingOnly;
+  _recRecorder.start(1000);
+  document.getElementById('btn-rec-start').style.display = 'none';
+  document.getElementById('btn-rec-stop').style.display  = '';
+  document.getElementById('rec-dot').style.display        = '';
+  document.getElementById('rec-timer').style.display      = '';
+  _recTimerInt = setInterval(_recTick, 1000);
+  _recStream.getVideoTracks()[0].addEventListener('ended', stopDocRecord);
+}
+
+function stopDocRecord() {
+  if (!_recRecorder) return;
+  _recRecorder.stop();
+  _recStream?.getTracks().forEach(t => t.stop());
+  clearInterval(_recTimerInt);
+  _recRecorder = null;
+  _recStream   = null;
+  document.getElementById('btn-rec-start').style.display = '';
+  document.getElementById('btn-rec-stop').style.display  = 'none';
+  document.getElementById('rec-dot').style.display        = 'none';
+  document.getElementById('rec-timer').style.display      = 'none';
+}
+
+async function _submitForAISummary() {
+  if (!_recChunks.length) return;
+  const mimeRaw = _recChunks[0].type || 'video/webm';
+  const mime = mimeRaw.split(';')[0].trim();
+  const ext  = (mime.includes('mp4') || mime.includes('h264') || mime.includes('avc1')) ? 'mp4' : 'webm';
+  const blob = new Blob(_recChunks, { type: mime });
+  _recChunks = [];
+  const now = new Date();
+  const ts  = now.toISOString().replace(/:/g, '-').replace(/\..+/, '') + 'Z';
+  const filename = 'room-' + roomId + '_' + ts + '.' + ext;
+
+  const modal = document.getElementById('summary-modal');
+  document.getElementById('summary-loading').style.display = '';
+  document.getElementById('summary-result').style.display  = 'none';
+  document.getElementById('summary-error').style.display   = 'none';
+  modal.classList.add('open');
+
+  const dlUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = dlUrl; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(dlUrl), 30000);
+
+  let patientName = '', patientCid = '', visitNumber = '';
+  if (typeof queueData !== 'undefined') {
+    const admitted = queueData.find(q => q.status === 'admitted');
+    if (admitted) {
+      patientName = admitted.patientName || '';
+      patientCid  = admitted.cid || '';
+      const idx = queueData.findIndex(q => q.token === admitted.token);
+      visitNumber = idx >= 0 ? String(idx + 1) : '';
+    }
+  }
+
+  const serviceStartTime = _recStartTime || '';
+  const serviceEndTime   = new Date().toISOString();
+
+  try {
+    const credRes = await fetch('/api/media-upload/credentials', { credentials: 'include' });
+    const creds   = await credRes.json();
+
+    const absForm = new FormData();
+    absForm.append('files',              blob, filename);
+    absForm.append('service_start_time', serviceStartTime);
+    absForm.append('service_end_time',   serviceEndTime);
+    absForm.append('provider_ids',       creds.providerCid || '');
+    absForm.append('patient_cid',        patientCid);
+    absForm.append('appointment_id',     roomId || '');
+    absForm.append('visit_number',       visitNumber);
+    fetch(creds.url, { method: 'POST', headers: { Authorization: 'Bearer ' + creds.token }, body: absForm })
+      .then(r => { if (r.ok) alert('✅ อัปโหลดวิดีโอสำเร็จแล้ว'); else alert('⚠️ อัปโหลดวิดีโอไม่สำเร็จ (HTTP ' + r.status + ')'); })
+      .catch(e => alert('❌ อัปโหลดวิดีโอล้มเหลว: ' + e.message));
+
+    const summaryForm = new FormData();
+    summaryForm.append('patientName',        patientName);
+    summaryForm.append('patientCid',         patientCid);
+    summaryForm.append('roomName',           roomName || roomId);
+    summaryForm.append('service_start_time', serviceStartTime);
+    summaryForm.append('service_end_time',   serviceEndTime);
+
+    const r = await fetch('/api/exam/' + roomId + '/submit-summary', {
+      method: 'POST', credentials: 'include', body: summaryForm,
+    });
+    const data = await r.json();
+    if (r.ok && data.summary) {
+      document.getElementById('summary-text').textContent = data.summary;
+      document.getElementById('summary-meta').textContent = 'ผู้ป่วย: ' + (patientName||'-') + '  ·  ห้อง: ' + (roomName||roomId) + '  ·  ' + new Date().toLocaleString('th-TH');
+      document.getElementById('summary-loading').style.display = 'none';
+      document.getElementById('summary-result').style.display  = '';
+    } else {
+      throw new Error(data.error || data.message || 'ไม่ได้รับผลสรุป');
+    }
+  } catch (e) {
+    document.getElementById('summary-loading').style.display = 'none';
+    document.getElementById('summary-error').style.display   = '';
+    document.getElementById('summary-error').textContent     = '⚠️ ส่งไม่สำเร็จ: ' + e.message;
+    console.error('[ai-summary] error:', e.message);
+  }
+}
+
+function _saveRecordingOnly() {
+  if (!_recChunks.length) return;
+  const mimeRaw = _recChunks[0].type || 'video/webm';
+  const mime = mimeRaw.split(';')[0].trim();
+  const ext  = (mime.includes('mp4') || mime.includes('h264') || mime.includes('avc1')) ? 'mp4' : 'webm';
+  const blob = new Blob(_recChunks, { type: mime });
+  _recChunks = [];
+  const now = new Date();
+  const ts  = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') +
+              '_' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0');
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = 'moph-meet-record_' + ts + '.' + ext; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  const endTime = new Date().toISOString();
+  fetch('/api/media-upload/credentials', { credentials: 'include' })
+    .then(r => r.json())
+    .then(creds => {
+      const form = new FormData();
+      form.append('files',              blob, 'moph-meet-record_' + ts + '.' + ext);
+      form.append('service_start_time', _recStartTime || '');
+      form.append('service_end_time',   endTime);
+      form.append('provider_ids',       creds.providerCid || '');
+      form.append('appointment_id',     roomId || '');
+      form.append('visit_number',       '0');
+      return fetch(creds.url, { method: 'POST', headers: { Authorization: 'Bearer ' + creds.token }, body: form });
+    })
+    .then(r => { if (r.ok) alert('✅ อัปโหลดวิดีโอสำเร็จแล้ว'); else alert('⚠️ อัปโหลดวิดีโอไม่สำเร็จ (HTTP ' + r.status + ')'); })
+    .catch(e => alert('❌ อัปโหลดวิดีโอล้มเหลว: ' + e.message));
+}
+
+window.addEventListener('beforeunload', () => { if (_recRecorder) _recRecorder.stop(); });
+</script>
+
+<script>
+if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
+</script>
+</body>
+</html>

@@ -7,8 +7,8 @@
   const calWrap = document.getElementById('mini-calendar');
   if (!calWrap) return;
 
-  // CAL_DATES is injected by the EJS template
-  const datesWithMeet = new Set((CAL_DATES || []).map(d => d.date));
+  // CAL_DATES may be set before this script (EJS) or after (static index.html via window.CAL_DATES)
+  let datesWithMeet = new Set((window.CAL_DATES || []).map(d => d.date));
 
   let currentYear  = new Date().getFullYear();
   let currentMonth = new Date().getMonth(); // 0-based
@@ -85,6 +85,12 @@
       });
     });
   }
+
+  // Expose for index.html to call after async data loads
+  window._renderCalendar = function () {
+    datesWithMeet = new Set((window.CAL_DATES || []).map(d => d.date));
+    renderCalendar();
+  };
 
   renderCalendar();
 

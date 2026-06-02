@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="mytheme">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – MOPH Meet</title>
+  <meta name="description" content="ระบบแพทย์ทางไกล กระทรวงสาธารณสุข" />
+  <meta name="theme-color" content="#1b7a43" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MOPH Meet" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/images/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5/themes.css" rel="stylesheet" type="text/css" />
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body class="bg-base-100 min-h-screen">
+
+<!-- Navbar -->
+<div class="bg-primary text-primary-content shadow">
+  <div class="navbar container mx-auto px-4 min-h-0 py-2 flex items-center gap-3">
+    <img src="/images/logo.png" alt="MOPH Meet" class="h-9 bg-white/90 p-1 rounded shrink-0" onerror="this.style.display='none'" />
+    <div class="flex-1"></div>
+    <a href="/usage-logs" class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary shrink-0">📊 สถิติ</a>
+    <form method="POST" action="/logout" style="margin:0">
+      <button class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary shrink-0">ออกจากระบบ</button>
+    </form>
+  </div>
+</div>
+
+<main class="container mx-auto p-4 flex flex-col gap-4">
+
+  <!-- ── User Card ─────────────────────────────────────────────────────── -->
+  <div id="user-card" class="card bg-white shadow-sm border border-base-200">
+    <div class="card-body py-4 px-5">
+      <div class="flex flex-row items-start gap-4">
+        <div class="avatar placeholder shrink-0">
+          <div class="bg-primary text-primary-content rounded-full w-14" style="display:flex;align-content:center;align-items:center;justify-content:center;">
+            <span id="user-avatar-letter" class="text-2xl">?</span>
+          </div>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <p id="user-display-name" class="font-bold text-lg leading-tight">กำลังโหลด…</p>
+            <span id="user-roles-wrap"></span>
+          </div>
+          <p id="user-position-org" class="text-sm text-base-content/70 mt-0.5 hidden"></p>
+          <div id="user-details-chips" class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-base-content/55"></div>
+          <div id="user-hcode-chips" class="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-base-content/55"></div>
+          <button class="btn btn-xs btn-outline btn-primary mt-2" onclick="document.getElementById('profileModal').showModal()">
+            ✏️ แก้ไขข้อมูลเพิ่มเติม
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Profile Edit Modal ──────────────────────────────────────────── -->
+  <dialog id="profileModal" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg mb-4">แก้ไขข้อมูลเพิ่มเติม (Data Hub)</h3>
+      <form method="POST" action="/profile" class="flex flex-col gap-3">
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">HCode 5 หลัก (รหัสสถานพยาบาล)</span></div>
+          <input type="text" name="hcode5" id="prof-hcode5" maxlength="5" pattern="[0-9]{5}" placeholder="เช่น 12345" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">HCode 9 หลัก (รหัสสถานพยาบาล)</span></div>
+          <input type="text" name="hcode9" id="prof-hcode9" maxlength="9" pattern="[0-9]{9}" placeholder="เช่น 123456789" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">Clinic Code 5 หลัก (รหัสคลินิก)</span></div>
+          <input type="text" name="clinicCode" id="prof-clinic" maxlength="5" pattern="[0-9]{5}" placeholder="เช่น 54321" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">วันเดือนปีเกิด</span></div>
+          <input type="date" name="dateOfBirth" id="prof-dob" class="input input-bordered w-full" />
+        </label>
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">เพศ</span></div>
+          <select name="gender" id="prof-gender" class="select select-bordered w-full">
+            <option value="">-- เลือก --</option>
+            <option value="ชาย">ชาย</option>
+            <option value="หญิง">หญิง</option>
+            <option value="อื่น ๆ">อื่น ๆ</option>
+          </select>
+        </label>
+        <div class="modal-action">
+          <button type="submit" class="btn btn-primary">💾 บันทึก</button>
+          <button type="button" class="btn" onclick="document.getElementById('profileModal').close()">ยกเลิก</button>
+        </div>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <!-- ── Create Room Cards ──────────────────────────────────────────────── -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-primary text-base">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+          สร้างห้องประชุม
+        </h2>
+        <p class="text-sm text-base-content/60">ห้องสำหรับประชุมทั่วไป กลุ่ม หรือสัมมนา</p>
+        <div class="card-actions mt-3">
+          <button onclick="openCreateModal('meet')" class="btn btn-primary btn-sm w-full">+ สร้างห้องประชุม</button>
+        </div>
+      </div>
+    </div>
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-accent text-base">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          สร้างห้องตรวจ
+        </h2>
+        <p class="text-sm text-base-content/60">ห้องตรวจโรคทางไกล สำหรับแพทย์และผู้ป่วย</p>
+        <div class="card-actions mt-3">
+          <button onclick="openCreateModal('exam')" class="btn btn-accent btn-sm w-full text-white">+ สร้างห้องตรวจ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Calendar + Meeting list ───────────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <h2 class="card-title text-primary text-lg">📅 ปฏิทินนัดหมาย</h2>
+        <div id="mini-calendar"></div>
+      </div>
+    </div>
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="card-title text-primary text-lg">รายการนัดหมาย</h2>
+          <input type="search" id="meet-search" placeholder="ค้นหา…"
+            class="input input-bordered input-sm w-36" oninput="filterMeets(this.value)" />
+        </div>
+        <div id="meet-list" class="flex flex-col gap-2 overflow-y-auto" style="max-height:480px">
+          <p class="text-base-content/50 text-sm py-4 text-center">กำลังโหลด…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Queue View Modal ────────────────────────────────────────────────────── -->
+<dialog id="queue-modal" class="modal">
+  <div class="modal-box bg-white w-full max-w-sm">
+    <h3 class="font-bold text-lg mb-1">👥 คิวผู้ป่วย</h3>
+    <p id="queue-modal-room" class="text-sm text-base-content/60 mb-3"></p>
+    <div id="queue-modal-list" class="flex flex-col gap-2 min-h-[60px]">
+      <p class="text-center text-base-content/40 text-sm py-4">กำลังโหลด…</p>
+    </div>
+    <div class="modal-action"><button onclick="document.getElementById('queue-modal').close()" class="btn btn-sm">ปิด</button></div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- ── Create Room Modal ──────────────────────────────────────────────────── -->
+<dialog id="create-room-modal" class="modal">
+  <div class="modal-box bg-white w-full max-w-md">
+    <h3 id="modal-title" class="font-bold text-lg mb-1">สร้างห้อง</h3>
+    <p id="modal-desc" class="text-sm text-base-content/60 mb-4"></p>
+    <div id="modal-form-panel">
+      <form id="create-room-form" class="flex flex-col gap-3">
+        <input type="hidden" id="room-type" name="type" value="meet" />
+        <label class="form-control w-full">
+          <div class="label"><span class="label-text">วันที่ <span class="text-error">*</span></span></div>
+          <input type="date" name="date" required class="input input-bordered w-full" />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="form-control w-full">
+            <div class="label"><span class="label-text">เวลาเริ่ม <span class="text-error">*</span></span></div>
+            <input type="time" name="starttime" required class="input input-bordered w-full" />
+          </label>
+          <label class="form-control w-full">
+            <div class="label"><span class="label-text">เวลาสิ้นสุด <span class="text-error">*</span></span></div>
+            <input type="time" name="endtime" required class="input input-bordered w-full" />
+          </label>
+        </div>
+        <div id="modal-error" class="alert alert-error hidden text-sm py-2"></div>
+        <div class="modal-action mt-2">
+          <button type="button" onclick="document.getElementById('create-room-modal').close()" class="btn btn-ghost">ยกเลิก</button>
+          <button type="submit" id="modal-submit-btn" class="btn btn-primary">สร้างห้อง</button>
+        </div>
+      </form>
+    </div>
+    <div id="modal-result-panel" class="hidden flex flex-col gap-3">
+      <div class="alert alert-success text-sm">สร้างห้องสำเร็จแล้ว!</div>
+      <div class="bg-base-100 rounded-lg p-3 flex flex-col gap-2">
+        <p class="font-semibold text-sm" id="result-room-name"></p>
+        <div id="result-meet-link-wrap" class="hidden">
+          <p class="text-xs text-base-content/60 mb-1">🔗 ลิงก์เข้าห้อง (ต้องล็อกอินด้วย Provider ID)</p>
+          <div class="flex gap-2">
+            <input type="text" id="result-meet-link" readonly class="input input-bordered input-sm flex-1 text-xs" />
+            <button onclick="copyLink('result-meet-link')" class="btn btn-sm btn-outline">คัดลอก</button>
+          </div>
+        </div>
+        <div id="result-patient-link-wrap" class="hidden">
+          <p class="text-xs text-base-content/60 mb-1">🧑‍⚕️ ลิงก์คิวสำหรับผู้ป่วย (JWT, ไม่มีวันหมดอายุ)</p>
+          <div class="flex gap-2">
+            <input type="text" id="result-patient-link" readonly class="input input-bordered input-sm flex-1 text-xs" />
+            <button onclick="copyLink('result-patient-link')" class="btn btn-sm btn-outline">คัดลอก</button>
+          </div>
+          <a id="result-doctor-link" href="#" class="btn btn-accent btn-sm w-full mt-2 text-white">👨‍⚕️ เข้าห้องตรวจ</a>
+        </div>
+      </div>
+      <div class="modal-action">
+        <button onclick="document.getElementById('create-room-modal').close();window.location.reload()" class="btn btn-primary w-full">เสร็จ</button>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<script>
+// ── Auth guard ─────────────────────────────────────────────────────────────
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|;)\\s*' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function formatDate(str) {
+  if (!str) return '-';
+  const d = new Date(str);
+  if (isNaN(d)) return str.slice(0, 10);
+  return d.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+function formatTime(str) {
+  if (!str) return '-';
+  const d = new Date(str);
+  if (isNaN(d)) return str.slice(11, 16) || '-';
+  return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Escape helper ──────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+let _currentUser = null;
+let _meets = [];
+
+// ── Render user card ───────────────────────────────────────────────────────
+function renderUser(user) {
+  _currentUser = user;
+  const org = (user.organization || [])[0] || {};
+  const pid = user.providerIDProfile || {};
+
+  const initial = (user.display || user.username || 'U')[0].toUpperCase();
+  document.getElementById('user-avatar-letter').textContent = initial;
+
+  const titleTh  = pid.title_th ? esc(pid.title_th) + ' ' : '';
+  const dispName = esc(user.display || user.username || 'ผู้ใช้');
+  document.getElementById('user-display-name').innerHTML = titleTh + dispName;
+
+  // Roles
+  const rolesWrap = document.getElementById('user-roles-wrap');
+  rolesWrap.innerHTML = (user.roles || []).map(r =>
+    `<span class="badge badge-primary badge-outline badge-sm">${esc(r)}</span>`
+  ).join('');
+
+  // Position + org
+  if (org.position || org.hname_th) {
+    const pos = [org.position, org.hname_th].filter(Boolean).map(esc).join(' · ');
+    const el = document.getElementById('user-position-org');
+    el.textContent = pos;
+    el.classList.remove('hidden');
+  }
+
+  // Detail chips
+  const chips = [];
+  if (org.hcode) chips.push(`<span class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>รหัสหน่วยงาน ${esc(org.hcode)}</span>`);
+  if (org.department) chips.push(`<span class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"/></svg>${esc(org.department)}</span>`);
+  const email = pid.email || org.email;
+  if (email) chips.push(`<span class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>${esc(email)}</span>`);
+  if (pid.provider_id) chips.push(`<span class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c0 1.657-1.343 3-3 3s-3-1.343-3-3"/></svg>Provider ID: ${esc(pid.provider_id)}</span>`);
+  const cid = pid.cid || user.username;
+  if (cid) chips.push(`<span class="flex items-center gap-1"><svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15A2.25 2.25 0 002.25 6.75v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm-1.875 6.375a4.5 4.5 0 00-4.125-2.063"/></svg>CID: ${esc(cid)}</span>`);
+  if (user.gender) chips.push(`<span class="flex items-center gap-1">🧑 เพศ: ${esc(user.gender)}</span>`);
+  if (user.dateOfBirth) chips.push(`<span class="flex items-center gap-1">🎂 วันเกิด: ${esc(user.dateOfBirth)}</span>`);
+  document.getElementById('user-details-chips').innerHTML = chips.join('');
+
+  // HCode chips
+  const hchips = [];
+  if (user.hcode5) hchips.push(`<span class="flex items-center gap-1">🏥 HCode 5 หลัก: <strong>${esc(user.hcode5)}</strong></span>`);
+  if (user.hcode9) hchips.push(`<span class="flex items-center gap-1">🏥 HCode 9 หลัก: <strong>${esc(user.hcode9)}</strong></span>`);
+  if (user.clinicCode) hchips.push(`<span class="flex items-center gap-1">🩺 Clinic Code: <strong>${esc(user.clinicCode)}</strong></span>`);
+  document.getElementById('user-hcode-chips').innerHTML = hchips.join('');
+
+  // Fill profile modal defaults
+  document.getElementById('prof-hcode5').value  = user.hcode5  || '';
+  document.getElementById('prof-hcode9').value  = user.hcode9  || '';
+  document.getElementById('prof-clinic').value  = user.clinicCode || '';
+  document.getElementById('prof-dob').value     = user.dateOfBirth || '';
+  document.getElementById('prof-gender').value  = user.gender   || '';
+}
+
+// ── Render meet list ───────────────────────────────────────────────────────
+function renderMeets(meets, currentUsername) {
+  _meets = meets;
+  const listEl = document.getElementById('meet-list');
+  if (!meets.length) {
+    listEl.innerHTML = '<p class="text-base-content/50 text-sm py-4 text-center">ไม่มีนัดหมาย</p>';
+    return;
+  }
+  listEl.innerHTML = meets.map(m => {
+    const isExamRoom = m.type === 'exam' || m.patientId;
+    const href = isExamRoom ? '/exam/' + esc(m.id) : '/room/' + esc(m.id);
+    const badgeCls = isExamRoom
+      ? 'badge-primary'
+      : 'bg-yellow-400 text-yellow-900 border-yellow-400';
+    const cardBorderCls = isExamRoom
+      ? 'border-primary bg-white hover:bg-primary hover:text-primary-content'
+      : 'border-yellow-400 bg-white hover:bg-yellow-400 hover:text-yellow-900';
+    const badgeLabel = isExamRoom ? '🩺 ตรวจ' : '📹 ประชุม';
+    const joinBadge = m.ownerId !== currentUsername
+      ? '<span class="badge badge-sm badge-outline badge-info shrink-0">🔗 เข้าร่วม</span>' : '';
+    const queueBtn = isExamRoom
+      ? `<button class="btn btn-xs btn-outline btn-primary z-10" onclick="event.preventDefault();event.stopPropagation();openQueueModal('${esc(m.id)}','${esc(m.name||m.id).replace(/'/g,"\\'")}')">👥 ดูคิว</button>` : '';
+    const ownerLine = (m.ownerId !== currentUsername && m.ownerDisplay)
+      ? `<span>👤 ${esc(m.ownerDisplay)}</span>` : '';
+    return `
+      <a class="meet-card card card-compact border-2 transition-all no-underline ${cardBorderCls}"
+         href="${href}"
+         data-title="${esc((m.name||m.title||'').toLowerCase())}"
+         data-desc="${esc((m.description||'').toLowerCase())}"
+         data-date="${esc(m.starttime ? m.starttime.slice(0,10) : '')}">
+        <div class="card-body py-3 px-4">
+          <div class="flex items-center gap-2">
+            <span class="badge badge-sm font-semibold shrink-0 ${badgeCls}">${badgeLabel}</span>
+            ${joinBadge}
+            <p class="font-semibold text-sm truncate">${esc(m.name||m.title||m.id)}</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-3 text-xs opacity-55 mt-1">
+            <span>📆 ${formatDate(m.starttime)}</span>
+            <span>🕐 ${formatTime(m.starttime)} – ${formatTime(m.endtime)}</span>
+            ${ownerLine}
+            ${queueBtn}
+          </div>
+        </div>
+      </a>`;
+  }).join('');
+}
+
+// ── Queue modal ────────────────────────────────────────────────────────────
+async function openQueueModal(roomId, roomName) {
+  const dlg = document.getElementById('queue-modal');
+  document.getElementById('queue-modal-room').textContent = roomName;
+  document.getElementById('queue-modal-list').innerHTML = '<p class="text-center text-base-content/40 text-sm py-4">กำลังโหลด…</p>';
+  dlg.showModal();
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/doctor', { credentials: 'include' });
+    if (!r.ok) throw new Error('ไม่สามารถโหลดคิวได้');
+    const room = await r.json();
+    const q = room.queue || [];
+    const listEl = document.getElementById('queue-modal-list');
+    if (!q.length) { listEl.innerHTML = '<p class="text-center text-base-content/40 text-sm py-4">ยังไม่มีผู้ป่วยในคิว</p>'; return; }
+    listEl.innerHTML = q.map((p, i) => {
+      const s = p.status === 'admitted'
+        ? '<span class="badge badge-success badge-xs">กำลังตรวจ</span>'
+        : '<span class="badge badge-ghost badge-xs">รอ #' + (i + 1) + '</span>';
+      const t = p.joinedAt ? new Date(p.joinedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="flex items-center gap-2 bg-base-100 rounded-lg px-3 py-2">${s}<span class="text-sm">${esc(p.patientName||'ผู้ป่วย')}</span><span class="text-xs text-base-content/40 ml-auto">${t}</span></div>`;
+    }).join('');
+  } catch (e) {
+    document.getElementById('queue-modal-list').innerHTML = `<p class="text-center text-error text-sm py-4">${esc(e.message)}</p>`;
+  }
+}
+
+// ── Create room modal ──────────────────────────────────────────────────────
+function openCreateModal(type) {
+  const modal = document.getElementById('create-room-modal');
+  document.getElementById('modal-form-panel').classList.remove('hidden');
+  document.getElementById('modal-result-panel').classList.add('hidden');
+  document.getElementById('room-type').value = type;
+  const errorEl = document.getElementById('modal-error');
+  errorEl.classList.add('hidden');
+  errorEl.textContent = '';
+  const submitBtn = document.getElementById('modal-submit-btn');
+  if (type === 'exam') {
+    document.getElementById('modal-title').textContent = '🦷 สร้างห้องตรวจ';
+    document.getElementById('modal-desc').textContent  = 'ชื่อห้องสร้างอัตโนมัติ ระบบจะบันทึกวิดีโออัตโนมัติ';
+    submitBtn.className   = 'btn btn-accent text-white';
+    submitBtn.textContent = 'สร้างห้องตรวจ';
+  } else {
+    document.getElementById('modal-title').textContent = '📡 สร้างห้องประชุม';
+    document.getElementById('modal-desc').textContent  = 'ชื่อห้องสร้างอัตโนมัติ ผู้เข้าร่วมต้องล็อกอินด้วย Provider ID';
+    submitBtn.className   = 'btn btn-primary';
+    submitBtn.textContent = 'สร้างห้องประชุม';
+  }
+  const dateInput = document.querySelector('#create-room-form [name="date"]');
+  if (dateInput && !dateInput.value) dateInput.value = new Date().toISOString().slice(0, 10);
+  modal.showModal();
+}
+
+function copyLink(inputId) {
+  const el = document.getElementById(inputId);
+  navigator.clipboard.writeText(el.value).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = 'คัดลอกแล้ว!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
+document.getElementById('create-room-form').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const btn     = document.getElementById('modal-submit-btn');
+  const errorEl = document.getElementById('modal-error');
+  const fd      = new FormData(this);
+  const type    = fd.get('type');
+  const body    = {
+    type,
+    starttime: fd.get('date') + 'T' + fd.get('starttime') + ':00',
+    endtime:   fd.get('date') + 'T' + fd.get('endtime')   + ':00',
+  };
+  btn.disabled = true;
+  btn.textContent = 'กำลังสร้าง…';
+  errorEl.classList.add('hidden');
+  try {
+    const res  = await fetch('/api/rooms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'เกิดข้อผิดพลาด');
+    const origin = window.location.origin;
+    document.getElementById('result-room-name').textContent = '🏠 ' + (data.room?.name || '');
+    if (type === 'meet') {
+      document.getElementById('result-meet-link').value = origin + data.meetJoinUrl;
+      document.getElementById('result-meet-link-wrap').classList.remove('hidden');
+      document.getElementById('result-patient-link-wrap').classList.add('hidden');
+    } else {
+      document.getElementById('result-patient-link').value = origin + data.patientJoinUrl;
+      document.getElementById('result-doctor-link').href   = '/exam/' + data.room.id;
+      document.getElementById('result-patient-link-wrap').classList.remove('hidden');
+      document.getElementById('result-meet-link-wrap').classList.add('hidden');
+    }
+    document.getElementById('modal-form-panel').classList.add('hidden');
+    document.getElementById('modal-result-panel').classList.remove('hidden');
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = type === 'exam' ? 'สร้างห้องตรวจ' : 'สร้างห้องประชุม';
+  }
+});
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+(async function init() {
+  // Auth guard
+  if (!getCookie('token')) { location.href = '/login.html'; return; }
+
+  // Load user
+  try {
+    const r = await fetch('/api/auth/me', { credentials: 'include' });
+    if (!r.ok) { location.href = '/login.html'; return; }
+    const user = await r.json();
+    renderUser(user);
+
+    // Load meets
+    const mr = await fetch('/api/meets', { credentials: 'include' });
+    const meets = mr.ok ? await mr.json() : [];
+    renderMeets(meets, user.username);
+
+    // Set calendar data and render
+    window.CAL_DATES = meets.map(m => ({
+      date: m.starttime ? m.starttime.slice(0, 10) : null,
+      hasPatient: m.type === 'exam'
+    })).filter(m => m.date);
+
+    if (typeof window._renderCalendar === 'function') window._renderCalendar();
+  } catch (e) {
+    console.error('init error:', e);
+    location.href = '/login.html';
+  }
+})();
+</script>
+
+<script src="/js/dashboard.js"></script>
+
+<script>
+if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
+</script>
+</body>
+</html>

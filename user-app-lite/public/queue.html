@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="mytheme">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>รอตรวจ – MOPH Meet</title>
+  <meta name="theme-color" content="#1b7a43" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/images/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/app.css" />
+<style>
+  body { font-family: 'Sarabun', sans-serif; background: #f0faf4; min-height: 100vh; margin: 0; }
+  #queue-view {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 2rem; text-align: center;
+  }
+  .queue-card {
+    background: #fff; border-radius: 1rem; padding: 2.5rem 2rem;
+    box-shadow: 0 4px 24px rgba(5,104,57,.1); max-width: 400px; width: 100%;
+  }
+  .queue-logo { color: #056839; font-size: 3rem; margin-bottom: .5rem; }
+  .queue-title { font-size: 1.25rem; font-weight: 700; color: #056839; margin: 0 0 .25rem; }
+  .queue-room { font-size: .9rem; color: #6b7280; margin: 0 0 1.5rem; }
+  .queue-num-box {
+    background: #f0fdf4; border: 2px solid #056839; border-radius: .75rem;
+    padding: 1.25rem; margin-bottom: 1rem;
+  }
+  .queue-num-label { font-size: .8rem; color: #6b7280; margin: 0 0 .25rem; }
+  .queue-num-val { font-size: 3rem; font-weight: 800; color: #056839; line-height: 1; margin: 0; }
+  .queue-total { font-size: .875rem; color: #6b7280; margin: .5rem 0 0; }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid #d1fae5;
+    border-top-color: #056839; border-radius: 50%;
+    animation: spin .8s linear infinite; margin: 1rem auto .5rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .poll-note { font-size: .8rem; color: #9ca3af; }
+  #jitsi-view { display: none; position: fixed; inset: 0; }
+  #jitsi-container { width: 100%; height: 100%; }
+  .admitted-banner {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: #056839; color: #fff; text-align: center;
+    padding: .5rem 1rem; font-size: .9rem; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div id="queue-view">
+  <div class="queue-card">
+    <div class="queue-logo">🏥</div>
+    <h1 class="queue-title">คิวรอตรวจ</h1>
+    <p class="queue-room" id="room-name-label">กำลังโหลด…</p>
+    <div class="queue-num-box">
+      <p class="queue-num-label">ลำดับของคุณ</p>
+      <p class="queue-num-val" id="my-position">—</p>
+      <p class="queue-total" id="queue-total"></p>
+    </div>
+    <div id="status-waiting">
+      <div class="spinner"></div>
+      <p class="poll-note">ระบบตรวจสอบคิวทุก 5 วินาที</p>
+    </div>
+    <div id="status-admitted" style="display:none">
+      <p style="color:#056839;font-weight:700;font-size:1rem;margin:.5rem 0 0">✅ ถึงคิวของคุณแล้ว! กำลังเข้าห้องตรวจ…</p>
+    </div>
+  </div>
+</div>
+
+<div id="jitsi-view">
+  <div class="admitted-banner" id="admitted-banner">🩺 เข้าห้องตรวจแล้ว</div>
+  <div id="jitsi-container" style="padding-top:40px;box-sizing:border-box;height:100%"></div>
+</div>
+
+<script>
+// ── Parse URL: /queue/:id?jwt=...&name=... ────────────────────────────────────
+const pathParts  = location.pathname.split('/');
+const roomId     = pathParts[2] || '';
+const params     = new URLSearchParams(location.search);
+const jwtToken   = params.get('jwt') || '';
+const patientName = params.get('name') || 'ผู้ป่วย';
+
+let admitted    = false;
+let pollInterval;
+let domain      = '';
+let jitsiApi    = null;
+
+if (!jwtToken) {
+  document.getElementById('room-name-label').textContent = 'ลิงก์ไม่ถูกต้อง';
+  document.getElementById('status-waiting').style.display = 'none';
+}
+
+// ── Load config (for meetingDomain) then start polling ────────────────────────
+(async function init() {
+  try {
+    const cfg = await fetch('/config').then(r => r.json());
+    domain = cfg.meetingDomain || '';
+  } catch (_) {}
+  if (jwtToken) {
+    pollQueue();
+    pollInterval = setInterval(pollQueue, 5000);
+  }
+})();
+
+async function pollQueue() {
+  if (admitted) return;
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/queue?jwt=' + encodeURIComponent(jwtToken));
+    if (!r.ok) return;
+    const d = await r.json();
+    document.getElementById('room-name-label').textContent = d.roomName || '';
+    document.getElementById('my-position').textContent =
+      d.status === 'admitted' ? '✅' : (d.position != null ? d.position : '—');
+    document.getElementById('queue-total').textContent =
+      d.total != null ? ('จากทั้งหมด ' + d.total + ' คน') : '';
+    if (d.status === 'admitted') {
+      admitted = true;
+      clearInterval(pollInterval);
+      showAdmitted();
+    }
+  } catch (_) {}
+}
+
+function showAdmitted() {
+  document.getElementById('status-waiting').style.display = 'none';
+  document.getElementById('status-admitted').style.display = 'block';
+  document.getElementById('admitted-banner').textContent = '🩺 เข้าห้องตรวจแล้ว – ' + patientName;
+  setTimeout(() => {
+    document.getElementById('queue-view').style.display = 'none';
+    document.getElementById('jitsi-view').style.display = 'block';
+    loadJitsiAndStart();
+  }, 1500);
+}
+
+function loadJitsiAndStart() {
+  if (!domain) { console.error('[queue] domain not loaded'); return; }
+  const script = document.createElement('script');
+  script.src    = 'https://' + domain + '/external_api.js';
+  script.onload = startJitsi;
+  document.head.appendChild(script);
+}
+
+function startJitsi() {
+  jitsiApi = new JitsiMeetExternalAPI(domain, {
+    roomName  : roomId,
+    width     : '100%',
+    height    : '100%',
+    parentNode: document.getElementById('jitsi-container'),
+    userInfo  : { displayName: patientName },
+    configOverwrite: { startWithAudioMuted: false, startWithVideoMuted: false },
+    interfaceConfigOverwrite: {
+      TOOLBAR_BUTTONS: ['microphone', 'camera', 'hangup', 'chat', 'tileview'],
+      SHOW_JITSI_WATERMARK: false,
+    }
+  });
+}
+</script>
+
+<script>
+if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
+</script>
+</body>
+</html>
