@@ -10,9 +10,24 @@ const whitelist = [
   '582d2d5553a081bc23fbd85d3c5aace5bd44fabadb75e6871ce1347135479e95',
 ];
 
+// Read the auth token from the Authorization header, or fall back to a `token`
+// cookie. The cookie fallback matters because nginx routes some /api/ paths
+// straight to core-lite (bypassing the user-app-lite proxy that converts the
+// cookie into a Bearer header) — without it those routes always 401.
+function tokenFromRequest(req) {
+  const bearer = req.headers['authorization']?.replace('Bearer ', '').trim();
+  if (bearer) return bearer;
+  const cookie = req.headers['cookie'];
+  if (cookie) {
+    const m = cookie.match(/(?:^|;\s*)token=([^;]+)/);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return undefined;
+}
+
 function auth() {
   return async (req, res, next) => {
-    const token = req.headers['authorization']?.replace('Bearer ', '');
+    const token = tokenFromRequest(req);
     if (token && whitelist.includes(token)) return next();
     if (token && await tokenStorage.has(token)) {
       res.locals.user  = await tokenStorage.get(token);

@@ -266,7 +266,8 @@ app.post('/api/phr/encounter', async (req, res) => {
 
 // ── Usage-logs proxy (path rewrite: /api/usage-logs → /api/logs) ──────────────
 app.get('/api/usage-logs/:endpoint', async (req, res) => {
-  const allowed = ['summary', 'daily', 'monthly', 'by-doctor', 'recent'];
+  const allowed = ['summary', 'daily', 'monthly', 'by-doctor', 'recent',
+                   'by-day', 'by-hour', 'by-region', 'by-province', 'by-platform', 'by-unit', 'longest-rooms'];
   if (!allowed.includes(req.params.endpoint)) return res.status(404).json({ error: 404 });
   try {
     const qs  = new URLSearchParams(req.query).toString();
@@ -279,8 +280,10 @@ app.get('/api/usage-logs/:endpoint', async (req, res) => {
 // ── General API proxy → core-lite (auth from cookie) ──────────────────────────
 app.use('/api', async (req, res) => {
   const token = req.cookies?.token;
-  const qs    = Object.keys(req.query).length ? '?' + new URLSearchParams(req.query).toString() : '';
-  const url   = `${CORE_BASE}${req.path}${qs}`;
+  // NOTE: inside app.use('/api', ...) Express strips the mount path, so req.path
+  // is '/rooms' not '/api/rooms'. Use req.originalUrl to preserve the '/api'
+  // prefix (and query string) when forwarding to core-lite.
+  const url   = `${CORE_BASE}${req.originalUrl}`;
   const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   const opts  = { method: req.method, headers };
   if (!['GET', 'HEAD'].includes(req.method) && req.body && Object.keys(req.body).length) {

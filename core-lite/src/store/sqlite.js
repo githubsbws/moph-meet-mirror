@@ -6,6 +6,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const { areaOf } = require('../data/area');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../../data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -62,6 +63,20 @@ const _roomSet  = _roomDb.prepare('INSERT OR REPLACE INTO rooms (id, value) VALU
 const _roomDel  = _roomDb.prepare('DELETE FROM rooms WHERE id = ?');
 const _roomKeys = _roomDb.prepare('SELECT id FROM rooms');
 
+// Filter rooms by owner directly in SQL (JSON1) so we never load the whole
+// table (can be 100k+ reserved rooms) into JS. Includes rooms the user owns OR
+// has joined as a provider. Most-recent first, capped by limit.
+const _roomByOwner = _roomDb.prepare(`
+  SELECT value FROM rooms
+  WHERE json_extract(value, '$.ownerId') = ?
+     OR EXISTS (
+       SELECT 1 FROM json_each(json_extract(value, '$.joinedProviders'))
+       WHERE json_extract(json_each.value, '$.userId') = ?
+     )
+  ORDER BY json_extract(value, '$.createdAt') DESC
+  LIMIT ?
+`);
+
 const roomStore = {
   get(id) {
     const row = _roomGet.get(id);
@@ -73,6 +88,9 @@ const roomStore = {
   },
   del(id) { _roomDel.run(id); },
   keys() { return _roomKeys.all().map(r => r.id); },
+  byOwner(ownerId, limit = 200) {
+    return _roomByOwner.all(ownerId, ownerId, Math.min(limit, 1000)).map(r => JSON.parse(r.value));
+  },
 };
 
 // ── Profile Storage (user_profiles.db) ─────────────────────────────────────────
@@ -142,20 +160,49 @@ _logDb.exec(`
   CREATE INDEX IF NOT EXISTS idx_logs_event  ON usage_logs(event);
 `);
 
+// ── Migration: add dashboard dimension columns (additive, idempotent) ─────────
+// Required for TOR 4.12.x: platform (mobile/web), service unit + area
+// (hcode→province→health region), and conversation duration.
+(function migrateUsageLogs() {
+  const existing = new Set(_logDb.prepare('PRAGMA table_info(usage_logs)').all().map(c => c.name));
+  const addCol = (name, type) => {
+    if (!existing.has(name)) {
+      _logDb.exec(`ALTER TABLE usage_logs ADD COLUMN ${name} ${type}`);
+      console.log(`[store:sqlite] migrated usage_logs: +${name}`);
+    }
+  };
+  addCol('platform',     "TEXT DEFAULT 'web'"); // mobile not launched yet → all web
+  addCol('unit_hcode',   'TEXT');
+  addCol('province',     'TEXT');
+  addCol('region',       'INTEGER');
+  addCol('duration_sec', 'INTEGER');
+  _logDb.exec('CREATE INDEX IF NOT EXISTS idx_logs_region   ON usage_logs(region)');
+  _logDb.exec('CREATE INDEX IF NOT EXISTS idx_logs_province ON usage_logs(province)');
+  _logDb.exec('CREATE INDEX IF NOT EXISTS idx_logs_platform ON usage_logs(platform)');
+})();
+
 const _logInsert = _logDb.prepare(`
-  INSERT INTO usage_logs (ts, event, room_id, room_type, room_name, doctor_id, doctor_name, patient_name, patient_cid, meta)
-  VALUES (datetime(?,'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO usage_logs (ts, event, room_id, room_type, room_name, doctor_id, doctor_name, patient_name, patient_cid, meta, platform, unit_hcode, province, region, duration_sec)
+  VALUES (datetime(?,'localtime'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const logStore = {
   insert(event, data = {}) {
     try {
+      // Derive area (province + health region) from the service unit hcode.
+      const hcode = data.unitHcode || null;
+      const area  = hcode ? areaOf(hcode) : null;
       _logInsert.run(
         new Date().toISOString(), event,
         data.roomId || null, data.roomType || null, data.roomName || null,
         data.doctorId || null, data.doctorName || null,
         data.patientName || null, data.patientCid || null,
-        data.meta ? JSON.stringify(data.meta) : null
+        data.meta ? JSON.stringify(data.meta) : null,
+        data.platform || 'web',
+        hcode,
+        area ? area.province : (data.province || null),
+        area ? area.region   : (data.region   ?? null),
+        data.durationSec ?? null
       );
     } catch (e) { console.error('[logStore:sqlite]', e.message); }
   },
@@ -214,9 +261,122 @@ const logStore = {
   recent(limit = 50) {
     return _logDb.prepare(`
       SELECT id, ts, event, room_id, room_type, room_name,
-             doctor_id, doctor_name, patient_name, patient_cid
+             doctor_id, doctor_name, patient_name, patient_cid,
+             platform, unit_hcode, province, region, duration_sec
       FROM usage_logs ORDER BY id DESC LIMIT ?
     `).all(Math.min(limit, 500));
+  },
+
+  // ── Dashboard queries (TOR 4.12.x) ──────────────────────────────────────────
+  // Shared WHERE builder: optional [from,to] date range (YYYY-MM-DD) and an
+  // optional hourFrom/hourTo "ช่วงเวลาในวัน" window (0-23). Returns { clause, params }.
+  _range({ from, to, hourFrom, hourTo } = {}) {
+    const where = [];
+    const params = [];
+    if (from) { where.push("date(ts) >= date(?)"); params.push(from); }
+    if (to)   { where.push("date(ts) <= date(?)"); params.push(to); }
+    if (hourFrom != null && hourTo != null) {
+      // CAST hour to int; supports normal (8-17) windows.
+      where.push("CAST(strftime('%H', ts) AS INTEGER) BETWEEN ? AND ?");
+      params.push(parseInt(hourFrom, 10), parseInt(hourTo, 10));
+    }
+    return { clause: where.length ? 'WHERE ' + where.join(' AND ') : '', params };
+  },
+
+  // 4.12.x.1 — usage per day, within an optional date range + time-of-day window
+  byDay(opts = {}) {
+    const { clause, params } = this._range(opts);
+    return _logDb.prepare(`
+      SELECT date(ts) as day,
+             SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
+             SUM(CASE WHEN event = 'patient_joined_queue' THEN 1 ELSE 0 END) as patients,
+             SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted
+      FROM usage_logs ${clause}
+      GROUP BY date(ts) ORDER BY day
+    `).all(...params);
+  },
+
+  // 4.12.x.1 — usage by hour of day (the "ช่วงวัน" distribution)
+  byHour(opts = {}) {
+    const { clause, params } = this._range(opts);
+    return _logDb.prepare(`
+      SELECT CAST(strftime('%H', ts) AS INTEGER) as hour,
+             COUNT(*) as total,
+             SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms
+      FROM usage_logs ${clause}
+      GROUP BY hour ORDER BY hour
+    `).all(...params);
+  },
+
+  // 4.12.x.2 — usage by health region (เขตสุขภาพ)
+  byRegion(opts = {}) {
+    const { clause, params } = this._range(opts);
+    return _logDb.prepare(`
+      SELECT region,
+             COUNT(*) as total,
+             SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
+             SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted
+      FROM usage_logs ${clause}
+      GROUP BY region ORDER BY (region IS NULL), region
+    `).all(...params);
+  },
+
+  // 4.12.x.2 — usage by province (จังหวัด), optionally within one region
+  byProvince(opts = {}) {
+    const { clause, params } = this._range(opts);
+    const regionFilter = opts.region != null
+      ? (clause ? ' AND region = ?' : 'WHERE region = ?')
+      : '';
+    const p = [...params];
+    if (opts.region != null) p.push(parseInt(opts.region, 10));
+    return _logDb.prepare(`
+      SELECT province, region,
+             COUNT(*) as total,
+             SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
+             SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted
+      FROM usage_logs ${clause}${regionFilter}
+      GROUP BY province ORDER BY total DESC
+    `).all(...p);
+  },
+
+  // 4.12.x.3 — usage split by platform (mobile vs web)
+  byPlatform(opts = {}) {
+    const { clause, params } = this._range(opts);
+    return _logDb.prepare(`
+      SELECT COALESCE(platform,'web') as platform, COUNT(*) as total,
+             SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms
+      FROM usage_logs ${clause}
+      GROUP BY COALESCE(platform,'web') ORDER BY total DESC
+    `).all(...params);
+  },
+
+  // 4.12.x.4 / 4.12.2.5 — service units called, with conversation start/end span.
+  // limit param drives "top N" (5 by default for 4.12.2.5).
+  byUnit(opts = {}) {
+    const { clause, params } = this._range(opts);
+    const limit = Math.min(opts.limit || 100, 500);
+    return _logDb.prepare(`
+      SELECT unit_hcode, province, region,
+             COUNT(*) as total,
+             SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
+             MIN(ts) as first_used, MAX(ts) as last_used,
+             SUM(COALESCE(duration_sec,0)) as total_duration_sec
+      FROM usage_logs ${clause}${clause ? ' AND' : 'WHERE'} unit_hcode IS NOT NULL
+      GROUP BY unit_hcode ORDER BY total DESC LIMIT ?
+    `).all(...params, limit);
+  },
+
+  // 4.12.2.6 — top N rooms by conversation duration (longest first)
+  longestRooms(opts = {}) {
+    const { clause, params } = this._range(opts);
+    const limit = Math.min(opts.limit || 5, 100);
+    return _logDb.prepare(`
+      SELECT room_id, room_name, room_type, doctor_name, province, region,
+             MAX(duration_sec) as duration_sec,
+             MIN(ts) as created_at
+      FROM usage_logs ${clause}${clause ? ' AND' : 'WHERE'} duration_sec IS NOT NULL
+      GROUP BY room_id ORDER BY duration_sec DESC LIMIT ?
+    `).all(...params, limit);
   },
 };
 

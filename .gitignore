@@ -1,9 +1,11 @@
 sonarqube/sonar*/*
 .scannerwork
-devserverlist.mddata/*.db
+devserverlist.md
+data/*.db
 data/*.db-shm
 data/*.db-wal
 moph-meet-debug.apk
 screen*.png
 test-results/
-data/*.db
+nul
+node_modules/

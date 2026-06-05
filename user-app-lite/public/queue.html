@@ -79,7 +79,27 @@ const pathParts  = location.pathname.split('/');
 const roomId     = pathParts[2] || '';
 const params     = new URLSearchParams(location.search);
 const jwtToken   = params.get('jwt') || '';
-const patientName = params.get('name') || 'ผู้ป่วย';
+const urlName    = params.get('name') || '';
+const patientName = urlName || 'ผู้ป่วย';
+
+// Stable per-patient id. Several patients can share ONE pre-generated invite
+// token (other systems generate tokens in advance). Without a per-browser id the
+// server collapses them into a single queue entry — so the queue never shows more
+// than one person and admitting one admits everyone. This id keeps each patient
+// distinct and survives refresh so they keep their place in line.
+let patientId = '';
+try {
+  const _k = 'moph_pid_' + roomId;
+  patientId = localStorage.getItem(_k) || '';
+  if (!patientId) {
+    patientId = (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+    localStorage.setItem(_k, patientId);
+  }
+} catch (_) {
+  patientId = 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
 
 let admitted    = false;
 let pollInterval;
@@ -106,7 +126,10 @@ if (!jwtToken) {
 async function pollQueue() {
   if (admitted) return;
   try {
-    const r = await fetch('/api/exam/' + roomId + '/queue?jwt=' + encodeURIComponent(jwtToken));
+    const qs = '/api/exam/' + roomId + '/queue?jwt=' + encodeURIComponent(jwtToken)
+             + '&pid=' + encodeURIComponent(patientId)
+             + (urlName ? '&name=' + encodeURIComponent(urlName) : '');
+    const r = await fetch(qs);
     if (!r.ok) return;
     const d = await r.json();
     document.getElementById('room-name-label').textContent = d.roomName || '';

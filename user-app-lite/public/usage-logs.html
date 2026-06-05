@@ -23,7 +23,7 @@
     <a href="/" class="flex items-center gap-2">
       <img src="/images/logo.png" alt="MOPH Meet" class="h-9 bg-white/90 p-1 rounded" onerror="this.style.display='none'" />
     </a>
-    <span class="text-lg font-semibold hidden sm:inline">สถิติการใช้งาน</span>
+    <span class="text-lg font-semibold hidden sm:inline">สถิติการใช้งาน (Dashboard)</span>
   </div>
   <div class="flex-none gap-3 items-center">
     <a href="/" class="btn btn-sm btn-outline text-primary-content border-primary-content hover:bg-primary-content hover:text-primary">← กลับหน้าหลัก</a>
@@ -32,141 +32,122 @@
 
 <main class="container mx-auto p-4 flex flex-col gap-4 max-w-6xl">
 
-  <!-- Summary Cards -->
-  <div id="summary-cards" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-    <div class="card bg-white shadow-sm border border-base-200">
-      <div class="card-body p-4 items-center text-center">
-        <div class="text-2xl font-bold text-primary" id="stat-rooms">—</div>
-        <div class="text-xs text-base-content/60">ห้องทั้งหมด</div>
-      </div>
-    </div>
-    <div class="card bg-white shadow-sm border border-base-200">
-      <div class="card-body p-4 items-center text-center">
-        <div class="text-2xl font-bold text-accent" id="stat-patients">—</div>
-        <div class="text-xs text-base-content/60">ผู้ป่วยเข้าคิว</div>
-      </div>
-    </div>
-    <div class="card bg-white shadow-sm border border-base-200">
-      <div class="card-body p-4 items-center text-center">
-        <div class="text-2xl font-bold text-success" id="stat-admitted">—</div>
-        <div class="text-xs text-base-content/60">รับเข้าตรวจ</div>
-      </div>
-    </div>
-    <div class="card bg-white shadow-sm border border-base-200">
-      <div class="card-body p-4 items-center text-center">
-        <div class="text-2xl font-bold text-info" id="stat-doctors">—</div>
-        <div class="text-xs text-base-content/60">แพทย์ทั้งหมด</div>
-      </div>
-    </div>
-    <div class="card bg-white shadow-sm border border-base-200">
-      <div class="card-body p-4 items-center text-center">
-        <div class="text-2xl font-bold text-warning" id="stat-today">—</div>
-        <div class="text-xs text-base-content/60">วันนี้</div>
-      </div>
-    </div>
-    <div class="card bg-white shadow-sm border border-base-200">
-      <div class="card-body p-4 items-center text-center">
-        <div class="text-2xl font-bold text-secondary-content" id="stat-month">—</div>
-        <div class="text-xs text-base-content/60">เดือนนี้</div>
-      </div>
+  <!-- Filter bar: date range + time-of-day window (4.12.x.1) -->
+  <div class="card bg-white shadow-sm border border-base-200">
+    <div class="card-body p-4 flex flex-row flex-wrap items-end gap-3">
+      <label class="form-control">
+        <span class="label-text text-xs mb-1">ตั้งแต่วันที่</span>
+        <input type="date" id="f-from" class="input input-bordered input-sm" />
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs mb-1">ถึงวันที่</span>
+        <input type="date" id="f-to" class="input input-bordered input-sm" />
+      </label>
+      <label class="form-control">
+        <span class="label-text text-xs mb-1">ช่วงเวลา (ชม.)</span>
+        <div class="flex items-center gap-1">
+          <input type="number" id="f-hour-from" min="0" max="23" placeholder="0" class="input input-bordered input-sm w-16" />
+          <span>–</span>
+          <input type="number" id="f-hour-to" min="0" max="23" placeholder="23" class="input input-bordered input-sm w-16" />
+        </div>
+      </label>
+      <button class="btn btn-primary btn-sm" onclick="applyFilters()">ใช้ตัวกรอง</button>
+      <button class="btn btn-ghost btn-sm" onclick="resetFilters()">ล้าง</button>
+      <span class="text-xs text-base-content/50 ml-auto" id="filter-note">แสดงข้อมูลทั้งหมด</span>
     </div>
   </div>
 
-  <!-- Charts -->
+  <!-- Summary Cards -->
+  <div id="summary-cards" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div class="card bg-white shadow-sm border border-base-200"><div class="card-body p-4 items-center text-center"><div class="text-2xl font-bold text-primary" id="stat-rooms">—</div><div class="text-xs text-base-content/60">ห้องทั้งหมด</div></div></div>
+    <div class="card bg-white shadow-sm border border-base-200"><div class="card-body p-4 items-center text-center"><div class="text-2xl font-bold text-accent" id="stat-patients">—</div><div class="text-xs text-base-content/60">ผู้ป่วยเข้าคิว</div></div></div>
+    <div class="card bg-white shadow-sm border border-base-200"><div class="card-body p-4 items-center text-center"><div class="text-2xl font-bold text-success" id="stat-admitted">—</div><div class="text-xs text-base-content/60">รับเข้าตรวจ</div></div></div>
+    <div class="card bg-white shadow-sm border border-base-200"><div class="card-body p-4 items-center text-center"><div class="text-2xl font-bold text-info" id="stat-doctors">—</div><div class="text-xs text-base-content/60">แพทย์ทั้งหมด</div></div></div>
+    <div class="card bg-white shadow-sm border border-base-200"><div class="card-body p-4 items-center text-center"><div class="text-2xl font-bold text-warning" id="stat-today">—</div><div class="text-xs text-base-content/60">วันนี้</div></div></div>
+    <div class="card bg-white shadow-sm border border-base-200"><div class="card-body p-4 items-center text-center"><div class="text-2xl font-bold text-secondary-content" id="stat-month">—</div><div class="text-xs text-base-content/60">เดือนนี้</div></div></div>
+  </div>
+
+  <!-- Tabs: TOR 4.12.1 (บริการรักษา) / 4.12.2 (งานทั่วไป) -->
+  <div role="tablist" class="tabs tabs-boxed bg-base-200">
+    <a role="tab" class="tab tab-active" id="tab-care" onclick="switchTab('care')">การให้บริการทางการรักษา (4.12.1)</a>
+    <a role="tab" class="tab" id="tab-general" onclick="switchTab('general')">งานทั่วไป (4.12.2)</a>
+  </div>
+
+  <!-- Charts shared by both tabs -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- 4.12.x.1 by day -->
     <div class="card bg-white shadow-sm border border-base-200">
       <div class="card-body p-4">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="card-title text-sm">📊 รายวัน (30 วัน)</h2>
-          <select id="daily-days" class="select select-bordered select-xs" onchange="loadDaily()">
-            <option value="7">7 วัน</option>
-            <option value="14">14 วัน</option>
-            <option value="30" selected>30 วัน</option>
-            <option value="90">90 วัน</option>
-          </select>
-        </div>
+        <h2 class="card-title text-sm mb-2">📊 ปริมาณการใช้งานรายวัน</h2>
         <canvas id="chart-daily" height="220"></canvas>
       </div>
     </div>
+    <!-- 4.12.x.1 by hour -->
     <div class="card bg-white shadow-sm border border-base-200">
       <div class="card-body p-4">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="card-title text-sm">📈 รายเดือน (12 เดือน)</h2>
-          <select id="monthly-months" class="select select-bordered select-xs" onchange="loadMonthly()">
-            <option value="6">6 เดือน</option>
-            <option value="12" selected>12 เดือน</option>
-            <option value="24">24 เดือน</option>
-          </select>
-        </div>
-        <canvas id="chart-monthly" height="220"></canvas>
+        <h2 class="card-title text-sm mb-2">🕐 ปริมาณการใช้งานตามช่วงเวลาในวัน</h2>
+        <canvas id="chart-hour" height="220"></canvas>
+      </div>
+    </div>
+    <!-- 4.12.x.2 by region -->
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body p-4">
+        <h2 class="card-title text-sm mb-2">🗺️ แบ่งตามเขตสุขภาพ</h2>
+        <canvas id="chart-region" height="220"></canvas>
+      </div>
+    </div>
+    <!-- 4.12.x.3 by platform -->
+    <div class="card bg-white shadow-sm border border-base-200">
+      <div class="card-body p-4">
+        <h2 class="card-title text-sm mb-2">📱 Mobile vs 💻 Web</h2>
+        <canvas id="chart-platform" height="220"></canvas>
       </div>
     </div>
   </div>
 
-  <!-- Doctor Table -->
+  <!-- 4.12.x.2 province table -->
   <div class="card bg-white shadow-sm border border-base-200">
     <div class="card-body p-4">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="card-title text-sm">👨‍⚕️ การใช้งานรายแพทย์</h2>
-        <select id="doctor-months" class="select select-bordered select-xs" onchange="loadDoctors()">
-          <option value="1">1 เดือน</option>
-          <option value="3" selected>3 เดือน</option>
-          <option value="6">6 เดือน</option>
-          <option value="12">12 เดือน</option>
-        </select>
+      <h2 class="card-title text-sm mb-2">แบ่งตามจังหวัด</h2>
+      <div class="overflow-x-auto max-h-72 overflow-y-auto">
+        <table class="table table-sm w-full">
+          <thead class="sticky top-0 bg-white"><tr><th>จังหวัด</th><th class="text-center">เขต</th><th class="text-center">ห้อง</th><th class="text-center">รับตรวจ</th><th class="text-center">รวม</th></tr></thead>
+          <tbody id="province-body"><tr><td colspan="5" class="text-center text-base-content/40 py-6">กำลังโหลด...</td></tr></tbody>
+        </table>
       </div>
+    </div>
+  </div>
+
+  <!-- 4.12.x.4 service units called + conversation span -->
+  <div class="card bg-white shadow-sm border border-base-200">
+    <div class="card-body p-4">
+      <h2 class="card-title text-sm mb-2" id="unit-title">หน่วยบริการที่ถูกเรียกใช้ (Top 5)</h2>
+      <p class="text-xs text-base-content/50 mb-2">แสดงหน่วยบริการ พร้อมเวลาเริ่มต้น–สิ้นสุด และระยะเวลารวมการสนทนา</p>
       <div class="overflow-x-auto">
-        <table class="table table-sm table-zebra w-full">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>แพทย์</th>
-              <th>รหัส (CID)</th>
-              <th class="text-center">สร้างห้อง</th>
-              <th class="text-center">รับตรวจ</th>
-              <th class="text-center">ส่งลิงก์</th>
-              <th class="text-center">รวม</th>
-              <th>ใช้งานล่าสุด</th>
-            </tr>
-          </thead>
-          <tbody id="doctor-table-body">
-            <tr><td colspan="8" class="text-center text-base-content/40 py-8">กำลังโหลด...</td></tr>
-          </tbody>
+        <table class="table table-sm w-full">
+          <thead><tr><th>#</th><th>หน่วยบริการ (hcode)</th><th>จังหวัด</th><th class="text-center">เขต</th><th class="text-center">ครั้ง</th><th>เริ่มใช้</th><th>ล่าสุด</th><th class="text-center">เวลารวมสนทนา</th></tr></thead>
+          <tbody id="unit-body"><tr><td colspan="8" class="text-center text-base-content/40 py-6">กำลังโหลด...</td></tr></tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- Recent Activity -->
-  <div class="card bg-white shadow-sm border border-base-200">
+  <!-- 4.12.2.6 longest rooms — only in general tab -->
+  <div class="card bg-white shadow-sm border border-base-200" id="longest-card">
     <div class="card-body p-4">
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="card-title text-sm">🕐 กิจกรรมล่าสุด</h2>
-        <button class="btn btn-xs btn-outline" onclick="loadRecent()">รีเฟรช</button>
-      </div>
-      <div class="overflow-x-auto max-h-80 overflow-y-auto">
-        <table class="table table-xs w-full">
-          <thead class="sticky top-0 bg-white">
-            <tr>
-              <th>เวลา</th>
-              <th>เหตุการณ์</th>
-              <th>ห้อง</th>
-              <th>แพทย์</th>
-              <th>ผู้ป่วย</th>
-            </tr>
-          </thead>
-          <tbody id="recent-table-body">
-            <tr><td colspan="5" class="text-center text-base-content/40 py-8">กำลังโหลด...</td></tr>
-          </tbody>
+      <h2 class="card-title text-sm mb-2">⏱️ 5 ห้องประชุมที่ใช้งานนานที่สุด</h2>
+      <div class="overflow-x-auto">
+        <table class="table table-sm w-full">
+          <thead><tr><th>#</th><th>ห้อง</th><th>ผู้สร้าง</th><th class="text-center">ระยะเวลา</th><th>วันที่</th></tr></thead>
+          <tbody id="longest-body"><tr><td colspan="5" class="text-center text-base-content/40 py-6">กำลังโหลด...</td></tr></tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- Transparency note -->
   <div class="alert bg-base-200 border-base-300 text-xs text-base-content/60">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-info shrink-0 w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-    <span>หน้านี้แสดงสถิติการใช้งานระบบ Telemedicine ของกระทรวงสาธารณสุข เพื่อความโปร่งใสในการใช้ทรัพยากร — ข้อมูลอัปเดตอัตโนมัติทุกครั้งที่เปิดหน้า</span>
+    <span>Dashboard แสดงสถิติการใช้งานระบบ Telemedicine กระทรวงสาธารณสุข — กรองตามวัน ช่วงเวลา เขตสุขภาพ จังหวัด และช่องทาง (Mobile/Web)</span>
   </div>
 
 </main>
@@ -174,166 +155,176 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 const API = '/api/usage-logs';
-const EVENT_LABELS = {
-  room_created: 'สร้างห้อง',
-  reserved_room_created: 'สร้างห้อง (นัดหมาย)',
-  patient_joined_queue: 'ผู้ป่วยเข้าคิว',
-  patient_admitted: 'รับเข้าตรวจ',
-  invite_generated: 'ส่งลิงก์เชิญ',
-  reserved_token_issued: 'ออก Token นัดหมาย',
-};
-const PRIMARY  = '#056839';
-const ACCENT   = '#0d9e5c';
-const SUCCESS  = '#22c55e';
-const INFO     = '#3b82f6';
+const PALETTE = ['#056839','#0d9e5c','#22c55e','#3b82f6','#f59e0b','#8b5cf6','#ec4899','#14b8a6','#ef4444','#6366f1','#84cc16','#f97316','#06b6d4'];
+let charts = {};
+let currentTab = 'care';
 
-let dailyChart, monthlyChart;
+// ── filter state ───────────────────────────────────────────────────────────
+function qs() {
+  const p = new URLSearchParams();
+  const from = document.getElementById('f-from').value;
+  const to   = document.getElementById('f-to').value;
+  const hf   = document.getElementById('f-hour-from').value;
+  const ht   = document.getElementById('f-hour-to').value;
+  if (from) p.set('from', from);
+  if (to)   p.set('to', to);
+  if (hf !== '' && ht !== '') { p.set('hourFrom', hf); p.set('hourTo', ht); }
+  const s = p.toString();
+  return s ? '?' + s : '';
+}
+function fetchJSON(ep, extra) {
+  const sep = qs() ? (qs() + (extra ? '&' + extra : '')) : (extra ? '?' + extra : '');
+  return fetch(API + '/' + ep + sep).then(r => r.json()).catch(() => []);
+}
 
+function applyFilters() {
+  const from = document.getElementById('f-from').value;
+  const to   = document.getElementById('f-to').value;
+  const hf   = document.getElementById('f-hour-from').value;
+  const ht   = document.getElementById('f-hour-to').value;
+  let note = [];
+  if (from || to) note.push((from || '…') + ' ถึง ' + (to || '…'));
+  if (hf !== '' && ht !== '') note.push('เวลา ' + hf + ':00–' + ht + ':59');
+  document.getElementById('filter-note').textContent = note.length ? note.join(' · ') : 'แสดงข้อมูลทั้งหมด';
+  loadAll();
+}
+function resetFilters() {
+  ['f-from','f-to','f-hour-from','f-hour-to'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('filter-note').textContent = 'แสดงข้อมูลทั้งหมด';
+  loadAll();
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-care').classList.toggle('tab-active', tab === 'care');
+  document.getElementById('tab-general').classList.toggle('tab-active', tab === 'general');
+  // longest rooms is a 4.12.2 (general) requirement
+  document.getElementById('longest-card').style.display = tab === 'general' ? '' : 'none';
+  document.getElementById('unit-title').textContent = tab === 'general'
+    ? 'หน่วยบริการที่ใช้งานสูงสุด (Top 5)'   // 4.12.2.5
+    : 'หน่วยบริการที่ถูกเรียกใช้ (Top 5)';   // 4.12.1.4
+}
+
+// ── loaders ──────────────────────────────────────────────────────────────────
 async function loadSummary() {
-  try {
-    const r = await fetch(API + '/summary');
-    const d = await r.json();
-    document.getElementById('stat-rooms').textContent    = d.rooms?.toLocaleString()    ?? '—';
-    document.getElementById('stat-patients').textContent  = d.patients?.toLocaleString()  ?? '—';
-    document.getElementById('stat-admitted').textContent   = d.admitted?.toLocaleString()  ?? '—';
-    document.getElementById('stat-doctors').textContent    = d.doctors?.toLocaleString()   ?? '—';
-    document.getElementById('stat-today').textContent      = d.today?.toLocaleString()     ?? '—';
-    document.getElementById('stat-month').textContent      = d.thisMonth?.toLocaleString() ?? '—';
-  } catch (e) { console.error('summary', e); }
+  const d = await fetch(API + '/summary').then(r => r.json()).catch(() => ({}));
+  const set = (id, v) => document.getElementById(id).textContent = (v ?? '—').toLocaleString?.() ?? v ?? '—';
+  set('stat-rooms', d.rooms); set('stat-patients', d.patients); set('stat-admitted', d.admitted);
+  set('stat-doctors', d.doctors); set('stat-today', d.today); set('stat-month', d.thisMonth);
+}
+
+function drawChart(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), cfg);
 }
 
 async function loadDaily() {
-  const days = document.getElementById('daily-days').value;
-  try {
-    const r = await fetch(API + '/daily?days=' + days);
-    const rows = await r.json();
-    const labels   = rows.map(r => r.day?.slice(5) || '');
-    const rooms    = rows.map(r => r.rooms    || 0);
-    const patients = rows.map(r => r.patients || 0);
-    const admitted = rows.map(r => r.admitted || 0);
-    if (dailyChart) dailyChart.destroy();
-    dailyChart = new Chart(document.getElementById('chart-daily'), {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'ห้อง',   data: rooms,    backgroundColor: PRIMARY },
-          { label: 'เข้าคิว', data: patients, backgroundColor: ACCENT  },
-          { label: 'รับตรวจ', data: admitted, backgroundColor: SUCCESS },
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-      }
-    });
-  } catch (e) { console.error('daily', e); }
+  const rows = await fetchJSON('by-day');
+  drawChart('chart-daily', {
+    type: 'bar',
+    data: { labels: rows.map(r => (r.day || '').slice(5)), datasets: [
+      { label: 'ห้อง',   data: rows.map(r => r.rooms || 0),    backgroundColor: PALETTE[0] },
+      { label: 'เข้าคิว', data: rows.map(r => r.patients || 0), backgroundColor: PALETTE[1] },
+      { label: 'รับตรวจ', data: rows.map(r => r.admitted || 0), backgroundColor: PALETTE[2] },
+    ]},
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
 }
 
-async function loadMonthly() {
-  const months = document.getElementById('monthly-months').value;
-  try {
-    const r = await fetch(API + '/monthly?months=' + months);
-    const rows = await r.json();
-    const labels   = rows.map(r => r.month || '');
-    const rooms    = rows.map(r => r.rooms    || 0);
-    const patients = rows.map(r => r.patients || 0);
-    const admitted = rows.map(r => r.admitted || 0);
-    const doctors  = rows.map(r => r.doctors  || 0);
-    if (monthlyChart) monthlyChart.destroy();
-    monthlyChart = new Chart(document.getElementById('chart-monthly'), {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { label: 'ห้อง',   data: rooms,    borderColor: PRIMARY, backgroundColor: PRIMARY + '33', fill: true, tension: 0.3 },
-          { label: 'เข้าคิว', data: patients, borderColor: ACCENT,  backgroundColor: ACCENT  + '33', fill: true, tension: 0.3 },
-          { label: 'รับตรวจ', data: admitted, borderColor: SUCCESS, tension: 0.3, borderDash: [5,3] },
-          { label: 'แพทย์',  data: doctors,  borderColor: INFO,    tension: 0.3, borderDash: [2,2] },
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-      }
-    });
-  } catch (e) { console.error('monthly', e); }
+async function loadHour() {
+  const rows = await fetchJSON('by-hour');
+  const byH = {}; rows.forEach(r => byH[r.hour] = r.total);
+  const labels = Array.from({length:24}, (_,h) => h + ':00');
+  const data   = Array.from({length:24}, (_,h) => byH[h] || 0);
+  drawChart('chart-hour', {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'ครั้ง', data, backgroundColor: PALETTE[3] }] },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
 }
 
-async function loadDoctors() {
-  const months = document.getElementById('doctor-months').value;
-  try {
-    const r = await fetch(API + '/by-doctor?months=' + months);
-    const rows = await r.json();
-    const tbody = document.getElementById('doctor-table-body');
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-base-content/40 py-8">ยังไม่มีข้อมูล</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map((d, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td class="font-medium">${esc(d.doctor_name || '—')}</td>
-        <td class="text-xs font-mono">${esc(d.doctor_id || '—')}</td>
-        <td class="text-center">${d.rooms}</td>
-        <td class="text-center">${d.admitted}</td>
-        <td class="text-center">${d.invites}</td>
-        <td class="text-center font-semibold">${d.total_events}</td>
-        <td class="text-xs">${fmtDate(d.last_seen)}</td>
-      </tr>
-    `).join('');
-  } catch (e) { console.error('doctors', e); }
+async function loadRegion() {
+  const rows = await fetchJSON('by-region');
+  const labels = rows.map(r => r.region ? ('เขต ' + r.region) : 'ไม่ระบุ');
+  drawChart('chart-region', {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'การใช้งาน', data: rows.map(r => r.total || 0), backgroundColor: labels.map((_,i) => PALETTE[i % PALETTE.length]) }] },
+    options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+  });
 }
 
-async function loadRecent() {
-  try {
-    const r = await fetch(API + '/recent?limit=100');
-    const rows = await r.json();
-    const tbody = document.getElementById('recent-table-body');
-    if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center text-base-content/40 py-8">ยังไม่มีข้อมูล</td></tr>';
-      return;
-    }
-    tbody.innerHTML = rows.map(e => `
-      <tr>
-        <td class="whitespace-nowrap text-xs">${fmtDate(e.ts)}</td>
-        <td><span class="badge badge-sm ${eventBadge(e.event)}">${EVENT_LABELS[e.event] || esc(e.event)}</span></td>
-        <td class="text-xs">${esc(e.room_name || e.room_id || '—')}</td>
-        <td class="text-xs">${esc(e.doctor_name || e.doctor_id || '—')}</td>
-        <td class="text-xs">${esc(e.patient_name || '—')}</td>
-      </tr>
-    `).join('');
-  } catch (e) { console.error('recent', e); }
+async function loadPlatform() {
+  const rows = await fetchJSON('by-platform');
+  const labelMap = { web: '💻 Web', mobile: '📱 Mobile' };
+  drawChart('chart-platform', {
+    type: 'doughnut',
+    data: { labels: rows.map(r => labelMap[r.platform] || r.platform), datasets: [{ data: rows.map(r => r.total || 0), backgroundColor: [PALETTE[3], PALETTE[4], PALETTE[5]] }] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+  });
 }
 
-function eventBadge(ev) {
-  if (ev.includes('created'))  return 'badge-primary';
-  if (ev.includes('admitted')) return 'badge-success';
-  if (ev.includes('queue'))    return 'badge-accent';
-  if (ev.includes('invite'))   return 'badge-info';
-  if (ev.includes('token'))    return 'badge-warning';
-  return 'badge-ghost';
+async function loadProvince() {
+  const rows = await fetchJSON('by-province');
+  const tb = document.getElementById('province-body');
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="5" class="text-center text-base-content/40 py-6">ยังไม่มีข้อมูล</td></tr>'; return; }
+  tb.innerHTML = rows.map(r => `<tr>
+    <td>${esc(r.province || 'ไม่ระบุ')}</td>
+    <td class="text-center">${r.region ?? '—'}</td>
+    <td class="text-center">${r.rooms || 0}</td>
+    <td class="text-center">${r.admitted || 0}</td>
+    <td class="text-center font-semibold">${r.total || 0}</td></tr>`).join('');
 }
 
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s||''); return d.innerHTML; }
+async function loadUnits() {
+  const rows = await fetchJSON('by-unit', 'limit=5');  // Top 5 (4.12.x.5)
+  const tb = document.getElementById('unit-body');
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="8" class="text-center text-base-content/40 py-6">ยังไม่มีข้อมูล (เริ่มเก็บ hcode ตั้งแต่รุ่นนี้)</td></tr>'; return; }
+  tb.innerHTML = rows.map((r, i) => `<tr>
+    <td>${i + 1}</td>
+    <td class="font-mono text-xs">${esc(r.unit_hcode || '—')}</td>
+    <td class="text-xs">${esc(r.province || 'ไม่ระบุ')}</td>
+    <td class="text-center">${r.region ?? '—'}</td>
+    <td class="text-center font-semibold">${r.total || 0}</td>
+    <td class="text-xs">${fmtDate(r.first_used)}</td>
+    <td class="text-xs">${fmtDate(r.last_used)}</td>
+    <td class="text-center text-xs">${fmtDur(r.total_duration_sec)}</td></tr>`).join('');
+}
 
+async function loadLongest() {
+  const rows = await fetchJSON('longest-rooms', 'limit=5');
+  const tb = document.getElementById('longest-body');
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="5" class="text-center text-base-content/40 py-6">ยังไม่มีข้อมูล</td></tr>'; return; }
+  tb.innerHTML = rows.map((r, i) => `<tr>
+    <td>${i + 1}</td>
+    <td class="text-xs">${esc(r.room_name || r.room_id || '—')}</td>
+    <td class="text-xs">${esc(r.doctor_name || '—')}</td>
+    <td class="text-center font-semibold">${fmtDur(r.duration_sec)}</td>
+    <td class="text-xs">${fmtDate(r.created_at)}</td></tr>`).join('');
+}
+
+function loadAll() {
+  loadDaily(); loadHour(); loadRegion(); loadPlatform();
+  loadProvince(); loadUnits(); loadLongest();
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 function fmtDate(iso) {
   if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    if (isNaN(d)) return String(iso);
-    return d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'2-digit' })
-         + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
-  } catch (_) { return String(iso); }
+  const d = new Date(String(iso).replace(' ', 'T'));
+  if (isNaN(d)) return String(iso);
+  return d.toLocaleDateString('th-TH', { day:'2-digit', month:'short', year:'2-digit' }) + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+}
+function fmtDur(sec) {
+  sec = parseInt(sec, 10);
+  if (!sec || isNaN(sec)) return '—';
+  const h = Math.floor(sec / 3600), m = Math.round((sec % 3600) / 60);
+  return (h ? h + ' ชม. ' : '') + m + ' นาที';
 }
 
+switchTab('care');
 loadSummary();
-loadDaily();
-loadMonthly();
-loadDoctors();
-loadRecent();
+loadAll();
 </script>
 
 <script>

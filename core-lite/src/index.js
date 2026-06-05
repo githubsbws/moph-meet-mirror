@@ -23,6 +23,51 @@ const PROVIDER_SERVICE_CLIENT_ID = process.env.PROVIDER_SERVICE_CLIENT_ID;
 const PROVIDER_SERVICE_SECRET_KEY = process.env.PROVIDER_SERVICE_SECRET_KEY;
 const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/$/, ''); // e.g. https://moph-meet.moph.go.th
 
+function parseManualAccounts() {
+    const fallback = [
+        {
+            username: 'Admin',
+            password: 'Admin123@',
+            display: 'App Reviewer (Temporary)',
+            roles: ['admin', 'staff'],
+            roleMaps: [{ roleName: 'admin' }, { roleName: 'staff' }],
+            isReviewAccount: true,
+        },
+        {
+            username: 'test',
+            password: 'test@1234',
+            display: 'Test User',
+            roles: ['admin', 'staff'],
+            roleMaps: [{ roleName: 'admin' }, { roleName: 'staff' }],
+            isReviewAccount: false,
+        },
+    ];
+    if (!process.env.MANUAL_LOGIN_ACCOUNTS) return fallback;
+    try {
+        const parsed = JSON.parse(process.env.MANUAL_LOGIN_ACCOUNTS);
+        return Array.isArray(parsed) && parsed.length > 0 ? parsed : fallback;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+const MANUAL_LOGIN_ENABLED = process.env.MANUAL_LOGIN_ENABLED !== 'false';
+const MANUAL_LOGIN_ACCOUNTS = parseManualAccounts();
+
+function buildManualUser(account) {
+    const roles = Array.isArray(account.roles) && account.roles.length > 0 ? account.roles : ['staff'];
+    return {
+        username: account.username,
+        display: account.display || account.username,
+        roles,
+        roleMaps: roles.map(roleName => ({ roleName })),
+        organization: null,
+        providerIDProfile: null,
+        isReviewAccount: Boolean(account.isReviewAccount),
+        authMode: 'manual',
+    };
+}
+
 // ── App ────────────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
@@ -31,6 +76,29 @@ app.use(cors());
 // ── Health ─────────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ── Auth: Manual username/password ────────────────────────────────────────────
+app.post('/api/auth', async (req, res) => {
+    if (!MANUAL_LOGIN_ENABLED) {
+        return res.status(403).json({ error: 403, message: 'manualLoginDisabled' });
+    }
+
+    const username = String(req.body?.username || '').trim();
+    const password = String(req.body?.password || '');
+    const account = MANUAL_LOGIN_ACCOUNTS.find(item => item.username === username && item.password === password);
+
+    if (!account) {
+        return res.status(401).json({ error: 401, message: 'invalidUsernameOrPassword' });
+    }
+
+    const user = buildManualUser(account);
+    const token = createHash('sha256')
+        .update(new Date().toISOString() + user.username + randomInt(1000))
+        .digest('hex');
+
+    await tokenStorage.set(token, user);
+    return res.json({ token, user });
 });
 
 // ── Auth: Provider ID ──────────────────────────────────────────────────────────
@@ -215,17 +283,25 @@ function autoRoomName(type, ownerDisplay) {
 // ── Meets – proxied from token cache (no DB) ─────────────────────────────────
 app.get('/api/meets', auth(), async (req, res) => {
     const userId = res.locals.user?.username;
+    const limit  = Math.min(parseInt(req.query.limit) || 200, 1000);
+
+    // Prefer an owner-filtered SQL query (scales to 100k+ rooms). Fall back to a
+    // bounded scan only if the backend doesn't implement byOwner.
+    if (typeof roomStore.byOwner === 'function') {
+        return res.json(await roomStore.byOwner(userId, limit));
+    }
+
     const rooms = [];
     const keys = await roomStore.keys();
     for (const k of keys) {
         const r = await roomStore.get(k);
         if (!r) continue;
-        const isOwner = r.ownerId === userId;
-        const isJoined = Array.isArray(r.joinedProviders) && r.joinedProviders.some(p => p.userId === userId);
-        if (isOwner || isJoined) rooms.push(r);
+        const mine = r.ownerId === userId ||
+            (Array.isArray(r.joinedProviders) && r.joinedProviders.some(p => p.userId === userId));
+        if (mine) rooms.push(r);
     }
     rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json(rooms);
+    res.json(rooms.slice(0, limit));
 });
 
 // ── POST /api/rooms – create meet or exam room ────────────────────────────────
@@ -256,7 +332,10 @@ app.post('/api/rooms', auth(), async (req, res) => {
 
     await roomStore.set(id, room);
     console.log(`[rooms] created ${type} room ${id} for ${user.display}`);
-    await logStore.insert('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display });
+    // Service unit (hcode) from the provider's ProviderID org, when present.
+    const unitHcode = user.organization?.[0]?.hcode || user.hcode5 || null;
+    const durationSec = Math.max(0, Math.round((new Date(room.endtime) - new Date(room.starttime)) / 1000)) || null;
+    await logStore.insert('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display, platform: 'web', unitHcode, durationSec, meta: { startTime: room.starttime, endTime: room.endtime } });
 
     // Build patient join URL for exam rooms (JWT, no expiry)
     let patientJoinUrl = null;
@@ -310,16 +389,23 @@ app.get('/api/exam/:id/queue', async (req, res) => {
     if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
     if (!room.queue) room.queue = [];
 
-    if (!room.queue.find(q => q.token === jwtToken)) {
-        const patientName = payload.patientName || 'ผู้ป่วย';
-        room.queue.push({ token: jwtToken, patientName, joinedAt: new Date().toISOString(), status: 'waiting' });
+    // Multiple patients may share ONE pre-generated token. Key each queue entry by
+    // a per-patient id (from the queue page) so they stay distinct; fall back to
+    // the token for older links that don't send a pid. The token is still fully
+    // verified above — this only changes how we de-duplicate queue entries.
+    const pid      = (req.query.pid || '').trim();
+    const entryKey = pid || jwtToken;
+
+    if (!room.queue.find(q => (q.key || q.token) === entryKey)) {
+        const patientName = (req.query.name || '').trim() || payload.patientName || 'ผู้ป่วย';
+        room.queue.push({ key: entryKey, token: jwtToken, patientName, joinedAt: new Date().toISOString(), status: 'waiting' });
         await roomStore.set(req.params.id, room);
         console.log(`[exam] patient "${patientName}" joined queue for room ${req.params.id}`);
         await logStore.insert('patient_joined_queue', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName, patientCid: payload.cid || '' });
     }
 
-    const myEntry = room.queue.find(q => q.token === jwtToken);
-    const position = room.queue.filter(q => q.status === 'waiting').findIndex(q => q.token === jwtToken) + 1;
+    const myEntry  = room.queue.find(q => (q.key || q.token) === entryKey);
+    const position = room.queue.filter(q => q.status === 'waiting').findIndex(q => (q.key || q.token) === entryKey) + 1;
 
     res.json({
         status:   myEntry.status,
@@ -344,7 +430,7 @@ app.post('/api/exam/:id/next', auth(), async (req, res) => {
     }
 
     if (room.currentPatientToken) {
-        const prev = room.queue.find(q => q.token === room.currentPatientToken);
+        const prev = room.queue.find(q => (q.key || q.token) === room.currentPatientToken);
         if (prev) prev.status = 'done';
     }
 
@@ -356,7 +442,7 @@ app.post('/api/exam/:id/next', auth(), async (req, res) => {
     }
 
     next.status = 'admitted';
-    room.currentPatientToken = next.token;
+    room.currentPatientToken = next.key || next.token;
     await roomStore.set(req.params.id, room);
 
     console.log(`[exam] admitted patient "${next.patientName}" for room ${req.params.id}`);
@@ -467,7 +553,10 @@ app.post('/api/meet/reserved', async (req, res) => {
     await tokenStorage.set(doctorToken, doctorUser);
 
     console.log(`[reserved] created exam room ${id} owner=${doctorId} (${doctorDisplay})`);
-    await logStore.insert('reserved_room_created', { roomId: id, roomType: 'exam', roomName: name, doctorId, doctorName: doctorDisplay, meta: { startTime: room.starttime, endTime: room.endtime } });
+    // hcode may come from the HIS payload (hcode/hospitalCode/account_hcode); null if not sent.
+    const reservedHcode = (req.body.hcode || req.body.hospitalCode || req.body.account_hcode || '').toString().trim() || null;
+    const reservedDuration = Math.max(0, Math.round((new Date(room.endtime) - new Date(room.starttime)) / 1000)) || null;
+    await logStore.insert('reserved_room_created', { roomId: id, roomType: 'exam', roomName: name, doctorId, doctorName: doctorDisplay, platform: 'web', unitHcode: reservedHcode, durationSec: reservedDuration, meta: { startTime: room.starttime, endTime: room.endtime } });
 
     // Full absolute URLs – include token so 3rd-party apps that only use the
     // `meet` URL can auto-authenticate the doctor without a separate login step.
@@ -570,6 +659,67 @@ app.get('/api/logs/by-doctor', async (req, res) => {
 // GET /api/logs/recent?limit=50 – recent event log
 app.get('/api/logs/recent', async (req, res) => {
     res.json(await logStore.recent(parseInt(req.query.limit) || 50));
+});
+
+// ── Dashboard API (TOR 4.12.x) ─────────────────────────────────────────────────
+// Shared optional query params on all endpoints below:
+//   from, to       — date range (YYYY-MM-DD)
+//   hourFrom,hourTo — time-of-day window (0-23), "ช่วงเวลาในวัน"
+function rangeParams(q) {
+    const opts = {};
+    if (q.from) opts.from = String(q.from);
+    if (q.to)   opts.to   = String(q.to);
+    if (q.hourFrom != null && q.hourFrom !== '' && q.hourTo != null && q.hourTo !== '') {
+        opts.hourFrom = parseInt(q.hourFrom, 10);
+        opts.hourTo   = parseInt(q.hourTo, 10);
+    }
+    return opts;
+}
+
+// 4.12.x.1 — usage per day (date range + time-of-day window)
+app.get('/api/logs/by-day', async (req, res) => {
+    res.json(await logStore.byDay(rangeParams(req.query)));
+});
+
+// 4.12.x.1 — usage by hour of day
+app.get('/api/logs/by-hour', async (req, res) => {
+    res.json(await logStore.byHour(rangeParams(req.query)));
+});
+
+// 4.12.x.2 — usage by health region (เขตสุขภาพ)
+app.get('/api/logs/by-region', async (req, res) => {
+    res.json(await logStore.byRegion(rangeParams(req.query)));
+});
+
+// 4.12.x.2 — usage by province (จังหวัด); optional ?region=N
+app.get('/api/logs/by-province', async (req, res) => {
+    const opts = rangeParams(req.query);
+    if (req.query.region != null && req.query.region !== '') opts.region = parseInt(req.query.region, 10);
+    res.json(await logStore.byProvince(opts));
+});
+
+// 4.12.x.3 — usage by platform (mobile vs web)
+app.get('/api/logs/by-platform', async (req, res) => {
+    res.json(await logStore.byPlatform(rangeParams(req.query)));
+});
+
+// 4.12.x.4 / 4.12.2.5 — service units called (top N via ?limit=)
+app.get('/api/logs/by-unit', async (req, res) => {
+    const opts = rangeParams(req.query);
+    if (req.query.limit) opts.limit = parseInt(req.query.limit, 10);
+    res.json(await logStore.byUnit(opts));
+});
+
+// 4.12.2.6 — top N rooms by conversation duration (?limit=, default 5)
+app.get('/api/logs/longest-rooms', async (req, res) => {
+    const opts = rangeParams(req.query);
+    opts.limit = req.query.limit ? parseInt(req.query.limit, 10) : 5;
+    res.json(await logStore.longestRooms(opts));
+});
+
+// ── 404 handler – always JSON (never HTML, so clients can safely res.json()) ──
+app.use((req, res) => {
+    res.status(404).json({ error: 404, message: `Cannot ${req.method} ${req.originalUrl}` });
 });
 
 // ── Error handler ──────────────────────────────────────────────────────────────
