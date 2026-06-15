@@ -2,15 +2,10 @@
 export const API_BASE      = 'https://moph-meet.moph.go.th';
 export const MEETING_DOMAIN = 'moph-meetingroom.moph.go.th';
 
-/**
- * MANUAL_LOGIN_ENABLED — show the username/password login alongside Provider ID
- * (mirrors user-app-lite's manual login). The backend also enforces its own
- * MANUAL_LOGIN_ENABLED env; if disabled server-side, /api/auth returns 403 and
- * the form shows an error.
- */
-export const MANUAL_LOGIN_ENABLED = true;
-
-// Provider ID OAuth
+// ── Provider ID OAuth ───────────────────────────────────────────────────────
+// Note: username/password login is always available in the app (no flag). The
+// backend still has its own MANUAL_LOGIN_ENABLED env; if it is disabled there,
+// /api/auth returns 403 and the form shows an error.
 export const PROVIDER_ID_CLIENT_ID    = '01953bd5-fc1e-73d4-9142-7598d70c34dc';
 export const PROVIDER_ID_REDIRECT_URI = `${API_BASE}/auth/providerid/callback`;
 

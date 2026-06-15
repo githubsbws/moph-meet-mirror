@@ -7,7 +7,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { saveAuth, loadToken } from '../constants/storage';
-import { providerIdOAuthUrl, directLogin, MANUAL_LOGIN_ENABLED } from '../constants/api';
+import { providerIdOAuthUrl, directLogin } from '../constants/api';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -119,41 +119,39 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* ── Username / password login (multi-login, like user-app-lite) ── */}
-        {MANUAL_LOGIN_ENABLED && (
-          <View style={styles.reviewerBox}>
-            <Text style={styles.reviewerLabel}>หรือ เข้าสู่ระบบด้วย Username / Password</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Username (เช่น Admin หรือ test)"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={reviewUser}
-              onChangeText={setReviewUser}
-              editable={!authLoading}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              secureTextEntry
-              value={reviewPass}
-              onChangeText={setReviewPass}
-              editable={!authLoading}
-            />
-            <TouchableOpacity
-              style={[styles.btn, styles.btnReviewer, authLoading && styles.btnDisabled]}
-              onPress={handleDirectLogin}
-              disabled={authLoading}
-              activeOpacity={0.8}
-            >
-              {authLoading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.btnText}>เข้าสู่ระบบด้วย Username / Password</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+        {/* ── Username / password login — always on for mobile (no flag) ── */}
+        <View style={styles.reviewerBox}>
+          <Text style={styles.reviewerLabel}>หรือ เข้าสู่ระบบด้วย Username / Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Username (เช่น Admin หรือ test)"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={reviewUser}
+            onChangeText={setReviewUser}
+            editable={!authLoading}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            secureTextEntry
+            value={reviewPass}
+            onChangeText={setReviewPass}
+            editable={!authLoading}
+          />
+          <TouchableOpacity
+            style={[styles.btn, styles.btnReviewer, authLoading && styles.btnDisabled]}
+            onPress={handleDirectLogin}
+            disabled={authLoading}
+            activeOpacity={0.8}
+          >
+            {authLoading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.btnText}>เข้าสู่ระบบด้วย Username / Password</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         <Text style={styles.hint}>ผู้ป่วยสามารถใช้ลิงก์นัดหมายที่ได้รับจากเจ้าหน้าที่</Text>
       </View>

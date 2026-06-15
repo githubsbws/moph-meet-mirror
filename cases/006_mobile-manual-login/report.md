@@ -16,13 +16,12 @@ mobile app **มี** username/password login อยู่แล้ว (`directL
 แล้วปิดทิ้ง (UI label "Test Account Login" / "Sign In") — ไม่ใช่ feature ถาวร
 
 ## Fix (ทำให้เป็น login ถาวรเหมือน user-app-lite)
-- `moph-meet/constants/api.ts` — เปลี่ยน `REVIEWER_MODE` → `MANUAL_LOGIN_ENABLED` (default true)
-  พร้อมคอมเมนต์ว่าเป็น multi-login จริง; backend ยังบังคับ `MANUAL_LOGIN_ENABLED` env เองอีกชั้น
-  (ถ้าปิดฝั่ง server, `/api/auth` คืน 403 แล้ว form แสดง error)
-- `moph-meet/app/index.tsx` — import flag ใหม่, relabel UI ให้ตรงกับ user-app-lite:
-  "หรือ เข้าสู่ระบบด้วย Username / Password", placeholder "Username (เช่น Admin หรือ test)",
-  ปุ่ม "เข้าสู่ระบบด้วย Username / Password" (เดิม "Test Account Login" / "Sign In")
+- `moph-meet/app/index.tsx` — แสดงฟอร์ม username/password **เสมอ ไม่มี flag** (ทีมจัดการ flag/env ไม่ถนัด
+  จึงไม่ผูกกับเงื่อนไขใดๆ ในแอป), relabel UI: "หรือ เข้าสู่ระบบด้วย Username / Password",
+  placeholder "Username (เช่น Admin หรือ test)", ปุ่ม "เข้าสู่ระบบด้วย Username / Password"
+- `moph-meet/constants/api.ts` — เอา const `MANUAL_LOGIN_ENABLED` ออก (ไม่ใช้แล้ว) คงไว้แค่ `directLogin`
 - logic `directLogin` / `handleDirectLogin` เดิมถูกต้องอยู่แล้ว (POST `/api/auth` → `{token, user}` → saveAuth → /dashboard) ไม่ต้องแก้
+- **ไม่แตะ backend** — core-lite `MANUAL_LOGIN_ENABLED` env default = เปิด อยู่แล้ว
 
 ## Verification
 - get_diagnostics: `app/index.tsx`, `constants/api.ts` — No diagnostics (TS clean)
@@ -37,5 +36,5 @@ mobile app **มี** username/password login อยู่แล้ว (`directL
 
 ## Follow-ups / risks
 - manual login accounts ฝั่ง server เป็น hardcoded fallback (Admin/test) ใน core-lite — production จริงควรตั้ง `MANUAL_LOGIN_ACCOUNTS` env แทน
-- ต้อง build app ใหม่เพื่อให้ flag มีผล (เป็น compile-time constant ไม่ใช่ remote config)
-- ถ้าไม่ต้องการ username/password บน production store build ให้ตั้ง `MANUAL_LOGIN_ENABLED = false` ก่อน build
+- ฝั่ง app เปิด manual login เสมอ (ไม่มี flag) — ถ้าภายหลังต้องปิดสำหรับ store build ต้องแก้โค้ด `app/index.tsx` (เอา View ออก) แล้ว build ใหม่ หรือไปปิดที่ backend env `MANUAL_LOGIN_ENABLED=false` (จะทำให้ `/api/auth` คืน 403)
+- ต้อง build app ใหม่ (Expo/EAS) การเปลี่ยนแปลงถึงมีผล
