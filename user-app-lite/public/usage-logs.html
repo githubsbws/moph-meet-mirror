@@ -138,7 +138,7 @@
       <h2 class="card-title text-sm mb-2">⏱️ 5 ห้องประชุมที่ใช้งานนานที่สุด</h2>
       <div class="overflow-x-auto">
         <table class="table table-sm w-full">
-          <thead><tr><th>#</th><th>ห้อง</th><th>ผู้สร้าง</th><th class="text-center">ระยะเวลา</th><th>วันที่</th></tr></thead>
+          <thead><tr><th>#</th><th>ห้อง (ref)</th><th>ประเภท</th><th class="text-center">ระยะเวลา</th><th>วันที่</th></tr></thead>
           <tbody id="longest-body"><tr><td colspan="5" class="text-center text-base-content/40 py-6">กำลังโหลด...</td></tr></tbody>
         </table>
       </div>
@@ -296,8 +296,8 @@ async function loadLongest() {
   if (!rows.length) { tb.innerHTML = '<tr><td colspan="5" class="text-center text-base-content/40 py-6">ยังไม่มีข้อมูล</td></tr>'; return; }
   tb.innerHTML = rows.map((r, i) => `<tr>
     <td>${i + 1}</td>
-    <td class="text-xs">${esc(r.room_name || r.room_id || '—')}</td>
-    <td class="text-xs">${esc(r.doctor_name || '—')}</td>
+    <td class="text-xs font-mono">${esc(r.room_ref || '—')}</td>
+    <td class="text-xs">${r.room_type === 'exam' ? '🩺 ตรวจ' : '📹 ประชุม'}</td>
     <td class="text-center font-semibold">${fmtDur(r.duration_sec)}</td>
     <td class="text-xs">${fmtDate(r.created_at)}</td></tr>`).join('');
 }

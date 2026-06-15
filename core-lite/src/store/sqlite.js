@@ -244,27 +244,40 @@ const logStore = {
     `).all(Math.min(months, 60));
   },
 
+  // PII-safe: number of distinct doctors active per period + their aggregate
+  // activity counts — but NO doctor identities (no id/name). The dashboard shows
+  // "how many doctors / how active", not who.
   byDoctor(months = 3) {
-    return _logDb.prepare(`
-      SELECT doctor_id, doctor_name,
+    const row = _logDb.prepare(`
+      SELECT COUNT(DISTINCT doctor_id) as doctors,
              SUM(CASE WHEN event IN ('room_created','reserved_room_created') THEN 1 ELSE 0 END) as rooms,
              SUM(CASE WHEN event = 'patient_admitted' THEN 1 ELSE 0 END) as admitted,
-             SUM(CASE WHEN event = 'invite_generated' THEN 1 ELSE 0 END) as invites,
-             COUNT(*) as total_events,
-             MIN(ts) as first_seen, MAX(ts) as last_seen
+             SUM(CASE WHEN event = 'invite_generated' THEN 1 ELSE 0 END) as invites
       FROM usage_logs
       WHERE doctor_id IS NOT NULL AND ts >= datetime('now', '-' || ? || ' months', 'localtime')
-      GROUP BY doctor_id ORDER BY total_events DESC
-    `).all(Math.min(months, 24));
+    `).get(Math.min(months, 24));
+    return row || { doctors: 0, rooms: 0, admitted: 0, invites: 0 };
   },
 
+  // PII-safe recent activity: event type + time + masked room ref + area only.
+  // No doctor/patient names or CIDs (dashboard shows counts, not identities).
   recent(limit = 50) {
-    return _logDb.prepare(`
-      SELECT id, ts, event, room_id, room_type, room_name,
-             doctor_id, doctor_name, patient_name, patient_cid,
-             platform, unit_hcode, province, region, duration_sec
+    const rows = _logDb.prepare(`
+      SELECT id, ts, event, room_id, room_type,
+             platform, province, region, duration_sec
       FROM usage_logs ORDER BY id DESC LIMIT ?
     `).all(Math.min(limit, 500));
+    return rows.map(r => ({
+      id: r.id,
+      ts: r.ts,
+      event: r.event,
+      room_ref: r.room_id ? String(r.room_id).slice(0, 6) : '—',
+      room_type: r.room_type,
+      platform: r.platform,
+      province: r.province,
+      region: r.region,
+      duration_sec: r.duration_sec,
+    }));
   },
 
   // ── Dashboard queries (TOR 4.12.x) ──────────────────────────────────────────
@@ -366,17 +379,29 @@ const logStore = {
     `).all(...params, limit);
   },
 
-  // 4.12.2.6 — top N rooms by conversation duration (longest first)
+  // 4.12.2.6 — top N rooms by conversation duration (longest first).
+  // PII-safe: returns NO room name / doctor name — only an opaque room ref,
+  // type, area (province/region) and duration.
   longestRooms(opts = {}) {
     const { clause, params } = this._range(opts);
     const limit = Math.min(opts.limit || 5, 100);
-    return _logDb.prepare(`
-      SELECT room_id, room_name, room_type, doctor_name, province, region,
+    const rows = _logDb.prepare(`
+      SELECT room_id, room_type, province, region,
              MAX(duration_sec) as duration_sec,
              MIN(ts) as created_at
       FROM usage_logs ${clause}${clause ? ' AND' : 'WHERE'} duration_sec IS NOT NULL
       GROUP BY room_id ORDER BY duration_sec DESC LIMIT ?
     `).all(...params, limit);
+    // Mask the room id to a short non-identifying ref (room ids are random
+    // hashes, but we still avoid exposing the full join key).
+    return rows.map(r => ({
+      room_ref: r.room_id ? String(r.room_id).slice(0, 6) : '—',
+      room_type: r.room_type,
+      province: r.province,
+      region: r.region,
+      duration_sec: r.duration_sec,
+      created_at: r.created_at,
+    }));
   },
 };
 
