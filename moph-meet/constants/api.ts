@@ -2,6 +2,14 @@
 export const API_BASE      = 'https://moph-meet.moph.go.th';
 export const MEETING_DOMAIN = 'moph-meetingroom.moph.go.th';
 
+/**
+ * MANUAL_LOGIN_ENABLED — show the username/password login alongside Provider ID
+ * (mirrors user-app-lite's manual login). The backend also enforces its own
+ * MANUAL_LOGIN_ENABLED env; if disabled server-side, /api/auth returns 403 and
+ * the form shows an error.
+ */
+export const MANUAL_LOGIN_ENABLED = true;
+
 // Provider ID OAuth
 export const PROVIDER_ID_CLIENT_ID    = '01953bd5-fc1e-73d4-9142-7598d70c34dc';
 export const PROVIDER_ID_REDIRECT_URI = `${API_BASE}/auth/providerid/callback`;
@@ -29,4 +37,15 @@ export async function apiFetch(path: string, token: string, opts: RequestInit = 
     },
   });
   return res;
+}
+
+/** Username/password login via core-lite /api/auth (mirrors user-app-lite). */
+export async function directLogin(username: string, password: string): Promise<{ token: string; user: any }> {
+  const res = await fetch(`${API_BASE}/api/auth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) throw new Error('invalidUsernameOrPassword');
+  return res.json();
 }
