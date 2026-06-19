@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- 
+      Allow the app to trust System CAs and User-installed CAs. 
+      This is crucial for older Android versions (7.0+) to trust internal 
+      certificates or incomplete chains if the user installs the CA.
+    -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- 
+      Specific bypass for the MOPH domain to ensure it works even if the 
+      Intermediate certificate is missing in the system trust store.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">moph-meet.moph.go.th</domain>
+        <domain includeSubdomains="true">moph-meetingroom.moph.go.th</domain>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

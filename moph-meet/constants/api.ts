@@ -38,9 +38,19 @@ export async function apiFetch(path: string, token: string, opts: RequestInit = 
 export async function directLogin(username: string, password: string): Promise<{ token: string; user: any }> {
   const res = await fetch(`${API_BASE}/api/auth`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json; charset=utf-8',
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Mobile Safari/537.36'
+    },
     body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error('invalidUsernameOrPassword');
-  return res.json();
+console.log('Status:', res.status);
+const body = await res.text();
+console.log('Body:', body);
+
+if (!res.ok) throw new Error(`Login failed: ${res.status} - ${body}`);
+return JSON.parse(body)
+  //if (!res.ok) throw new Error('invalidUsernameOrPassword');
+  //return res.json();
 }
