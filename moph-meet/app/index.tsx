@@ -79,10 +79,14 @@ export default function LoginScreen() {
       const { token, user } = await directLogin(reviewUser.trim(), reviewPass);
       await saveAuth(token, user);
       router.replace('/dashboard');
-    } catch {
+    } catch (err) {
       setAuthLoading(false);
-      Alert.alert('เข้าสู่ระบบไม่สำเร็จ', 'Username หรือ Password ไม่ถูกต้อง');
+      Alert.alert('เข้าสู่ระบบไม่สำเร็จ', String(err));
     }
+    // } catch {
+    //   setAuthLoading(false);
+    //   Alert.alert('เข้าสู่ระบบไม่สำเร็จ', 'Username หรือ Password ไม่ถูกต้อง');
+    // }
   }
 
   if (loading) {

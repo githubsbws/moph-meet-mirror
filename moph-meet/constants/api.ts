@@ -45,10 +45,7 @@ export async function directLogin(username: string, password: string): Promise<{
     },
     body: JSON.stringify({ username, password }),
   });
-console.log('Status:', res.status);
 const body = await res.text();
-console.log('Body:', body);
-
 if (!res.ok) throw new Error(`Login failed: ${res.status} - ${body}`);
 return JSON.parse(body)
   //if (!res.ok) throw new Error('invalidUsernameOrPassword');
