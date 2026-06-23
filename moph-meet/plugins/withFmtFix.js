@@ -16,6 +16,7 @@ const withFmtFix = (config) => {
       if (content.includes("FMT_USE_CONSTEVAL")) return config;
 
       const patch = `
+post_install do |installer|
   installer.pods_project.targets.each do |target|
     if target.name == 'fmt' || target.name == 'RCT-Folly'
       target.build_configurations.each do |config|
@@ -24,12 +25,11 @@ const withFmtFix = (config) => {
         config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'FMT_USE_CONSTEVAL=0'
       end
     end
-  end`;
+  end
+end
+`;
 
-      content = content.replace(
-        /post_install do \|installer\|/,
-        `post_install do |installer|\n${patch}`
-      );
+      content = content + patch;
       fs.writeFileSync(podfilePath, content);
       return config;
     },
