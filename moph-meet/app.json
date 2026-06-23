@@ -9,15 +9,18 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "buildNumber": "1",
       "supportsTablet": true,
-      "bundleIdentifier": "th.go.moph.meet",
+      "bundleIdentifier": "th.go.moph.moph-meet",
       "infoPlist": {
         "NSCameraUsageDescription": "MOPH Meet ต้องการใช้กล้องสำหรับวิดีโอคอล",
-        "NSMicrophoneUsageDescription": "MOPH Meet ต้องการใช้ไมโครโฟนสำหรับวิดีโอคอล"
+        "NSMicrophoneUsageDescription": "MOPH Meet ต้องการใช้ไมโครโฟนสำหรับวิดีโอคอล",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "th.go.moph.meet",
+      "targetSdkVersion": 35,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#1b7a43"
@@ -34,6 +37,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+       "./plugins/withFmtFix",
       "expo-router",
       [
         "expo-splash-screen",
@@ -48,6 +52,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "2ba5fef6-62ca-4a4b-ac91-5775592a4df6"
+      }
     }
   }
 }
