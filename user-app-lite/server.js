@@ -35,14 +35,15 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Cookie helpers ─────────────────────────────────────────────────────────────
-function setAuthCookies(res, token, user) {
-  const cookieOpts = { httpOnly: false, sameSite: 'lax', maxAge: 86400000 };
-  res.cookie('token', token, cookieOpts);
-  // Store compact user info only (strip huge ProviderID JWT & full org array)
+// Build a compact user object (strip the huge ProviderID JWT/profile & full org
+// array). Used for both the web cookie and the mobile deep-link redirect — the
+// full user object is large and, when packed into the mobile redirect URL,
+// overflows nginx's proxy_buffer_size → 502. Keep only fields the apps read.
+function compactUser(user) {
   const u = user || {};
   const org0 = u.organization?.[0] || {};
   const pid  = u.providerIDProfile  || {};
-  const compact = {
+  return {
     username: u.username, display: u.display, roles: u.roles,
     hcode5: u.hcode5, hcode9: u.hcode9, clinicCode: u.clinicCode,
     dateOfBirth: u.dateOfBirth, gender: u.gender,
@@ -55,8 +56,13 @@ function setAuthCookies(res, token, user) {
       hcode: org0.hcode, department: org0.department,
     }] : undefined,
   };
+}
+
+function setAuthCookies(res, token, user) {
+  const cookieOpts = { httpOnly: false, sameSite: 'lax', maxAge: 86400000 };
+  res.cookie('token', token, cookieOpts);
   try {
-    const str = JSON.stringify(compact);
+    const str = JSON.stringify(compactUser(user));
     if (str.length <= 3800) res.cookie('user_json', str, cookieOpts);
   } catch (_) {}
 }
@@ -136,8 +142,10 @@ app.get('/auth/providerid/callback', async (req, res) => {
     try { data = JSON.parse(rawText); } catch (_) { return res.redirect('/login.html?error=providerid_fail'); }
     if (!data.data) return res.redirect('/login.html?error=providerid_no_data');
     if (isMobile) {
+      // Send a COMPACT user — the full user object overflows nginx's proxy
+      // buffer when URL-encoded into the redirect Location header → 502.
       const token = encodeURIComponent(data.data.token);
-      const user  = encodeURIComponent(JSON.stringify(data.data.user));
+      const user  = encodeURIComponent(JSON.stringify(compactUser(data.data.user)));
       return res.redirect(`mophmeet://auth?token=${token}&user=${user}`);
     }
     const user = { ...data.data.user, roles: ['admin', 'staff'] };
