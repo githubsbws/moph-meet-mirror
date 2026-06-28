@@ -719,6 +719,33 @@ app.get('/api/logs/longest-rooms', async (req, res) => {
 
 
 
+
+// ── Unit Search API (TOR 4.2 / 4.3 / 4.10.3) ────────────────────────────────
+// GET /api/units/search?q=<text>&limit=20
+// Searches hospital name / hcode using the hcode map (area.js).
+// If hcode-to-area.js is not generated, returns empty list gracefully.
+
+app.get('/api/units/search', auth(), (req, res) => {
+    const q     = String(req.query.q || '').trim().toLowerCase();
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    if (!q) return res.json([]);
+
+    // Try to access HCODE_TO_AREA via the area module
+    let map = {};
+    try { ({ HCODE_TO_AREA: map } = require('./data/hcode-to-area')); } catch (_) {}
+
+    const results = [];
+    for (const [hcode, info] of Object.entries(map)) {
+        const hospital = (info.hospital || '').toLowerCase();
+        const province = (info.province || '').toLowerCase();
+        if (hospital.includes(q) || hcode.includes(q) || province.includes(q)) {
+            results.push({ hcode, hospital: info.hospital, province: info.province, region: info.region });
+            if (results.length >= limit) break;
+        }
+    }
+    res.json(results);
+});
+
 // ── HIS Export API (TOR 4.7 + 4.10.7) ───────────────────────────────────────
 // POST /api/his/export { roomId } → aggregate vitals + room data → POST to HIS
 // HIS_ENDPOINT env (default = demo-his at localhost:3501)
