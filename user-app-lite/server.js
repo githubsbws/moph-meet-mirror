@@ -19,6 +19,9 @@ const MEETING_DOMAIN         = process.env.MEETING_DOMAIN;
 const PROVIDER_ID_CLIENT_ID  = process.env.PROVIDER_ID_CLIENT_ID;
 const PROVIDER_ID_REDIRECT_URI = process.env.PROVIDER_ID_REDIRECT_URI;
 const MANUAL_LOGIN_ENABLED   = process.env.MANUAL_LOGIN_ENABLED !== 'false';
+const THAID_CLIENT_ID        = process.env.THAID_CLIENT_ID || '';
+const THAID_REDIRECT_URI     = process.env.THAID_REDIRECT_URI || '';
+const THAID_AUTH_URL         = process.env.THAID_AUTH_URL || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/';
 
 function apiFetch(url, opts = {}) {
   if (url && url.startsWith('https://')) opts = { ...opts, agent: _insecureAgent };
@@ -79,6 +82,9 @@ app.get('/config', (_req, res) => {
     meetingDomain:         MEETING_DOMAIN,
     meetingUrl:            MEETING_URL,
     manualLoginEnabled:    MANUAL_LOGIN_ENABLED,
+    thaidClientId:         THAID_CLIENT_ID,
+    thaidRedirectUri:      THAID_REDIRECT_URI,
+    thaidAuthUrl:          THAID_AUTH_URL,
   });
 });
 
@@ -153,6 +159,41 @@ app.get('/auth/providerid/callback', async (req, res) => {
     return res.redirect('/');
   } catch (err) {
     console.error('[ProviderID] error:', err.message);
+    return res.redirect('/login.html?error=server');
+  }
+});
+
+
+// ── GET /auth/thaid/callback (TOR 4.6) ────────────────────────────────────────
+app.get('/auth/thaid/callback', async (req, res) => {
+  const { code, state } = req.query;
+  const isMobile = state === 'mobile';
+  if (!code) return res.redirect('/login.html?error=no_code');
+  try {
+    const r = await apiFetch(`${CORE_BASE}/api/auth/thaiD`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const rawText = await r.text();
+    if (!r.ok) {
+      let errMsg = 'thaid_fail';
+      try { errMsg = JSON.parse(rawText).message || errMsg; } catch (_) {}
+      console.error('[ThaID] auth failed:', rawText);
+      return res.redirect(`/login.html?error=${encodeURIComponent(errMsg)}`);
+    }
+    let data;
+    try { data = JSON.parse(rawText); } catch (_) { return res.redirect('/login.html?error=thaid_fail'); }
+    if (!data.token) return res.redirect('/login.html?error=thaid_no_token');
+    if (isMobile) {
+      const token = encodeURIComponent(data.token);
+      const user  = encodeURIComponent(JSON.stringify(compactUser(data.user)));
+      return res.redirect(`mophmeet://auth?token=${token}&user=${user}`);
+    }
+    setAuthCookies(res, data.token, data.user);
+    return res.redirect('/');
+  } catch (err) {
+    console.error('[ThaID] error:', err.message);
     return res.redirect('/login.html?error=server');
   }
 });

@@ -216,6 +216,83 @@ app.post('/api/auth/providerID', async (req, res, next) => {
     }
 });
 
+
+// ── Auth: ThaID (TOR 4.6 — ช่องทางที่ 3) ─────────────────────────────────────
+// TODO: เมื่อได้ THAID_* credentials จาก สธ ให้กรอก env และเอา TODO notice ออก
+// โครงเดียวกับ POST /api/auth/providerID — exchange code → token → profile → session
+const THAID_CLIENT_ID    = process.env.THAID_CLIENT_ID    || '';
+const THAID_CLIENT_SECRET= process.env.THAID_CLIENT_SECRET|| '';
+const THAID_REDIRECT_URI = process.env.THAID_REDIRECT_URI || '';
+const THAID_TOKEN_URL    = process.env.THAID_TOKEN_URL    || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/';
+const THAID_PROFILE_URL  = process.env.THAID_PROFILE_URL  || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/userinfo/';
+
+app.post('/api/auth/thaiD', async (req, res, next) => {
+    // If credentials not configured yet, return a clear error (not 502/HTML)
+    if (!THAID_CLIENT_ID || !THAID_CLIENT_SECRET || !THAID_REDIRECT_URI) {
+        return res.status(503).json({
+            error: 503,
+            message: 'thaiDNotConfigured',
+            detail: 'Set THAID_CLIENT_ID / THAID_CLIENT_SECRET / THAID_REDIRECT_URI env vars to enable ThaID login'
+        });
+    }
+
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 400, message: 'code required' });
+
+    try {
+        // Step 1 — exchange code → ThaID access token
+        const tokenRes = await fetch(THAID_TOKEN_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type:    'authorization_code',
+                client_id:     THAID_CLIENT_ID,
+                client_secret: THAID_CLIENT_SECRET,
+                code,
+                redirect_uri:  THAID_REDIRECT_URI,
+            }).toString(),
+        });
+        const tokenJson = await tokenRes.json();
+        const accessToken = tokenJson?.access_token;
+        if (!accessToken) {
+            return res.status(401).json({ error: 401, message: tokenJson?.error || 'thaiDTokenFailed', detail: tokenJson });
+        }
+
+        // Step 2 — get user info / profile
+        const profileRes = await fetch(THAID_PROFILE_URL, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const profile = await profileRes.json();
+        if (!profile?.pid && !profile?.sub) {
+            return res.status(401).json({ error: 401, message: 'thaiDProfileFailed' });
+        }
+
+        // Step 3 — build session (use pid/sub as username; ThaID users are 'staff')
+        const uid  = profile.pid || profile.sub;
+        const name = [profile.title_th, profile.fname, profile.lname].filter(Boolean).join('') || uid;
+        const user = {
+            username: uid,
+            display:  name,
+            roles:    ['staff'],
+            roleMaps: [{ roleName: 'staff' }],
+            organization: null,
+            thaiDProfile: { pid: profile.pid, name_th: name },
+            authMode: 'thaiD',
+        };
+        const token = require('crypto').createHash('sha256')
+            .update(new Date().toISOString() + uid + require('crypto').randomInt(1000))
+            .digest('hex');
+        await tokenStorage.set(token, user);
+
+        return res.json({ token, user });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// Redirect helper: /auth/thaid/callback → handled by user-app-lite server.js
+// (same pattern as /auth/providerid/callback)
+
 // ── Auth: Guest / temporary token ─────────────────────────────────────────────
 app.post('/api/auth/guest', async (req, res, next) => {
     try {
