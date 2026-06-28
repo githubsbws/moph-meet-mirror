@@ -68,6 +68,37 @@ function buildManualUser(account) {
     };
 }
 
+
+// ── LINE OA Notification helper (TOR 4.11.1) ─────────────────────────────────
+// Non-blocking: failure is logged, never delays room creation.
+// Set LINE_CHANNEL_TOKEN + LINE_TARGET (userId or groupId) in env to enable.
+
+const LINE_CHANNEL_TOKEN = process.env.LINE_CHANNEL_TOKEN || '';
+const LINE_TARGET        = process.env.LINE_TARGET        || '';
+
+async function notifyLine(message) {
+    if (!LINE_CHANNEL_TOKEN || !LINE_TARGET) {
+        console.log('[notify] LINE not configured — skip. Set LINE_CHANNEL_TOKEN + LINE_TARGET to enable.');
+        return;
+    }
+    try {
+        await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${LINE_CHANNEL_TOKEN}`,
+            },
+            body: JSON.stringify({
+                to: LINE_TARGET,
+                messages: [{ type: 'text', text: message }],
+            }),
+        });
+        console.log('[notify] LINE push sent');
+    } catch (e) {
+        console.warn('[notify] LINE push failed:', e.message);
+    }
+}
+
 // ── App ────────────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
@@ -633,6 +664,9 @@ app.post('/api/meet/reserved', async (req, res) => {
     // hcode may come from the HIS payload (hcode/hospitalCode/account_hcode); null if not sent.
     const reservedHcode = (req.body.hcode || req.body.hospitalCode || req.body.account_hcode || '').toString().trim() || null;
     const reservedDuration = Math.max(0, Math.round((new Date(room.endtime) - new Date(room.starttime)) / 1000)) || null;
+    // TOR 4.11.1 — notify LINE OA (non-blocking)
+    const _reservedLink = `${APP_BASE_URL}/exam/${id}`;
+    notifyLine(`📅 จองห้องตรวจ: ${name}\nแพทย์: ${doctorDisplay}\nลิงก์: ${_reservedLink}`).catch(() => {});
     await logStore.insert('reserved_room_created', { roomId: id, roomType: 'exam', roomName: name, doctorId, doctorName: doctorDisplay, platform: 'web', unitHcode: reservedHcode, durationSec: reservedDuration, meta: { startTime: room.starttime, endTime: room.endtime } });
 
     // Full absolute URLs – include token so 3rd-party apps that only use the
