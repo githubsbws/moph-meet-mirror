@@ -830,6 +830,16 @@ window.addEventListener('beforeunload', () => { if (_recRecorder) _recRecorder.s
 
 <script>
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
+
+// ── Presence ping (TOR 4.4) ───────────────────────────────────────────────────
+(function startPresencePing() {
+  async function ping() {
+    try { await fetch('/api/presence/ping', { method: 'POST', credentials: 'include' }); } catch (_) {}
+  }
+  ping();
+  setInterval(ping, 20 * 1000);
+})();
+
 </script>
 </body>
 </html>

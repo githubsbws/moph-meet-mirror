@@ -720,6 +720,36 @@ app.get('/api/logs/longest-rooms', async (req, res) => {
 
 
 
+
+// ── Presence API (TOR 4.4) — online/offline indicator ────────────────────────
+// Uses NodeCache (already imported) — last-seen per user, TTL 90s.
+// online = ping received within PRESENCE_ONLINE_WINDOW_MS.
+const _presenceCache = new NodeCache({ stdTTL: 90, checkperiod: 30 });
+const PRESENCE_ONLINE_WINDOW_MS = 60 * 1000; // 60s
+
+// POST /api/presence/ping — call every ~20s while logged in
+app.post('/api/presence/ping', auth(), (req, res) => {
+    const uid = res.locals.user?.username;
+    if (!uid) return res.status(401).json({ error: 401, message: 'unauthorized' });
+    _presenceCache.set(uid, Date.now());
+    res.json({ ok: true });
+});
+
+// GET /api/presence?ids=a,b,c — check online status for a list of user IDs
+app.get('/api/presence', auth(), (req, res) => {
+    const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (ids.length === 0 || ids.length > 50) {
+        return res.status(400).json({ error: 400, message: 'ids param required (comma-separated, max 50)' });
+    }
+    const now = Date.now();
+    const result = {};
+    for (const id of ids) {
+        const lastSeen = _presenceCache.get(id);
+        result[id] = (lastSeen && (now - lastSeen) < PRESENCE_ONLINE_WINDOW_MS) ? 'online' : 'offline';
+    }
+    res.json(result);
+});
+
 // ── Unit Search API (TOR 4.2 / 4.3 / 4.10.3) ────────────────────────────────
 // GET /api/units/search?q=<text>&limit=20
 // Searches hospital name / hcode using the hcode map (area.js).
