@@ -15,7 +15,9 @@
       "infoPlist": {
         "NSCameraUsageDescription": "MOPH Meet ต้องการใช้กล้องสำหรับวิดีโอคอล",
         "NSMicrophoneUsageDescription": "MOPH Meet ต้องการใช้ไมโครโฟนสำหรับวิดีโอคอล",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSBluetoothPeripheralUsageDescription": "ใช้ Bluetooth เพื่อเชื่อมต่ออุปกรณ์ทางการแพทย์ (TOR 4.10.6)",
+        "NSBluetoothAlwaysUsageDescription": "ใช้ Bluetooth เพื่อเชื่อมต่ออุปกรณ์ทางการแพทย์ (TOR 4.10.6)"
       }
     },
     "android": {
@@ -28,7 +30,12 @@
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
-        "INTERNET"
+        "INTERNET",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -37,7 +44,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-       "./plugins/withFmtFix",
+      "./plugins/withFmtFix",
       "expo-router",
       [
         "expo-splash-screen",
@@ -48,7 +55,16 @@
           "backgroundColor": "#1b7a43"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "central"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
