@@ -211,6 +211,8 @@ app.get('/room/:id',  (_req, res) => res.sendFile(path.join(__dirname, 'public',
 app.get('/exam/:id',  (_req, res) => res.sendFile(path.join(__dirname, 'public', 'meet.html')));
 app.get('/queue/:id', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'queue.html')));
 app.get('/usage-logs',(_req, res) => res.sendFile(path.join(__dirname, 'public', 'usage-logs.html')));
+app.get('/vitals',    (_req, res) => res.sendFile(path.join(__dirname, 'public', 'vitals.html')));
+app.get('/vitals/:id',(_req, res) => res.sendFile(path.join(__dirname, 'public', 'vitals.html')));
 
 // ── ABS upload credentials ─────────────────────────────────────────────────────
 app.get('/api/media-upload/credentials', (req, res) => {

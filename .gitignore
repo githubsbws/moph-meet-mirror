@@ -9,3 +9,10 @@ screen*.png
 test-results/
 nul
 node_modules/
+
+# --- TOR completion plan — remaining new files (pending review) ---
+core-lite/src/store/vitals.js
+user-app-lite/views/vitals.ejs
+moph-meet/app/vitals/
+moph-meet/app/devices.tsx
+moph-meet/constants/ble.ts

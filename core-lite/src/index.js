@@ -6,7 +6,7 @@ const cors = require('cors');
 const { createHash, randomInt } = require('crypto');
 const NodeCache = require('node-cache');
 const jwt = require('jsonwebtoken');
-const { tokenStorage, roomStore, profileStore, logStore } = require('./store');
+const { tokenStorage, roomStore, profileStore, logStore, vitalStore } = require('./store');
 const { auth } = require('./middlewares/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_me_jwt_secret';
@@ -715,6 +715,54 @@ app.get('/api/logs/longest-rooms', async (req, res) => {
     const opts = rangeParams(req.query);
     opts.limit = req.query.limit ? parseInt(req.query.limit, 10) : 5;
     res.json(await logStore.longestRooms(opts));
+});
+
+
+// ── Vital Signs API (TOR 4.10.5) ────────────────────────────────────────────
+// Metrics: weight|height|temp|spo2|sys|dia|map|pr|rr|pulse|glucose|fhr|toco
+// Source:  manual | ble
+
+// POST /api/vitals — record a single vital sign reading
+app.post('/api/vitals', auth(), (req, res) => {
+    const { roomId, patientKey, deviceId, deviceType, metric, value, unit, source, organization, recordedAt } = req.body;
+    if (!metric || value === undefined || value === null || value === '') {
+        return res.status(400).json({ error: 400, message: 'metric and value are required' });
+    }
+    vitalStore.insert({ roomId, patientKey, deviceId, deviceType, metric, value, unit, source, organization, recordedAt });
+    res.status(201).json({ ok: true });
+});
+
+// POST /api/vitals/batch — record multiple readings at once (BLE device dump)
+app.post('/api/vitals/batch', auth(), (req, res) => {
+    const records = req.body;
+    if (!Array.isArray(records) || records.length === 0) {
+        return res.status(400).json({ error: 400, message: 'body must be a non-empty array' });
+    }
+    if (records.length > 200) {
+        return res.status(400).json({ error: 400, message: 'batch limit 200 records' });
+    }
+    for (const r of records) {
+        if (!r.metric || r.value === undefined || r.value === null || r.value === '') {
+            return res.status(400).json({ error: 400, message: 'each record needs metric + value' });
+        }
+    }
+    vitalStore.insertBatch(records);
+    res.status(201).json({ ok: true, count: records.length });
+});
+
+// GET /api/vitals?roomId= — list vitals for a room
+app.get('/api/vitals', auth(), (req, res) => {
+    const { roomId, patientKey } = req.query;
+    if (!roomId && !patientKey) {
+        return res.status(400).json({ error: 400, message: 'roomId or patientKey required' });
+    }
+    const rows = roomId ? vitalStore.byRoom(roomId) : vitalStore.byPatient(patientKey);
+    res.json(rows);
+});
+
+// GET /api/rooms/:id/vitals/latest — latest value per metric for a room
+app.get('/api/rooms/:id/vitals/latest', auth(), (req, res) => {
+    res.json(vitalStore.latestByRoom(req.params.id));
 });
 
 // ── 404 handler – always JSON (never HTML, so clients can safely res.json()) ──
