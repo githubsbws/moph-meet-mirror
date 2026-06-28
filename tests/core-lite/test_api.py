@@ -435,3 +435,42 @@ class TestVitals:
         # Room not found check not enforced in vitals (returns empty list)
         assert r.status_code in (200, 404)
         assert r.headers.get("content-type", "").startswith("application/json")
+
+
+class TestHisExport:
+    """TOR 4.7 + 4.10.7 — HIS export endpoint"""
+
+    def test_export_missing_room_id(self, api, auth_headers):
+        r = api.post("/api/his/export", json={}, headers=auth_headers)
+        assert r.status_code == 400
+        assert "roomId" in r.json().get("message", "")
+
+    def test_export_room_not_found(self, api, auth_headers):
+        r = api.post("/api/his/export", json={"roomId": "nonexistent_xxx"}, headers=auth_headers)
+        assert r.status_code == 404
+
+    def test_export_no_vitals(self, api, auth_headers):
+        # Create a fresh room with no vitals
+        cr = api.post("/api/rooms", json={"type": "exam"}, headers=auth_headers)
+        room_id = cr.json()["room"]["id"]
+        r = api.post("/api/his/export", json={"roomId": room_id}, headers=auth_headers)
+        assert r.status_code == 400
+        assert "vital" in r.json().get("message", "").lower()
+
+    def test_export_with_vitals(self, api, auth_headers, exam_room_id):
+        # Insert at least one vital first
+        api.post("/api/vitals", json={
+            "roomId": exam_room_id, "deviceType": "thermometer",
+            "metric": "temp", "value": "37.0", "unit": "°C", "source": "manual",
+        }, headers=auth_headers)
+        r = api.post("/api/his/export", json={"roomId": exam_room_id}, headers=auth_headers)
+        # 200 (HIS up) or 502 (demo-his not running in CI) — both are valid
+        assert r.status_code in (200, 502)
+        data = r.json()
+        if r.status_code == 200:
+            assert data.get("ok") is True
+            assert data.get("vitalCount", 0) > 0
+
+    def test_export_no_auth(self, api, exam_room_id):
+        r = api.post("/api/his/export", json={"roomId": exam_room_id})
+        assert r.status_code == 401

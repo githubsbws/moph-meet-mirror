@@ -718,6 +718,74 @@ app.get('/api/logs/longest-rooms', async (req, res) => {
 });
 
 
+
+// ── HIS Export API (TOR 4.7 + 4.10.7) ───────────────────────────────────────
+// POST /api/his/export { roomId } → aggregate vitals + room data → POST to HIS
+// HIS_ENDPOINT env (default = demo-his at localhost:3501)
+// Non-blocking: failure is logged but never breaks room flow.
+
+const HIS_ENDPOINT = (process.env.HIS_ENDPOINT || 'http://localhost:3501').replace(/\/$/, '');
+
+app.post('/api/his/export', auth(), async (req, res) => {
+    const { roomId } = req.body;
+    if (!roomId) return res.status(400).json({ error: 400, message: 'roomId required' });
+
+    const room = await roomStore.get(roomId);
+    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+
+    const vitals = vitalStore.byRoom(roomId);
+    if (!vitals || vitals.length === 0) {
+        return res.status(400).json({ error: 400, message: 'no vitals recorded for this room' });
+    }
+
+    // Build export payload — field names follow สธ HL7-FHIR-lite schema
+    // (adjust mapping per สธ spec when available; comment shows intent)
+    const payload = {
+        sessionId:    room.id,
+        sessionName:  room.name,
+        sessionType:  room.type,
+        startTime:    room.starttime,
+        endTime:      room.endtime,
+        doctorId:     room.ownerId,
+        doctorName:   room.ownerDisplay,
+        vitals: vitals.map(v => ({
+            metric:      v.metric,
+            value:       v.value,
+            unit:        v.unit,
+            deviceType:  v.device_type,
+            source:      v.source,
+            recordedAt:  v.recorded_at,
+        })),
+        exportedAt: new Date().toISOString(),
+    };
+
+    let success = false;
+    let hisStatus = null;
+    try {
+        const hisRes = await fetch(`${HIS_ENDPOINT}/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        hisStatus = hisRes.status;
+        success = hisRes.ok;
+    } catch (e) {
+        console.error('[HIS] export failed:', e.message);
+    }
+
+    // Log the result regardless
+    await logStore.insert('his_exported', {
+        roomId, roomType: room.type, roomName: room.name,
+        doctorId: room.ownerId, doctorName: room.ownerDisplay,
+        meta: { success, hisStatus, vitalCount: vitals.length },
+    });
+
+    if (success) {
+        return res.json({ ok: true, vitalCount: vitals.length, hisStatus });
+    }
+    return res.status(502).json({ error: 502, message: 'HIS endpoint unreachable or returned error', hisStatus });
+});
+
 // ── Vital Signs API (TOR 4.10.5) ────────────────────────────────────────────
 // Metrics: weight|height|temp|spo2|sys|dia|map|pr|rr|pulse|glucose|fhr|toco
 // Source:  manual | ble

@@ -29,6 +29,8 @@ tags:
   - name: Meet (Legacy)
   - name: JWT
 
+  - name: HIS
+    description: HIS export (TOR 4.7 / 4.10.7)
 paths:
 
   # ── Health ──────────────────────────────────────────────────────────────────
@@ -720,3 +722,38 @@ components:
         currentPatientToken:
           type: string
           nullable: true
+
+  /api/his/export:
+    post:
+      tags: [HIS]
+      summary: Export room vitals to HIS endpoint (TOR 4.7/4.10.7)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roomId]
+              properties:
+                roomId:
+                  type: string
+                  example: "abc123def456"
+      responses:
+        "200":
+          description: Exported successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  vitalCount: { type: integer }
+                  hisStatus: { type: integer }
+        "400":
+          description: No vitals recorded or missing roomId
+        "404":
+          description: Room not found
+        "502":
+          description: HIS endpoint unreachable
