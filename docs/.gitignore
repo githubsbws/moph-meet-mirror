@@ -1,0 +1,5 @@
+tor*.md
+
+# scratch patch scripts (one-off, not part of source)
+patch_*.py
+vitals_store_snippet.js
