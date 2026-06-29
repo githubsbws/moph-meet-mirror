@@ -7,13 +7,14 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { saveAuth, loadToken } from '../constants/storage';
-import { providerIdOAuthUrl, directLogin } from '../constants/api';
+import { providerIdOAuthUrl, directLogin, getConfig, thaiDOAuthUrl, type AppConfig } from '../constants/api';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(false);
+  const [config, setConfig] = useState<AppConfig>({});
   // Username/password login form (multi-login alongside Provider ID)
   const [reviewUser, setReviewUser] = useState('');
   const [reviewPass, setReviewPass] = useState('');
@@ -26,6 +27,8 @@ export default function LoginScreen() {
         else setLoading(false);
       })
       .catch(() => setLoading(false)); // SecureStore can throw on some Android devices
+    // Load server config (for ThaID availability) — mirrors web /config
+    getConfig().then(setConfig).catch(() => {});
   }, []);
 
   // Handle deep-link callback: mophmeet://auth?token=...&user=...
@@ -64,13 +67,19 @@ export default function LoginScreen() {
   }
 
   async function handleProviderIdLogin() {
+    await startOAuth(providerIdOAuthUrl());
+  }
+
+  async function handleThaiDLogin() {
+    await startOAuth(thaiDOAuthUrl(config));
+  }
+
+  // Shared OAuth runner for ProviderID + ThaID (both redirect to mophmeet://auth)
+  async function startOAuth(url: string) {
     setAuthLoading(true);
     setHandledAuth(false);
     try {
-      const result = await WebBrowser.openAuthSessionAsync(
-        providerIdOAuthUrl(),
-        'mophmeet://',
-      );
+      const result = await WebBrowser.openAuthSessionAsync(url, 'mophmeet://');
       // The auth session usually captures the mophmeet:// redirect itself, so the
       // global Linking listener may NOT fire. Parse the returned URL directly so
       // login completes even when the user switched apps during the OAuth step.
@@ -138,6 +147,18 @@ export default function LoginScreen() {
             <Text style={styles.btnText}>เข้าสู่ระบบด้วย Provider ID</Text>
           )}
         </TouchableOpacity>
+
+        {/* ThaID login — shown only when backend config provides a client id (TOR 4.6) */}
+        {config.thaidClientId ? (
+          <TouchableOpacity
+            style={[styles.btn, styles.btnThaid, authLoading && styles.btnDisabled]}
+            onPress={handleThaiDLogin}
+            disabled={authLoading}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.btnText}>🪪 เข้าสู่ระบบด้วย ThaID</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* ── Username / password login — always on for mobile (no flag) ── */}
         <View style={styles.reviewerBox}>
@@ -217,6 +238,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnDisabled: { opacity: 0.6 },
+  btnThaid: { backgroundColor: '#0066cc', marginTop: -4 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   hint: { fontSize: 12, color: '#9ca3af', textAlign: 'center' },
   reviewerBox: {
