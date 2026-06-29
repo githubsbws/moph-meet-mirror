@@ -11,6 +11,7 @@ import {
 import { useLocalSearchParams, router } from 'expo-router';
 import { loadToken } from '../../constants/storage';
 import { apiFetch, API_BASE } from '../../constants/api';
+import { Icon } from '../../components/Icon';
 
 const GREEN = '#1b7a43';
 const POLL = 5000;
@@ -115,10 +116,12 @@ export default function DoctorScreen() {
         {/* Actions */}
         <View style={s.actionRow}>
           <TouchableOpacity style={[s.btn, s.btnPrimary]} onPress={() => router.push(`/meet/${id}`)}>
-            <Text style={s.btnText}>🎥 เข้าห้องวิดีโอ</Text>
+            <Icon name="video" size={18} color="#fff" />
+            <Text style={s.btnText}>เข้าห้องวิดีโอ</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[s.btn, s.btnOutline]} onPress={() => setInviteOpen(true)}>
-            <Text style={s.btnOutlineText}>➕ เชิญผู้ป่วย</Text>
+            <Icon name="invite" size={18} color={GREEN} />
+            <Text style={s.btnOutlineText}>เชิญผู้ป่วย</Text>
           </TouchableOpacity>
         </View>
 
@@ -132,7 +135,12 @@ export default function DoctorScreen() {
 
         {/* Call next */}
         <TouchableOpacity style={[s.callBtn, (calling || waiting.length === 0) && s.btnDis]} onPress={callNext} disabled={calling || waiting.length === 0}>
-          {calling ? <ActivityIndicator color="#fff" /> : <Text style={s.callText}>▶ เรียกผู้ป่วยคนถัดไป ({waiting.length})</Text>}
+          {calling ? <ActivityIndicator color="#fff" /> : (
+            <>
+              <Icon name="next" size={18} color="#fff" />
+              <Text style={s.callText}> เรียกผู้ป่วยคนถัดไป ({waiting.length})</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         {/* Queue */}
@@ -195,7 +203,7 @@ const s = StyleSheet.create({
   title:  { color: '#fff', fontWeight: '700', fontSize: 15, flex: 1, textAlign: 'center' },
   scroll: { padding: 16, paddingBottom: 40 },
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  btn:    { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center', justifyContent: 'center' },
+  btn:    { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 },
   btnPrimary: { backgroundColor: GREEN },
   btnOutline: { borderWidth: 1, borderColor: GREEN, backgroundColor: '#fff' },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
@@ -203,7 +211,7 @@ const s = StyleSheet.create({
   admitBox: { backgroundColor: '#f0fdf4', borderWidth: 2, borderColor: GREEN, borderRadius: 10, padding: 14, alignItems: 'center', marginBottom: 12 },
   admitLabel: { fontSize: 12, color: '#6b7280' },
   admitName: { fontSize: 18, fontWeight: '700', color: GREEN, marginTop: 2 },
-  callBtn: { backgroundColor: GREEN, borderRadius: 10, paddingVertical: 15, alignItems: 'center', marginBottom: 20 },
+  callBtn: { backgroundColor: GREEN, borderRadius: 10, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', marginBottom: 20 },
   btnDis: { opacity: 0.5 },
   callText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   section: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 8 },

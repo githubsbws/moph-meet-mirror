@@ -8,6 +8,7 @@ import { router } from 'expo-router';
 import { loadToken, loadUser, clearAuth } from '../constants/storage';
 import { apiFetch, API_BASE, MEETING_DOMAIN } from '../constants/api';
 import MiniCalendar from '../components/MiniCalendar';
+import { Icon } from '../components/Icon';
 
 const GREEN = '#1b7a43';
 
@@ -149,7 +150,7 @@ export default function DashboardScreen() {
       <View style={styles.navbar}>
         <Text style={styles.navTitle}>MOPH Meet</Text>
         <TouchableOpacity onPress={() => router.push('/stats')} style={styles.statsBtn}>
-          <Text style={styles.logoutText}>📊 สถิติ</Text>
+          <Icon name="stats" size={16} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Text style={styles.logoutText}>ออกจากระบบ</Text>
@@ -193,7 +194,8 @@ export default function DashboardScreen() {
             </View>
           )}
           <TouchableOpacity style={styles.editProfileBtn} onPress={() => router.push('/profile')}>
-            <Text style={styles.editProfileText}>✏️ แก้ไขข้อมูลเพิ่มเติม</Text>
+            <Icon name="edit" size={14} color={GREEN} />
+            <Text style={styles.editProfileText}> แก้ไขข้อมูลเพิ่มเติม</Text>
           </TouchableOpacity>
         </View>
 
@@ -206,7 +208,7 @@ export default function DashboardScreen() {
               onPress={() => createRoom('exam')}
               disabled={creating}
             >
-              <Text style={styles.actionIcon}>🏥</Text>
+              <Icon name="exam" size={24} color="#fff" />
               <Text style={styles.actionLabel}>สร้างห้องตรวจ</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -214,17 +216,17 @@ export default function DashboardScreen() {
               onPress={() => createRoom('meet')}
               disabled={creating}
             >
-              <Text style={styles.actionIcon}>🖥️</Text>
+              <Icon name="meet" size={24} color="#fff" />
               <Text style={styles.actionLabel}>สร้างห้องประชุม</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionBtn, styles.actionSecondary]} onPress={() => router.push('/devices')}>
-              <Text style={styles.actionIcon}>🩺</Text>
+              <Icon name="vitals" size={24} color={GREEN} />
               <Text style={styles.actionLabelDark}>บันทึกสัญญาณชีพ</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionBtn, styles.actionSecondary]} onPress={() => router.push('/devices')}>
-              <Text style={styles.actionIcon}>📡</Text>
+              <Icon name="device" size={24} color={GREEN} />
               <Text style={styles.actionLabelDark}>อุปกรณ์การแพทย์</Text>
             </TouchableOpacity>
           </View>
@@ -325,7 +327,7 @@ const styles = StyleSheet.create({
   detailText: { fontSize: 12, color: '#9ca3af' },
   chipsRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
   chip:       { fontSize: 11, color: '#475569', backgroundColor: '#f1f5f9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  editProfileBtn: { marginTop: 12, alignSelf: 'flex-start', borderWidth: 1, borderColor: GREEN, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  editProfileBtn: { marginTop: 12, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: GREEN, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   editProfileText: { color: GREEN, fontSize: 13, fontWeight: '600' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
   calCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
@@ -333,7 +335,7 @@ const styles = StyleSheet.create({
   actionsCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   actionsTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
+  actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 16, alignItems: 'center', justifyContent: 'center', gap: 4 },
   actionPrimary: { backgroundColor: GREEN },
   actionSecondary: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
   actionDisabled: { opacity: 0.6 },

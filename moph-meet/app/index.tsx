@@ -8,6 +8,7 @@ import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { saveAuth, loadToken } from '../constants/storage';
 import { providerIdOAuthUrl, directLogin, getConfig, thaiDOAuthUrl, type AppConfig } from '../constants/api';
+import { Icon } from '../components/Icon';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -156,7 +157,8 @@ export default function LoginScreen() {
             disabled={authLoading}
             activeOpacity={0.8}
           >
-            <Text style={styles.btnText}>🪪 เข้าสู่ระบบด้วย ThaID</Text>
+            <Icon name="thaid" size={18} color="#fff" />
+            <Text style={[styles.btnText, { marginLeft: 8 }]}>เข้าสู่ระบบด้วย ThaID</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   btnDisabled: { opacity: 0.6 },
-  btnThaid: { backgroundColor: '#0066cc', marginTop: -4 },
+  btnThaid: { backgroundColor: '#0066cc', marginTop: -4, flexDirection: 'row' },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   hint: { fontSize: 12, color: '#9ca3af', textAlign: 'center' },
   reviewerBox: {
