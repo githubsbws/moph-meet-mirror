@@ -148,6 +148,9 @@ export default function DashboardScreen() {
       {/* Navbar */}
       <View style={styles.navbar}>
         <Text style={styles.navTitle}>MOPH Meet</Text>
+        <TouchableOpacity onPress={() => router.push('/stats')} style={styles.statsBtn}>
+          <Text style={styles.logoutText}>📊 สถิติ</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Text style={styles.logoutText}>ออกจากระบบ</Text>
         </TouchableOpacity>
@@ -307,6 +310,7 @@ const styles = StyleSheet.create({
   },
   navTitle:   { color: '#fff', fontWeight: '700', fontSize: 18, flex: 1 },
   logoutBtn:  { borderWidth: 1, borderColor: 'rgba(255,255,255,.6)', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  statsBtn:   { borderWidth: 1, borderColor: 'rgba(255,255,255,.6)', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, marginRight: 8 },
   logoutText: { color: '#fff', fontSize: 13 },
   scroll: { padding: 16, paddingBottom: 32 },
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
