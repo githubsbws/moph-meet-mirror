@@ -7,6 +7,7 @@ import {
 import { router } from 'expo-router';
 import { loadToken, loadUser, clearAuth } from '../constants/storage';
 import { apiFetch, API_BASE, MEETING_DOMAIN } from '../constants/api';
+import MiniCalendar from '../components/MiniCalendar';
 
 const GREEN = '#1b7a43';
 
@@ -79,6 +80,7 @@ export default function DashboardScreen() {
 
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   async function createRoom(type: 'exam' | 'meet') {
     if (!token || creating) return;
     setCreating(true);
@@ -131,10 +133,13 @@ export default function DashboardScreen() {
 
   const upcoming = meets.filter(m => m.status !== 'ended');
   const past     = meets.filter(m => m.status === 'ended');
+  const markedDates = new Set(meets.map(m => (m.starttime ? m.starttime.slice(0, 10) : '')).filter(Boolean));
   const q = search.trim().toLowerCase();
-  const filteredUpcoming = q
-    ? upcoming.filter(m => (m.name || m.title || m.id || '').toLowerCase().includes(q))
-    : upcoming;
+  const filteredUpcoming = upcoming.filter(m => {
+    if (q && !(m.name || m.title || m.id || '').toLowerCase().includes(q)) return false;
+    if (selectedDate && (m.starttime || '').slice(0, 10) !== selectedDate) return false;
+    return true;
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -228,6 +233,12 @@ export default function DashboardScreen() {
           )}
         </View>
 
+        {/* Calendar */}
+        <View style={styles.calCard}>
+          <Text style={styles.calTitle}>📅 ปฏิทินนัดหมาย</Text>
+          <MiniCalendar marked={markedDates} selected={selectedDate} onSelect={setSelectedDate} />
+        </View>
+
         {/* Upcoming meets */}
         <Text style={styles.sectionTitle}>นัดหมายที่กำลังจะถึง</Text>
         {upcoming.length > 0 && (
@@ -241,7 +252,7 @@ export default function DashboardScreen() {
           />
         )}
         {filteredUpcoming.length === 0 ? (
-          <Text style={styles.emptyText}>{q ? 'ไม่พบนัดหมายที่ค้นหา' : 'ยังไม่มีนัดหมาย'}</Text>
+          <Text style={styles.emptyText}>{q || selectedDate ? 'ไม่พบนัดหมายตามเงื่อนไข' : 'ยังไม่มีนัดหมาย'}</Text>
         ) : (
           filteredUpcoming.map(meet => (
             <View key={meet.id} style={styles.meetCard}>
@@ -313,6 +324,8 @@ const styles = StyleSheet.create({
   editProfileBtn: { marginTop: 12, alignSelf: 'flex-start', borderWidth: 1, borderColor: GREEN, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   editProfileText: { color: GREEN, fontSize: 13, fontWeight: '600' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
+  calCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  calTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 10 },
   actionsCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   actionsTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
   actionRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
