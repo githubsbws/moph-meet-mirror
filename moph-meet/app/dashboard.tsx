@@ -97,7 +97,7 @@ export default function DashboardScreen() {
         Alert.alert(
           'สร้างห้องตรวจแล้ว',
           `ลิงก์สำหรับผู้ป่วย:\n${link}`,
-          [{ text: 'เข้าห้องตรวจ', onPress: () => router.push(`/meet/${roomId}`) }]
+          [{ text: 'เข้าห้องตรวจ', onPress: () => router.push(`/doctor/${roomId}`) }]
         );
       } else {
         router.push(`/meet/${roomId}`);
@@ -111,7 +111,7 @@ export default function DashboardScreen() {
 
   function joinRoom(meet: Meet) {
     if (meet.type === 'exam') {
-      router.push(`/exam/${meet.id}`);
+      router.push(`/doctor/${meet.id}`);
     } else {
       router.push(`/meet/${meet.id}`);
     }
