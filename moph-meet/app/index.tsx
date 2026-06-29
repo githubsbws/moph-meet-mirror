@@ -31,16 +31,24 @@ export default function LoginScreen() {
   // Handle deep-link callback: mophmeet://auth?token=...&user=...
   useEffect(() => {
     const sub = Linking.addEventListener('url', handleDeepLink);
+    // Cold start: app opened directly from the auth redirect
+    Linking.getInitialURL().then(url => { if (url) handleDeepLink({ url }); }).catch(() => {});
     return () => sub.remove();
   }, []);
 
+  // Guard so the redirect URL isn't processed twice (auth-session result + listener)
+  const [handledAuth, setHandledAuth] = useState(false);
+
   async function handleDeepLink({ url }: { url: string }) {
-    if (!url.startsWith('mophmeet://auth')) return;
+    if (!url || !url.startsWith('mophmeet://auth')) return;
+    if (handledAuth) return;
+    setHandledAuth(true);
     const { queryParams } = Linking.parse(url);
     const token = queryParams?.token as string | undefined;
     const userRaw = queryParams?.user as string | undefined;
     if (!token) {
       setAuthLoading(false);
+      setHandledAuth(false);
       Alert.alert('เข้าสู่ระบบไม่สำเร็จ', 'ไม่พบ token กรุณาลองใหม่');
       return;
     }
@@ -50,19 +58,31 @@ export default function LoginScreen() {
       router.replace('/dashboard');
     } catch {
       setAuthLoading(false);
+      setHandledAuth(false);
       Alert.alert('เข้าสู่ระบบไม่สำเร็จ', 'เกิดข้อผิดพลาด กรุณาลองใหม่');
     }
   }
 
   async function handleProviderIdLogin() {
     setAuthLoading(true);
+    setHandledAuth(false);
     try {
       const result = await WebBrowser.openAuthSessionAsync(
         providerIdOAuthUrl(),
         'mophmeet://',
       );
-      // If user cancelled (no deep-link fired), reset loading
-      if (result.type !== 'success') setAuthLoading(false);
+      // The auth session usually captures the mophmeet:// redirect itself, so the
+      // global Linking listener may NOT fire. Parse the returned URL directly so
+      // login completes even when the user switched apps during the OAuth step.
+      if (result.type === 'success' && result.url) {
+        await handleDeepLink({ url: result.url });
+      } else if (result.type === 'cancel' || result.type === 'dismiss') {
+        // Browser was dismissed (e.g. user switched apps). The deep link may still
+        // arrive via the listener — keep the spinner briefly, then reset.
+        setTimeout(() => setAuthLoading(false), 1500);
+      } else {
+        setAuthLoading(false);
+      }
     } catch (err) {
       setAuthLoading(false);
       Alert.alert('เกิดข้อผิดพลาด', String(err));
