@@ -10,3 +10,6 @@ test-results/
 nul
 node_modules/
 
+
+# temporary task tracker
+tasks.md

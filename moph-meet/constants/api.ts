@@ -20,6 +20,41 @@ export function providerIdOAuthUrl(): string {
   return `https://moph.id.th/oauth/redirect?${params.toString()}`;
 }
 
+// ── Server config (mirrors web /config) ─────────────────────────────────────
+export type AppConfig = {
+  providerIdClientId?: string;
+  providerIdRedirectUri?: string;
+  meetingDomain?: string;
+  meetingUrl?: string;
+  manualLoginEnabled?: boolean;
+  thaidClientId?: string;
+  thaidRedirectUri?: string;
+  thaidAuthUrl?: string;
+};
+
+export async function getConfig(): Promise<AppConfig> {
+  try {
+    const r = await fetch(`${API_BASE}/config`);
+    if (!r.ok) return {};
+    return await r.json();
+  } catch (_) {
+    return {};
+  }
+}
+
+/** ThaID OAuth URL built from server config; state='mobile' → backend redirects to mophmeet:// */
+export function thaiDOAuthUrl(cfg: AppConfig): string {
+  const base = cfg.thaidAuthUrl || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/auth/';
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id:     cfg.thaidClientId || '',
+    redirect_uri:  cfg.thaidRedirectUri || `${API_BASE}/auth/thaid/callback`,
+    scope:         'pid name',
+    state:         'mobile',
+  });
+  return `${base}?${params.toString()}`;
+}
+
 // ── API helpers ────────────────────────────────────────────────────────────────
 export async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
