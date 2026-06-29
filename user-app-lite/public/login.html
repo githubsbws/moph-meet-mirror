@@ -33,6 +33,14 @@
         <img src="/images/provider-id-1.png" alt="เข้าสู่ระบบด้วย Provider ID" class="h-12" onerror="this.style.display='none'" />
       </a>
 
+      <a id="thaid-link" href="#" style="display:none"
+        class="btn w-full p-2 h-auto"
+        style="background:#0066cc;color:#fff;border:none"
+      >
+        <span style="font-size:1.1rem">🪪</span>
+        <span style="font-size:0.9rem;font-weight:600">เข้าสู่ระบบด้วย ThaID</span>
+      </a>
+
       <div id="manual-section" style="display:none;width:100%">
         <div class="divider text-xs text-base-content/50 my-1">หรือ</div>
         <form method="POST" action="/login/manual" class="flex flex-col gap-3 w-full">
@@ -98,6 +106,17 @@
       + '&redirect_uri=' + encodeURIComponent(cfg.providerIdRedirectUri || '')
       + '&response_type=code';
     document.getElementById('provider-id-link').href = link;
+    // ThaID button (only shown if configured)
+    if (cfg.thaidClientId) {
+      const thaidLink = cfg.thaidAuthUrl
+        + '?response_type=code'
+        + '&client_id='    + encodeURIComponent(cfg.thaidClientId || '')
+        + '&redirect_uri=' + encodeURIComponent(cfg.thaidRedirectUri || '')
+        + '&scope=pid+name'
+        + '&state=web';
+      const el = document.getElementById('thaid-link');
+      if (el) { el.href = thaidLink; el.style.display = ''; }
+    }
     if (cfg.manualLoginEnabled) {
       document.getElementById('manual-section').style.display = '';
     }

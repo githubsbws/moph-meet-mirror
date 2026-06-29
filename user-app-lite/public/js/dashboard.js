@@ -1,3 +1,9 @@
+/* Calendar legend (TOR 4.11.4):
+ * .has-meet  = green dot  (any room)
+ * .has-exam  = blue dot   (exam/ตรวจ room)
+ * .today     = bold ring
+ * .selected  = filled background
+ */
 /* dashboard.js – vanilla JS, no build step needed */
 
 (function () {
@@ -9,6 +15,13 @@
 
   // CAL_DATES may be set before this script (EJS) or after (static index.html via window.CAL_DATES)
   let datesWithMeet = new Set((window.CAL_DATES || []).map(d => d.date));
+
+  // ── Calendar type coloring (TOR 4.11.4) ──────────────────────────────────
+  // datesWithExam: dates that have at least one exam-type room (blue dot)
+  // datesWithMeet: dates with any room (green dot, already exists)
+  let datesWithExam = new Set((window.CAL_DATES || []).filter(d => d.type === 'exam').map(d => d.date));
+
+
 
   let currentYear  = new Date().getFullYear();
   let currentMonth = new Date().getMonth(); // 0-based
@@ -55,6 +68,7 @@
             today.getMonth() === currentMonth &&
             today.getDate() === day ? 'today' : '',
             datesWithMeet.has(iso) ? 'has-meet' : '',
+            datesWithExam.has(iso) ? 'has-exam' : '',
             selectedDate === iso ? 'selected' : ''
           ].filter(Boolean).join(' ');
           html += `<td class="${classes}" data-date="${iso}" tabindex="0" role="gridcell">${day}</td>`;
@@ -89,6 +103,7 @@
   // Expose for index.html to call after async data loads
   window._renderCalendar = function () {
     datesWithMeet = new Set((window.CAL_DATES || []).map(d => d.date));
+    datesWithExam = new Set((window.CAL_DATES || []).filter(d => d.type === 'exam').map(d => d.date));
     renderCalendar();
   };
 

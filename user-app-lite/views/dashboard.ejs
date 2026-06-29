@@ -34,12 +34,6 @@
             <p class="font-bold text-lg leading-tight">
               <%= pid.title_th || '' %> <%= user.display || user.username || 'ผู้ใช้' %>
             </p>
-            <% if (isProvider) { %>
-              <span class="badge badge-success badge-sm gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Provider
-              </span>
-            <% } %>
             <% if (user.roles?.length) { %>
               <% for (const r of user.roles) { %>
                 <span class="badge badge-primary badge-outline badge-sm"><%= r %></span>
@@ -160,8 +154,6 @@
     <form method="dialog" class="modal-backdrop"><button>close</button></form>
   </dialog>
 
-  <% if (isProvider) { %>
-
   <!-- ── Create Room Cards ──────────────────────────────────────────────── -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
@@ -267,18 +259,6 @@
     </div>
 
   </div>
-
-  <% } else { %>
-  <!-- ── Guest view ─────────────────────────────────────────────────────── -->
-  <div class="flex justify-center mt-8">
-    <div class="card bg-white shadow-sm border border-base-200 max-w-sm w-full">
-      <div class="card-body items-center text-center">
-        <h2 class="card-title">ยินดีต้อนรับ</h2>
-        <p class="text-base-content/60">กรุณาใช้ลิงก์นัดหมายที่ได้รับเพื่อเข้าห้องประชุม</p>
-      </div>
-    </div>
-  </div>
-  <% } %>
 
 </main>
 
@@ -491,3 +471,14 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
 </script>
 
 <%- include('partials/foot') %>
+
+<script>
+// Presence ping (TOR 4.4)
+(function() {
+  async function ping() {
+    try { await fetch('/api/presence/ping', { method: 'POST', credentials: 'include' }); } catch (_) {}
+  }
+  ping();
+  setInterval(ping, 20 * 1000);
+})();
+</script>

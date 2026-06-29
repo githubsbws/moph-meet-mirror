@@ -6,7 +6,7 @@ const cors = require('cors');
 const { createHash, randomInt } = require('crypto');
 const NodeCache = require('node-cache');
 const jwt = require('jsonwebtoken');
-const { tokenStorage, roomStore, profileStore, logStore } = require('./store');
+const { tokenStorage, roomStore, profileStore, logStore, vitalStore } = require('./store');
 const { auth } = require('./middlewares/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_me_jwt_secret';
@@ -66,6 +66,37 @@ function buildManualUser(account) {
         isReviewAccount: Boolean(account.isReviewAccount),
         authMode: 'manual',
     };
+}
+
+
+// ── LINE OA Notification helper (TOR 4.11.1) ─────────────────────────────────
+// Non-blocking: failure is logged, never delays room creation.
+// Set LINE_CHANNEL_TOKEN + LINE_TARGET (userId or groupId) in env to enable.
+
+const LINE_CHANNEL_TOKEN = process.env.LINE_CHANNEL_TOKEN || '';
+const LINE_TARGET        = process.env.LINE_TARGET        || '';
+
+async function notifyLine(message) {
+    if (!LINE_CHANNEL_TOKEN || !LINE_TARGET) {
+        console.log('[notify] LINE not configured — skip. Set LINE_CHANNEL_TOKEN + LINE_TARGET to enable.');
+        return;
+    }
+    try {
+        await fetch('https://api.line.me/v2/bot/message/push', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${LINE_CHANNEL_TOKEN}`,
+            },
+            body: JSON.stringify({
+                to: LINE_TARGET,
+                messages: [{ type: 'text', text: message }],
+            }),
+        });
+        console.log('[notify] LINE push sent');
+    } catch (e) {
+        console.warn('[notify] LINE push failed:', e.message);
+    }
 }
 
 // ── App ────────────────────────────────────────────────────────────────────────
@@ -215,6 +246,83 @@ app.post('/api/auth/providerID', async (req, res, next) => {
         next(err);
     }
 });
+
+
+// ── Auth: ThaID (TOR 4.6 — ช่องทางที่ 3) ─────────────────────────────────────
+// TODO: เมื่อได้ THAID_* credentials จาก สธ ให้กรอก env และเอา TODO notice ออก
+// โครงเดียวกับ POST /api/auth/providerID — exchange code → token → profile → session
+const THAID_CLIENT_ID    = process.env.THAID_CLIENT_ID    || '';
+const THAID_CLIENT_SECRET= process.env.THAID_CLIENT_SECRET|| '';
+const THAID_REDIRECT_URI = process.env.THAID_REDIRECT_URI || '';
+const THAID_TOKEN_URL    = process.env.THAID_TOKEN_URL    || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/token/';
+const THAID_PROFILE_URL  = process.env.THAID_PROFILE_URL  || 'https://imauth.bora.dopa.go.th/api/v2/oauth2/userinfo/';
+
+app.post('/api/auth/thaiD', async (req, res, next) => {
+    // If credentials not configured yet, return a clear error (not 502/HTML)
+    if (!THAID_CLIENT_ID || !THAID_CLIENT_SECRET || !THAID_REDIRECT_URI) {
+        return res.status(503).json({
+            error: 503,
+            message: 'thaiDNotConfigured',
+            detail: 'Set THAID_CLIENT_ID / THAID_CLIENT_SECRET / THAID_REDIRECT_URI env vars to enable ThaID login'
+        });
+    }
+
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ error: 400, message: 'code required' });
+
+    try {
+        // Step 1 — exchange code → ThaID access token
+        const tokenRes = await fetch(THAID_TOKEN_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type:    'authorization_code',
+                client_id:     THAID_CLIENT_ID,
+                client_secret: THAID_CLIENT_SECRET,
+                code,
+                redirect_uri:  THAID_REDIRECT_URI,
+            }).toString(),
+        });
+        const tokenJson = await tokenRes.json();
+        const accessToken = tokenJson?.access_token;
+        if (!accessToken) {
+            return res.status(401).json({ error: 401, message: tokenJson?.error || 'thaiDTokenFailed', detail: tokenJson });
+        }
+
+        // Step 2 — get user info / profile
+        const profileRes = await fetch(THAID_PROFILE_URL, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const profile = await profileRes.json();
+        if (!profile?.pid && !profile?.sub) {
+            return res.status(401).json({ error: 401, message: 'thaiDProfileFailed' });
+        }
+
+        // Step 3 — build session (use pid/sub as username; ThaID users are 'staff')
+        const uid  = profile.pid || profile.sub;
+        const name = [profile.title_th, profile.fname, profile.lname].filter(Boolean).join('') || uid;
+        const user = {
+            username: uid,
+            display:  name,
+            roles:    ['staff'],
+            roleMaps: [{ roleName: 'staff' }],
+            organization: null,
+            thaiDProfile: { pid: profile.pid, name_th: name },
+            authMode: 'thaiD',
+        };
+        const token = require('crypto').createHash('sha256')
+            .update(new Date().toISOString() + uid + require('crypto').randomInt(1000))
+            .digest('hex');
+        await tokenStorage.set(token, user);
+
+        return res.json({ token, user });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// Redirect helper: /auth/thaid/callback → handled by user-app-lite server.js
+// (same pattern as /auth/providerid/callback)
 
 // ── Auth: Guest / temporary token ─────────────────────────────────────────────
 app.post('/api/auth/guest', async (req, res, next) => {
@@ -556,6 +664,9 @@ app.post('/api/meet/reserved', async (req, res) => {
     // hcode may come from the HIS payload (hcode/hospitalCode/account_hcode); null if not sent.
     const reservedHcode = (req.body.hcode || req.body.hospitalCode || req.body.account_hcode || '').toString().trim() || null;
     const reservedDuration = Math.max(0, Math.round((new Date(room.endtime) - new Date(room.starttime)) / 1000)) || null;
+    // TOR 4.11.1 — notify LINE OA (non-blocking)
+    const _reservedLink = `${APP_BASE_URL}/exam/${id}`;
+    notifyLine(`📅 จองห้องตรวจ: ${name}\nแพทย์: ${doctorDisplay}\nลิงก์: ${_reservedLink}`).catch(() => {});
     await logStore.insert('reserved_room_created', { roomId: id, roomType: 'exam', roomName: name, doctorId, doctorName: doctorDisplay, platform: 'web', unitHcode: reservedHcode, durationSec: reservedDuration, meta: { startTime: room.starttime, endTime: room.endtime } });
 
     // Full absolute URLs – include token so 3rd-party apps that only use the
@@ -715,6 +826,179 @@ app.get('/api/logs/longest-rooms', async (req, res) => {
     const opts = rangeParams(req.query);
     opts.limit = req.query.limit ? parseInt(req.query.limit, 10) : 5;
     res.json(await logStore.longestRooms(opts));
+});
+
+
+
+
+
+// ── Presence API (TOR 4.4) — online/offline indicator ────────────────────────
+// Uses NodeCache (already imported) — last-seen per user, TTL 90s.
+// online = ping received within PRESENCE_ONLINE_WINDOW_MS.
+const _presenceCache = new NodeCache({ stdTTL: 90, checkperiod: 30 });
+const PRESENCE_ONLINE_WINDOW_MS = 60 * 1000; // 60s
+
+// POST /api/presence/ping — call every ~20s while logged in
+app.post('/api/presence/ping', auth(), (req, res) => {
+    const uid = res.locals.user?.username;
+    if (!uid) return res.status(401).json({ error: 401, message: 'unauthorized' });
+    _presenceCache.set(uid, Date.now());
+    res.json({ ok: true });
+});
+
+// GET /api/presence?ids=a,b,c — check online status for a list of user IDs
+app.get('/api/presence', auth(), (req, res) => {
+    const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (ids.length === 0 || ids.length > 50) {
+        return res.status(400).json({ error: 400, message: 'ids param required (comma-separated, max 50)' });
+    }
+    const now = Date.now();
+    const result = {};
+    for (const id of ids) {
+        const lastSeen = _presenceCache.get(id);
+        result[id] = (lastSeen && (now - lastSeen) < PRESENCE_ONLINE_WINDOW_MS) ? 'online' : 'offline';
+    }
+    res.json(result);
+});
+
+// ── Unit Search API (TOR 4.2 / 4.3 / 4.10.3) ────────────────────────────────
+// GET /api/units/search?q=<text>&limit=20
+// Searches hospital name / hcode using the hcode map (area.js).
+// If hcode-to-area.js is not generated, returns empty list gracefully.
+
+app.get('/api/units/search', auth(), (req, res) => {
+    const q     = String(req.query.q || '').trim().toLowerCase();
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    if (!q) return res.json([]);
+
+    // Try to access HCODE_TO_AREA via the area module
+    let map = {};
+    try { ({ HCODE_TO_AREA: map } = require('./data/hcode-to-area')); } catch (_) {}
+
+    const results = [];
+    for (const [hcode, info] of Object.entries(map)) {
+        const hospital = (info.hospital || '').toLowerCase();
+        const province = (info.province || '').toLowerCase();
+        if (hospital.includes(q) || hcode.includes(q) || province.includes(q)) {
+            results.push({ hcode, hospital: info.hospital, province: info.province, region: info.region });
+            if (results.length >= limit) break;
+        }
+    }
+    res.json(results);
+});
+
+// ── HIS Export API (TOR 4.7 + 4.10.7) ───────────────────────────────────────
+// POST /api/his/export { roomId } → aggregate vitals + room data → POST to HIS
+// HIS_ENDPOINT env (default = demo-his at localhost:3501)
+// Non-blocking: failure is logged but never breaks room flow.
+
+const HIS_ENDPOINT = (process.env.HIS_ENDPOINT || 'http://localhost:3501').replace(/\/$/, '');
+
+app.post('/api/his/export', auth(), async (req, res) => {
+    const { roomId } = req.body;
+    if (!roomId) return res.status(400).json({ error: 400, message: 'roomId required' });
+
+    const room = await roomStore.get(roomId);
+    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+
+    const vitals = vitalStore.byRoom(roomId);
+    if (!vitals || vitals.length === 0) {
+        return res.status(400).json({ error: 400, message: 'no vitals recorded for this room' });
+    }
+
+    // Build export payload — field names follow สธ HL7-FHIR-lite schema
+    // (adjust mapping per สธ spec when available; comment shows intent)
+    const payload = {
+        sessionId:    room.id,
+        sessionName:  room.name,
+        sessionType:  room.type,
+        startTime:    room.starttime,
+        endTime:      room.endtime,
+        doctorId:     room.ownerId,
+        doctorName:   room.ownerDisplay,
+        vitals: vitals.map(v => ({
+            metric:      v.metric,
+            value:       v.value,
+            unit:        v.unit,
+            deviceType:  v.device_type,
+            source:      v.source,
+            recordedAt:  v.recorded_at,
+        })),
+        exportedAt: new Date().toISOString(),
+    };
+
+    let success = false;
+    let hisStatus = null;
+    try {
+        const hisRes = await fetch(`${HIS_ENDPOINT}/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        hisStatus = hisRes.status;
+        success = hisRes.ok;
+    } catch (e) {
+        console.error('[HIS] export failed:', e.message);
+    }
+
+    // Log the result regardless
+    await logStore.insert('his_exported', {
+        roomId, roomType: room.type, roomName: room.name,
+        doctorId: room.ownerId, doctorName: room.ownerDisplay,
+        meta: { success, hisStatus, vitalCount: vitals.length },
+    });
+
+    if (success) {
+        return res.json({ ok: true, vitalCount: vitals.length, hisStatus });
+    }
+    return res.status(502).json({ error: 502, message: 'HIS endpoint unreachable or returned error', hisStatus });
+});
+
+// ── Vital Signs API (TOR 4.10.5) ────────────────────────────────────────────
+// Metrics: weight|height|temp|spo2|sys|dia|map|pr|rr|pulse|glucose|fhr|toco
+// Source:  manual | ble
+
+// POST /api/vitals — record a single vital sign reading
+app.post('/api/vitals', auth(), (req, res) => {
+    const { roomId, patientKey, deviceId, deviceType, metric, value, unit, source, organization, recordedAt } = req.body;
+    if (!metric || value === undefined || value === null || value === '') {
+        return res.status(400).json({ error: 400, message: 'metric and value are required' });
+    }
+    vitalStore.insert({ roomId, patientKey, deviceId, deviceType, metric, value, unit, source, organization, recordedAt });
+    res.status(201).json({ ok: true });
+});
+
+// POST /api/vitals/batch — record multiple readings at once (BLE device dump)
+app.post('/api/vitals/batch', auth(), (req, res) => {
+    const records = req.body;
+    if (!Array.isArray(records) || records.length === 0) {
+        return res.status(400).json({ error: 400, message: 'body must be a non-empty array' });
+    }
+    if (records.length > 200) {
+        return res.status(400).json({ error: 400, message: 'batch limit 200 records' });
+    }
+    for (const r of records) {
+        if (!r.metric || r.value === undefined || r.value === null || r.value === '') {
+            return res.status(400).json({ error: 400, message: 'each record needs metric + value' });
+        }
+    }
+    vitalStore.insertBatch(records);
+    res.status(201).json({ ok: true, count: records.length });
+});
+
+// GET /api/vitals?roomId= — list vitals for a room
+app.get('/api/vitals', auth(), (req, res) => {
+    const { roomId, patientKey } = req.query;
+    if (!roomId && !patientKey) {
+        return res.status(400).json({ error: 400, message: 'roomId or patientKey required' });
+    }
+    const rows = roomId ? vitalStore.byRoom(roomId) : vitalStore.byPatient(patientKey);
+    res.json(rows);
+});
+
+// GET /api/rooms/:id/vitals/latest — latest value per metric for a room
+app.get('/api/rooms/:id/vitals/latest', auth(), (req, res) => {
+    res.json(vitalStore.latestByRoom(req.params.id));
 });
 
 // ── 404 handler – always JSON (never HTML, so clients can safely res.json()) ──

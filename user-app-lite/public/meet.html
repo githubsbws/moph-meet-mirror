@@ -433,6 +433,33 @@ function renderQueue(queue, currentToken) {
   });
 }
 
+
+// ── Queue ring (TOR 4.5) — play tone when patient is admitted ────────────────
+function playAdmitRing() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+    // second beep
+    const osc2 = ctx.createOscillator();
+    osc2.connect(gain);
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1100, ctx.currentTime + 0.7);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime + 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+    osc2.start(ctx.currentTime + 0.7);
+    osc2.stop(ctx.currentTime + 1.2);
+  } catch (_) {}
+}
+
 async function callNextPatient() {
   const btn = document.getElementById('btn-next-patient');
   btn.disabled    = true;
@@ -647,7 +674,7 @@ async function startDocRecord() {
   if (_recRecorder) return;
   try {
     _recStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 25, width: { ideal: 1280 }, height: { ideal: 720 }, displaySurface: 'browser' },
+      video: { frameRate: 25, width: { ideal: 1920 }, height: { ideal: 1080 }, displaySurface: 'browser' }, // TOR 4.9.2 ≥720×720
       audio: true,
       selfBrowserSurface: 'include'
     });
@@ -803,6 +830,16 @@ window.addEventListener('beforeunload', () => { if (_recRecorder) _recRecorder.s
 
 <script>
 if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
+
+// ── Presence ping (TOR 4.4) ───────────────────────────────────────────────────
+(function startPresencePing() {
+  async function ping() {
+    try { await fetch('/api/presence/ping', { method: 'POST', credentials: 'include' }); } catch (_) {}
+  }
+  ping();
+  setInterval(ping, 20 * 1000);
+})();
+
 </script>
 </body>
 </html>

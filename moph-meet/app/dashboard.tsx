@@ -40,13 +40,18 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     (async () => {
-      const tok = await loadToken();
-      const usr = await loadUser();
-      if (!tok) { router.replace('/'); return; }
-      setToken(tok);
-      setUser(usr);
-      await fetchMeets(tok);
-      setLoading(false);
+      try {
+        const tok = await loadToken();
+        const usr = await loadUser();
+        if (!tok) { router.replace('/'); return; }
+        setToken(tok);
+        setUser(usr);
+        await fetchMeets(tok);
+      } catch {
+        router.replace('/');
+      } finally {
+        setLoading(false);
+      }
     })();
   }, []);
 
@@ -72,6 +77,37 @@ export default function DashboardScreen() {
     router.replace('/');
   }
 
+  const [creating, setCreating] = useState(false);
+  async function createRoom(type: 'exam' | 'meet') {
+    if (!token || creating) return;
+    setCreating(true);
+    try {
+      const r = await apiFetch('/api/rooms', token, {
+        method: 'POST',
+        body: JSON.stringify({ type }),
+      });
+      if (r.status === 401) { await handleLogout(); return; }
+      if (!r.ok) { Alert.alert('สร้างห้องไม่สำเร็จ', `รหัส ${r.status}`); return; }
+      const d = await r.json();
+      const roomId = d.room?.id;
+      if (!roomId) { Alert.alert('สร้างห้องไม่สำเร็จ', 'ไม่ได้รับรหัสห้อง'); return; }
+      if (type === 'exam' && d.patientJoinUrl) {
+        const link = d.patientJoinUrl.startsWith('http') ? d.patientJoinUrl : `${API_BASE}${d.patientJoinUrl}`;
+        Alert.alert(
+          'สร้างห้องตรวจแล้ว',
+          `ลิงก์สำหรับผู้ป่วย:\n${link}`,
+          [{ text: 'เข้าห้องตรวจ', onPress: () => router.push(`/meet/${roomId}`) }]
+        );
+      } else {
+        router.push(`/meet/${roomId}`);
+      }
+    } catch (e: any) {
+      Alert.alert('เกิดข้อผิดพลาด', e.message || 'network');
+    } finally {
+      setCreating(false);
+    }
+  }
+
   function joinRoom(meet: Meet) {
     if (meet.type === 'exam') {
       router.push(`/exam/${meet.id}`);
@@ -90,7 +126,6 @@ export default function DashboardScreen() {
 
   const org = user?.organization?.[0] || {};
   const pid = user?.providerIDProfile || {};
-  const isProvider = user?.roles?.includes('staff') || user?.roles?.includes('admin');
   const initials = ((user?.display || user?.username || 'U')[0]).toUpperCase();
 
   const upcoming = meets.filter(m => m.status !== 'ended');
@@ -123,11 +158,6 @@ export default function DashboardScreen() {
                 <Text style={styles.displayName}>
                   {pid.title_th || ''} {user?.display || user?.username || 'ผู้ใช้'}
                 </Text>
-                {isProvider && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>Provider</Text>
-                  </View>
-                )}
               </View>
               {(org.position || org.hname_th) && (
                 <Text style={styles.orgText}>
@@ -139,6 +169,45 @@ export default function DashboardScreen() {
               )}
             </View>
           </View>
+        </View>
+
+        {/* Quick actions */}
+        <View style={styles.actionsCard}>
+          <Text style={styles.actionsTitle}>เริ่มใช้งาน</Text>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionPrimary, creating && styles.actionDisabled]}
+              onPress={() => createRoom('exam')}
+              disabled={creating}
+            >
+              <Text style={styles.actionIcon}>🏥</Text>
+              <Text style={styles.actionLabel}>สร้างห้องตรวจ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionPrimary, creating && styles.actionDisabled]}
+              onPress={() => createRoom('meet')}
+              disabled={creating}
+            >
+              <Text style={styles.actionIcon}>🖥️</Text>
+              <Text style={styles.actionLabel}>สร้างห้องประชุม</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={[styles.actionBtn, styles.actionSecondary]} onPress={() => router.push('/devices')}>
+              <Text style={styles.actionIcon}>🩺</Text>
+              <Text style={styles.actionLabelDark}>บันทึกสัญญาณชีพ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionBtn, styles.actionSecondary]} onPress={() => router.push('/devices')}>
+              <Text style={styles.actionIcon}>📡</Text>
+              <Text style={styles.actionLabelDark}>อุปกรณ์การแพทย์</Text>
+            </TouchableOpacity>
+          </View>
+          {creating && (
+            <View style={styles.creatingRow}>
+              <ActivityIndicator color={GREEN} size="small" />
+              <Text style={styles.creatingText}>กำลังสร้างห้อง…</Text>
+            </View>
+          )}
         </View>
 
         {/* Upcoming meets */}
@@ -212,6 +281,18 @@ const styles = StyleSheet.create({
   orgText:    { fontSize: 13, color: '#64748b', marginBottom: 2 },
   detailText: { fontSize: 12, color: '#9ca3af' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
+  actionsCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  actionsTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
+  actionRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
+  actionBtn: { flex: 1, borderRadius: 10, paddingVertical: 16, alignItems: 'center', justifyContent: 'center' },
+  actionPrimary: { backgroundColor: GREEN },
+  actionSecondary: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
+  actionDisabled: { opacity: 0.6 },
+  actionIcon: { fontSize: 24, marginBottom: 4 },
+  actionLabel: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  actionLabelDark: { color: GREEN, fontWeight: '600', fontSize: 13 },
+  creatingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 },
+  creatingText: { color: GREEN, fontSize: 13 },
   emptyText:  { fontSize: 14, color: '#9ca3af', marginBottom: 16 },
   meetCard: {
     backgroundColor: '#fff', borderRadius: 12, padding: 14,

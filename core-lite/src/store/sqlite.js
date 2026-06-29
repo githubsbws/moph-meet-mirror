@@ -408,4 +408,58 @@ const logStore = {
 // ── Init (no-op for SQLite, tables already created above) ──────────────────────
 async function init() { console.log('[store:sqlite] ready'); }
 
-module.exports = { tokenStorage, roomStore, profileStore, logStore, init };
+
+// ── Vital Signs Storage (rooms.db — new table) ────────────────────────────────
+// TOR 4.10.5: น้ำหนัก ส่วนสูง อุณหภูมิ SpO2 BP RR Pulse น้ำตาล + NST
+// PII: ผูกด้วย patient_key (queue-key random) ไม่เก็บ CID ตรง
+_roomDb.exec(`
+  CREATE TABLE IF NOT EXISTS vitals (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id      TEXT,
+    patient_key  TEXT,
+    device_id    TEXT,
+    device_type  TEXT NOT NULL,
+    metric       TEXT NOT NULL,
+    value        TEXT NOT NULL,
+    unit         TEXT,
+    source       TEXT NOT NULL DEFAULT 'manual',
+    organization TEXT,
+    recorded_at  TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    created_at   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_vitals_room     ON vitals(room_id);
+  CREATE INDEX IF NOT EXISTS idx_vitals_patient  ON vitals(patient_key);
+  CREATE INDEX IF NOT EXISTS idx_vitals_recorded ON vitals(recorded_at);
+`);
+
+const _vitalInsert = _roomDb.prepare(
+  `INSERT INTO vitals (room_id, patient_key, device_id, device_type, metric, value, unit, source, organization, recorded_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+);
+const _vitalByRoom    = _roomDb.prepare('SELECT * FROM vitals WHERE room_id = ? ORDER BY recorded_at DESC LIMIT 500');
+const _vitalByPatient = _roomDb.prepare('SELECT * FROM vitals WHERE patient_key = ? ORDER BY recorded_at DESC LIMIT 200');
+const _vitalLatest    = _roomDb.prepare(
+  `SELECT v.* FROM vitals v
+   INNER JOIN (SELECT metric, MAX(recorded_at) as maxts FROM vitals WHERE room_id = ? GROUP BY metric) m
+     ON v.metric = m.metric AND v.recorded_at = m.maxts AND v.room_id = ?
+   ORDER BY v.metric`
+);
+
+const vitalStore = {
+  insert({ roomId, patientKey, deviceId, deviceType, metric, value, unit, source, organization, recordedAt }) {
+    _vitalInsert.run(
+      roomId || null, patientKey || null, deviceId || null,
+      deviceType || 'manual', metric, String(value),
+      unit || null, source || 'manual', organization || null,
+      recordedAt || new Date().toISOString()
+    );
+  },
+  insertBatch(records) {
+    _roomDb.transaction(() => { for (const r of records) vitalStore.insert(r); })();
+  },
+  byRoom(roomId)        { return _vitalByRoom.all(roomId); },
+  byPatient(patientKey) { return _vitalByPatient.all(patientKey); },
+  latestByRoom(roomId)  { return _vitalLatest.all(roomId, roomId); },
+};
+
+module.exports = { tokenStorage, roomStore, profileStore, logStore, vitalStore, init };

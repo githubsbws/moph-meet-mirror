@@ -70,3 +70,7 @@ body, html { font-family: 'Sarabun', sans-serif; }
 @media (max-width: 640px) {
   .grid[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
 }
+
+/* Calendar exam-type color dot (TOR 4.11.4) */
+.has-exam::after { content:''; display:block; width:5px; height:5px; border-radius:50%; background:#2563eb; margin:2px auto 0; }
+.has-meet.has-exam::after { background: linear-gradient(90deg, #1b7a43 50%, #2563eb 50%); }
