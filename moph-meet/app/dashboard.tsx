@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   SafeAreaView, ActivityIndicator, Alert, RefreshControl,
-  StatusBar,
+  StatusBar, TextInput,
 } from 'react-native';
 import { router } from 'expo-router';
 import { loadToken, loadUser, clearAuth } from '../constants/storage';
@@ -78,6 +78,7 @@ export default function DashboardScreen() {
   }
 
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
   async function createRoom(type: 'exam' | 'meet') {
     if (!token || creating) return;
     setCreating(true);
@@ -130,6 +131,10 @@ export default function DashboardScreen() {
 
   const upcoming = meets.filter(m => m.status !== 'ended');
   const past     = meets.filter(m => m.status === 'ended');
+  const q = search.trim().toLowerCase();
+  const filteredUpcoming = q
+    ? upcoming.filter(m => (m.name || m.title || m.id || '').toLowerCase().includes(q))
+    : upcoming;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -169,6 +174,19 @@ export default function DashboardScreen() {
               )}
             </View>
           </View>
+          {/* hcode / clinic chips (parity with web Data Hub) */}
+          {(user?.hcode5 || user?.hcode9 || user?.clinicCode || user?.gender || user?.dateOfBirth) && (
+            <View style={styles.chipsRow}>
+              {user?.hcode5 ? <Text style={styles.chip}>🏥 HCode5: {user.hcode5}</Text> : null}
+              {user?.hcode9 ? <Text style={styles.chip}>🏥 HCode9: {user.hcode9}</Text> : null}
+              {user?.clinicCode ? <Text style={styles.chip}>🩺 Clinic: {user.clinicCode}</Text> : null}
+              {user?.gender ? <Text style={styles.chip}>🧑 {user.gender}</Text> : null}
+              {user?.dateOfBirth ? <Text style={styles.chip}>🎂 {user.dateOfBirth}</Text> : null}
+            </View>
+          )}
+          <TouchableOpacity style={styles.editProfileBtn} onPress={() => router.push('/profile')}>
+            <Text style={styles.editProfileText}>✏️ แก้ไขข้อมูลเพิ่มเติม</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Quick actions */}
@@ -212,10 +230,20 @@ export default function DashboardScreen() {
 
         {/* Upcoming meets */}
         <Text style={styles.sectionTitle}>นัดหมายที่กำลังจะถึง</Text>
-        {upcoming.length === 0 ? (
-          <Text style={styles.emptyText}>ยังไม่มีนัดหมาย</Text>
+        {upcoming.length > 0 && (
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="🔍 ค้นหานัดหมาย…"
+            placeholderTextColor="#9ca3af"
+            autoCapitalize="none"
+          />
+        )}
+        {filteredUpcoming.length === 0 ? (
+          <Text style={styles.emptyText}>{q ? 'ไม่พบนัดหมายที่ค้นหา' : 'ยังไม่มีนัดหมาย'}</Text>
         ) : (
-          upcoming.map(meet => (
+          filteredUpcoming.map(meet => (
             <View key={meet.id} style={styles.meetCard}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.meetName}>{meet.name || meet.title || meet.id}</Text>
@@ -280,6 +308,10 @@ const styles = StyleSheet.create({
   badgeText:  { color: GREEN, fontSize: 11, fontWeight: '600' },
   orgText:    { fontSize: 13, color: '#64748b', marginBottom: 2 },
   detailText: { fontSize: 12, color: '#9ca3af' },
+  chipsRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  chip:       { fontSize: 11, color: '#475569', backgroundColor: '#f1f5f9', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  editProfileBtn: { marginTop: 12, alignSelf: 'flex-start', borderWidth: 1, borderColor: GREEN, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  editProfileText: { color: GREEN, fontSize: 13, fontWeight: '600' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
   actionsCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
   actionsTitle: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 12 },
@@ -294,6 +326,7 @@ const styles = StyleSheet.create({
   creatingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 },
   creatingText: { color: GREEN, fontSize: 13 },
   emptyText:  { fontSize: 14, color: '#9ca3af', marginBottom: 16 },
+  searchInput:{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#111', marginBottom: 10 },
   meetCard: {
     backgroundColor: '#fff', borderRadius: 12, padding: 14,
     marginBottom: 10, flexDirection: 'row', alignItems: 'center',
