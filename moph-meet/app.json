@@ -23,7 +23,6 @@
     "android": {
       "package": "th.go.moph.meet",
       "targetSdkVersion": 35,
-      "experiencesPageSize16kb": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#1b7a43"
