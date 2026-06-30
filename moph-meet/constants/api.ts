@@ -56,13 +56,16 @@ export function thaiDOAuthUrl(cfg: AppConfig): string {
 }
 
 // ── API helpers ────────────────────────────────────────────────────────────────
+// Send token via Cookie header (same as web) instead of Authorization header.
+// The user-app-lite proxy reads token from cookies, not from Authorization header.
 export async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
   const res = await fetch(url, {
     ...opts,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      'Cookie': `token=${token}`,
       ...(opts.headers as Record<string, string> || {}),
     },
   });
