@@ -1,0 +1,135 @@
+# Kiro Handover — MOPH Meet Mobile App
+
+> สร้าง: 1 กรกฎาคม 2026  
+> สถานะ: รอ git mirror พร้อม → push → เครื่อง build pull → atx upgrade
+
+---
+
+## สรุปงานที่ทำไปแล้ว
+
+### ✅ TASK 1: Bug Mobile 401 tokenExpired — เสร็จแล้ว
+
+**อาการ:** Login สำเร็จ แต่กดสร้างห้องตรวจ/ห้องประชุมได้ 401 ทันที (เฉพาะ Mobile — Web ปกติ)
+
+**Root Cause:** Mobile ส่ง token ผ่าน `Authorization: Bearer` header แต่ proxy (`user-app-lite/server.js`) อ่าน token จาก Cookie เท่านั้น
+
+**Fix ที่ทำ:** แก้ `moph-meet/constants/api.ts`
+- เปลี่ยน `Authorization: Bearer ${token}` → `Cookie: token=${token}`
+- เพิ่ม `credentials: 'include'`
+
+**ไฟล์ที่แก้:**
+- `moph-meet/constants/api.ts` ✅ แก้แล้ว
+
+**Case report:** `cases/016_mobile-create-room-401/report.md`
+
+---
+
+### 🔄 TASK 2: Android 16KB Page Size — รอดำเนินการบนเครื่อง build
+
+**อาการ:** Upload .aab ขึ้น Google Play Console ไม่ผ่าน error:
+> "แอปไม่รองรับหน้าหน่วยความจำขนาด 16 KB"
+
+**สาเหตุ:** Expo SDK 52 / React Native 0.76.9 ใช้ prebuilt `.so` libraries ที่ compile ด้วย 4KB alignment — ไม่รองรับ 16KB
+
+**Deadline:** หมดแล้ว (31 พ.ค. 2026) — ปุ่มผ่อนผันใน Play Console หายแล้ว
+
+**Libraries ที่ fail (จาก Play Console):**
+```
+libhermes.so, libreactnative.so, libexpo-modules-core.so,
+libgesturehandler.so, libreanimated.so, librnscreens.so,
+libworklets.so, libreact_codegen_*.so, libc++_shared.so,
+libfbjni.so, libjsi.so, libgifimage.so, libstatic-webp.so, ...
+```
+
+**สิ่งที่ลองแล้ว (ไม่ได้ผล):**
+- เพิ่ม `android.ndk.maxPageSize=16384` ใน `gradle.properties` — ไม่ช่วย เพราะ prebuilt .so ถูก compile มาแล้ว
+- เพิ่ม cmake argument `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON` ใน `build.gradle` — ไม่ช่วย เหตุผลเดียวกัน
+
+**หมายเหตุ:** ทั้งสองอย่างนี้ยังอยู่ใน file แต่ไม่มีผล — ATX จะ clean ให้เองตอน upgrade
+
+**วิธีแก้ที่ถูกต้อง:** อัพเกรด Expo SDK 53+ (มี React Native 0.77+ ที่รองรับ 16KB)
+
+---
+
+## Next Steps — เครื่อง build (Linux)
+
+Dev แนะนำให้ใช้ **AWS Transform Custom (ATX)**:
+
+```bash
+# 1. ติดตั้ง ATX (ถ้ายังไม่มี)
+curl -fsSL https://transform-cli.awsstatic.com/install.sh | bash
+
+# 2. cd เข้า project
+cd moph-meet/
+
+# 3. รัน ATX upgrade (interactive)
+atx
+
+# แล้วพิมพ์ใน session:
+# "Upgrade Expo SDK from 52 to 53 (or latest)"
+```
+
+หรือรัน manual:
+```bash
+npm install expo@^53.0.0
+npx expo install --fix
+npx expo-doctor
+npx expo prebuild --clean
+```
+
+**Breaking changes ที่ต้องระวัง:**
+| Package | ก่อน | หลัง | หมายเหตุ |
+|---------|------|------|---------|
+| `react-native-reanimated` | ~3.16.1 | v4 | API เปลี่ยน |
+| `react-native-ble-plx` | ^3.5.1 | ต้องเช็ค | อาจกระทบ BLE |
+| `react` | 18.3.1 | 19.0.0 | New JSX transform |
+
+---
+
+## สถานะไฟล์ปัจจุบัน
+
+| ไฟล์ | สถานะ | หมายเหตุ |
+|------|--------|---------|
+| `moph-meet/constants/api.ts` | ✅ แก้แล้ว | Bug 401 fix — ต้อง push |
+| `moph-meet/android/gradle.properties` | ⚠️ มี `maxPageSize=16384` | ไม่มีผลจริง — ATX จะ clean |
+| `moph-meet/android/app/build.gradle` | ⚠️ มี cmake flag | ไม่มีผลจริง — ATX จะ clean |
+| `cases/016_mobile-create-room-401/report.md` | ✅ สร้างแล้ว | Case report Bug 401 |
+
+---
+
+## สถาปัตยกรรมระบบ (ภาพรวม)
+
+```
+[Mobile App]  moph-meet/          ← Expo SDK 52, React Native 0.76.9
+      ↓ API calls (Cookie auth)
+[Proxy]       user-app-lite/      ← Express + EJS, port per .env
+      ↓ forward /api/*
+[Core API]    core-lite/          ← Plain JS, SQLite, port 3500
+      ↓ Jitsi rooms
+[Video]       call/               ← Jitsi Meet server
+```
+
+**กฎสำคัญ:**
+- ทำงานเฉพาะ `*-lite` และ `moph-meet` — ห้ามแตะ `core/`, `user-app/` (deprecated)
+- Production build ใช้โค้ดจาก git — ต้อง push ก่อน build
+
+---
+
+## Git Workflow
+
+```
+เครื่องนี้ (Windows/Kiro) → git push → git mirror
+เครื่อง build (Linux)      → git pull → atx upgrade → eas build
+```
+
+ตอนนี้: **รอ git mirror พร้อม** แล้ว push ต่อ
+
+---
+
+## References
+
+- Case 016 (Bug 401): `cases/016_mobile-create-room-401/report.md`
+- Pending patches: `docs/PENDING-PATCHES.md`
+- Expo 16KB issue: https://github.com/expo/fyi/blob/main/android-16kb-page-sizes.md
+- ATX docs: https://docs.aws.amazon.com/transform/latest/userguide/custom-get-started.html
+- Steering rules: `.kiro/steering/lite-only.md`, `.kiro/steering/playwright-testing.md`
