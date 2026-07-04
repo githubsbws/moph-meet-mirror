@@ -20,7 +20,15 @@ eas whoami                # verify ล็อกอิน
 
 - ต้องมี `EXPO_TOKEN` (CI) หรือ interactive login
 - iOS: ต้องมี Apple Developer account (EAS จัดการ signing ให้ได้ผ่าน `eas credentials`)
-- Android: EAS สร้าง/เก็บ keystore ให้ (managed) — **อย่าใช้ debug keystore สำหรับ production**
+- Android: **โปรเจกต์นี้เคย EAS build + ขึ้นสโตร์แล้ว** → keystore ถูกเก็บที่ EAS
+  (managed credentials) ผูกกับ `projectId 2ba5fef6-62ca-4a4b-ac91-5775592a4df6`
+  (slug `moph-meet`) — **EAS จะ reuse keystore เดิมอัตโนมัติ ไม่ gen ใหม่** ตราบใดที่
+  login ด้วยบัญชี Expo เดิมที่เป็นเจ้าของ project
+  - ⚠️ ถ้า EAS ถามให้สร้าง keystore ใหม่ = แปลว่า login ผิดบัญชี/ผิด project → **อย่าตอบ yes**
+    (keystore ใหม่จะเซ็นคนละลายเซ็น → อัปเดตทับบน Play Store ไม่ได้) ให้ตรวจ `eas whoami`
+    + `projectId` ให้ตรงก่อน
+  - production update: versionCode จัดการอัตโนมัติด้วย `autoIncrement` (profile production,
+    `appVersionSource: remote`) — ต้องสูงกว่าตัวที่อยู่บน Play เสมอ
 
 > เลี่ยงปม MAX_PATH บนเครื่อง local: EAS build รันบน cloud/Linux → ไม่เจอปัญหา
 > path-length ของ reanimated เหมือน build บน Windows local
