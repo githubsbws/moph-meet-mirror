@@ -58,9 +58,29 @@ export function thaiDOAuthUrl(cfg: AppConfig): string {
 // ── API helpers ────────────────────────────────────────────────────────────────
 // Send token via Cookie header (same as web) instead of Authorization header.
 // The user-app-lite proxy reads token from cookies, not from Authorization header.
-export async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
-  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
-  const res = await fetch(url, {
+// This is the case-016 401 fix — DO NOT regress to `Authorization: Bearer`.
+
+/** Resolve a request path to an absolute URL (absolute paths are passed through). */
+export function buildApiUrl(path: string): string {
+  return path.startsWith('http') ? path : `${API_BASE}${path}`;
+}
+
+/**
+ * Build the fetch request options for an authenticated API call (pure).
+ *
+ * The token is always sent via the `Cookie: token=<token>` header together with
+ * `credentials: 'include'`, matching the web client. It MUST NOT set an
+ * `Authorization` header (case-016 401 fix — see steering `mobile-app.md`).
+ *
+ * Property 2 (design.md): for any `(path, token)`, the returned options contain
+ * header `Cookie: token=<token>` and `credentials: 'include'`, and no
+ * `Authorization` header.
+ *
+ * @param token session token to send via the Cookie header
+ * @param opts  caller-supplied RequestInit overrides (headers are merged last)
+ */
+export function buildApiRequestInit(token: string, opts: RequestInit = {}): RequestInit {
+  return {
     ...opts,
     credentials: 'include',
     headers: {
@@ -68,7 +88,12 @@ export async function apiFetch(path: string, token: string, opts: RequestInit = 
       'Cookie': `token=${token}`,
       ...(opts.headers as Record<string, string> || {}),
     },
-  });
+  };
+}
+
+export async function apiFetch(path: string, token: string, opts: RequestInit = {}) {
+  const url = buildApiUrl(path);
+  const res = await fetch(url, buildApiRequestInit(token, opts));
   return res;
 }
 

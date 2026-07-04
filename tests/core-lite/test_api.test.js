@@ -146,6 +146,43 @@ describe('Rooms', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 3b. ROOMS – PLATFORM HINT (Requirement 9)
+// ═════════════════════════════════════════════════════════════════════════════
+describe('Rooms – platform hint (Req 9)', () => {
+  // The room_created log is observable via GET /api/logs/recent. On the default
+  // sqlite backend each entry carries `platform` plus a masked `room_ref`
+  // (first 6 chars of the room id). Match the created room to read its platform.
+  async function findRoomCreatedPlatform(roomId) {
+    const ref = String(roomId).slice(0, 6);
+    const r = await api.get('/api/logs/recent?limit=200');
+    expect(r.status).toBe(200);
+    const entry = r.data.find(l => l.event === 'room_created' && l.room_ref === ref);
+    return entry ? entry.platform : undefined;
+  }
+
+  test('platform "mobile" → room_created logged with platform "mobile" (Req 9.2)', async () => {
+    const cr = await api.post('/api/rooms', { type: 'meet', platform: 'mobile' }, { headers: authHeaders });
+    expect(cr.status).toBe(200);
+    const roomId = cr.data.room.id;
+    expect(await findRoomCreatedPlatform(roomId)).toBe('mobile');
+  });
+
+  test('no platform hint → room_created logged with platform "web" (Req 9.3, backward compatible)', async () => {
+    const cr = await api.post('/api/rooms', { type: 'meet' }, { headers: authHeaders });
+    expect(cr.status).toBe(200);
+    const roomId = cr.data.room.id;
+    expect(await findRoomCreatedPlatform(roomId)).toBe('web');
+  });
+
+  test('invalid platform value → defaults to "web" (Req 9.3)', async () => {
+    const cr = await api.post('/api/rooms', { type: 'exam', platform: 'desktop' }, { headers: authHeaders });
+    expect(cr.status).toBe(200);
+    const roomId = cr.data.room.id;
+    expect(await findRoomCreatedPlatform(roomId)).toBe('web');
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // 4. EXAM / QUEUE
 // ═════════════════════════════════════════════════════════════════════════════
 describe('Exam Queue', () => {

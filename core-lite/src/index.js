@@ -418,6 +418,8 @@ app.post('/api/rooms', auth(), async (req, res) => {
     if (!['meet', 'exam'].includes(type)) {
         return res.status(400).json({ error: 400, message: 'type must be meet or exam' });
     }
+    // Platform hint from client (allow-list); default 'web' for backward compatibility.
+    const platform = ['web', 'mobile'].includes(req.body.platform) ? req.body.platform : 'web';
 
     const user = res.locals.user;
     const id   = makeRoomId();
@@ -443,7 +445,7 @@ app.post('/api/rooms', auth(), async (req, res) => {
     // Service unit (hcode) from the provider's ProviderID org, when present.
     const unitHcode = user.organization?.[0]?.hcode || user.hcode5 || null;
     const durationSec = Math.max(0, Math.round((new Date(room.endtime) - new Date(room.starttime)) / 1000)) || null;
-    await logStore.insert('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display, platform: 'web', unitHcode, durationSec, meta: { startTime: room.starttime, endTime: room.endtime } });
+    await logStore.insert('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display, platform, unitHcode, durationSec, meta: { startTime: room.starttime, endTime: room.endtime } });
 
     // Build patient join URL for exam rooms (JWT, no expiry)
     let patientJoinUrl = null;

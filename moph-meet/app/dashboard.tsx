@@ -2,15 +2,41 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   SafeAreaView, ActivityIndicator, Alert, RefreshControl,
-  StatusBar, TextInput,
+  StatusBar, TextInput, Modal, Share,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { loadToken, loadUser, clearAuth } from '../constants/storage';
 import { apiFetch, API_BASE, MEETING_DOMAIN } from '../constants/api';
+import {
+  type RoomType,
+  type CreateRoomInput,
+  type ResultLinks,
+  todayDateString,
+  validateCreateRoomInput,
+  buildCreateRoomBody,
+  selectResultLinks,
+} from '../constants/roomForm';
 import MiniCalendar from '../components/MiniCalendar';
 import { Icon } from '../components/Icon';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 const GREEN = '#1b7a43';
+
+// ── date/time <-> string helpers (parity format: 'YYYY-MM-DD' / 'HH:mm') ──────
+function pad2(n: number) { return String(n).padStart(2, '0'); }
+function fmtDateVal(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function fmtTimeVal(d: Date) { return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; }
+function parseDateVal(s?: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+}
+function parseTimeVal(s?: string): Date {
+  const m = /^(\d{2}):(\d{2})$/.exec(s || '');
+  const d = new Date();
+  if (m) d.setHours(+m[1], +m[2], 0, 0);
+  return d;
+}
 
 type Meet = {
   id: string;
@@ -79,37 +105,184 @@ export default function DashboardScreen() {
     router.replace('/');
   }
 
-  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  async function createRoom(type: 'exam' | 'meet') {
-    if (!token || creating) return;
-    setCreating(true);
+
+  // ── Create_Room_Form state (parity flow: เปิดฟอร์ม → ยืนยัน → result panel) ──
+  const [formVisible, setFormVisible] = useState(false);
+  const [formType, setFormType] = useState<RoomType>('exam');
+  const [formInput, setFormInput] = useState<CreateRoomInput>({
+    type: 'exam',
+    date: '',
+    startTime: '',
+    endTime: '',
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<ResultLinks | null>(null);
+  // ช่องที่กำลังเปิด native picker อยู่ (null = ปิด)
+  const [pickerField, setPickerField] = useState<null | 'date' | 'startTime' | 'endTime'>(null);
+
+  /** ค่า Date ที่ใช้ seed picker ตามช่องที่เปิด. */
+  function pickerValue(): Date {
+    if (pickerField === 'date') return parseDateVal(formInput.date);
+    if (pickerField === 'startTime') return parseTimeVal(formInput.startTime);
+    if (pickerField === 'endTime') return parseTimeVal(formInput.endTime);
+    return new Date();
+  }
+
+  /** onChange ของ native picker → แปลงเป็น string parity แล้วเก็บลง formInput. */
+  function onPickerChange(event: DateTimePickerEvent, selected?: Date) {
+    const field = pickerField;
+    setPickerField(null); // Android: ปิด dialog หลังเลือก/ยกเลิก
+    if (event.type === 'dismissed' || !selected || !field) return;
+    if (field === 'date') {
+      setFormInput((prev) => ({ ...prev, date: fmtDateVal(selected) }));
+    } else if (field === 'startTime') {
+      setFormInput((prev) => ({ ...prev, startTime: fmtTimeVal(selected) }));
+    } else {
+      setFormInput((prev) => ({ ...prev, endTime: fmtTimeVal(selected) }));
+    }
+  }
+  // full URL ที่เพิ่งคัดลอก (แสดงข้อความยืนยัน "คัดลอกแล้ว!" ชั่วคราวบนปุ่มนั้น)
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  /**
+   * เปิด Create_Room_Form สำหรับชนิดห้องที่เลือก (แทนการยิง POST /api/rooms ทันที).
+   * รีเซ็ต error/result, ตั้งค่า default วันที่ = วันนี้ (todayDateString) เมื่อช่อง
+   * วันที่ยังว่าง (Req 1.2), แล้วเปิดฟอร์ม (Req 1.1, 2.1).
+   */
+  function openForm(type: RoomType) {
+    setFormType(type);
+    setFormError(null);
+    setResult(null);
+    setFormInput(prev => ({
+      ...prev,
+      type,
+      date: prev.date && prev.date.trim() !== '' ? prev.date : todayDateString(),
+    }));
+    setFormVisible(true);
+  }
+
+  /**
+   * ปิด Create_Room_Form โดย **ไม่** ส่งคำขอสร้างห้อง (Req 3.4).
+   * ไม่แตะ token/network — เพียงซ่อน modal และล้างข้อความ error.
+   */
+  function cancelForm() {
+    setFormVisible(false);
+    setFormError(null);
+  }
+
+  /**
+   * ยืนยันการสร้างห้องจาก Create_Room_Form (parity flow).
+   *
+   * ลำดับการทำงาน (ตาม design.md — Error Handling):
+   *  1) validate ด้วย `validateCreateRoomInput`; ถ้าไม่ผ่าน → เซ็ต `formError`
+   *     และ **ไม่** เรียก API (Req 4.1, 4.2).
+   *  2) ตั้ง `submitting = true` เพื่อปิดปุ่มยืนยันกันส่งซ้ำ, reset ใน `finally`
+   *     (Req 4.3).
+   *  3) ประกอบ body ด้วย `buildCreateRoomBody(input, { platform: 'mobile' })` แล้ว
+   *     ยิง `POST /api/rooms` ผ่าน `apiFetch` (Cookie auth, ไม่ตั้ง Authorization —
+   *     Req 6.1).
+   *  4) จัดการผล: 401 → clearAuth + กลับ login (Req 6.2); non-2xx อื่น → Alert
+   *     สร้างห้องไม่สำเร็จ (Req 6.3); สำเร็จแต่ไม่มี `room.id` → Alert ไม่ได้รับ
+   *     รหัสห้อง (Req 6.4); network error → Alert; สำเร็จมี `room.id` →
+   *     `selectResultLinks` → เซ็ต `result` เพื่อสลับไป Room_Result_Panel (Req 1.3,
+   *     1.5, 2.2, 2.3, 7.1, 7.2).
+   */
+  async function submitCreateRoom() {
+    if (!token || submitting) return;
+
+    // 1) Validate ก่อนยิง API — ถ้าไม่ผ่านให้ระงับคำขอและแสดงข้อความ (Req 4.1, 4.2)
+    const validation = validateCreateRoomInput(formInput);
+    if (!validation.ok) {
+      setFormError(validation.message);
+      return;
+    }
+    setFormError(null);
+
+    // 2) ปิดปุ่มยืนยันระหว่างส่ง กันส่งซ้ำ (Req 4.3)
+    setSubmitting(true);
     try {
+      // 3) body parity กับเว็บ + platform hint 'mobile' (Req 1.3, 2.2, 9.1);
+      //    ส่งผ่าน Cookie auth เดิม ไม่ตั้ง Authorization (Req 6.1)
+      const body = buildCreateRoomBody(formInput, { platform: 'mobile' });
       const r = await apiFetch('/api/rooms', token, {
         method: 'POST',
-        body: JSON.stringify({ type }),
+        body: JSON.stringify(body),
       });
+
+      // 4a) 401 → ล้าง auth และกลับหน้า login (Req 6.2)
       if (r.status === 401) { await handleLogout(); return; }
-      if (!r.ok) { Alert.alert('สร้างห้องไม่สำเร็จ', `รหัส ${r.status}`); return; }
-      const d = await r.json();
-      const roomId = d.room?.id;
-      if (!roomId) { Alert.alert('สร้างห้องไม่สำเร็จ', 'ไม่ได้รับรหัสห้อง'); return; }
-      if (type === 'exam' && d.patientJoinUrl) {
-        const link = d.patientJoinUrl.startsWith('http') ? d.patientJoinUrl : `${API_BASE}${d.patientJoinUrl}`;
-        Alert.alert(
-          'สร้างห้องตรวจแล้ว',
-          `ลิงก์สำหรับผู้ป่วย:\n${link}`,
-          [{ text: 'เข้าห้องตรวจ', onPress: () => router.push(`/doctor/${roomId}`) }]
-        );
-      } else {
-        router.push(`/meet/${roomId}`);
+
+      // 4b) non-2xx อื่น → Alert สร้างห้องไม่สำเร็จ (Req 6.3)
+      if (!r.ok) {
+        Alert.alert('สร้างห้องไม่สำเร็จ', `รหัส ${r.status}`);
+        return;
       }
+
+      const data = await r.json();
+
+      // 4c) สำเร็จแต่ไม่มี room.id → Alert ไม่ได้รับรหัสห้อง (Req 6.4)
+      if (!data?.room?.id) {
+        Alert.alert('สร้างห้องไม่สำเร็จ', 'ไม่ได้รับรหัสห้อง');
+        return;
+      }
+
+      // 4d) สำเร็จ (มี room.id) → ตีความ/เลือกลิงก์ตามชนิดห้อง แล้วสลับ form-panel →
+      //     result-panel ใน modal เดิม (parity กับเว็บ: ซ่อน modal-form-panel แสดง
+      //     modal-result-panel). **ไม่** ปิด modal ตรงนี้ — modal ยังเปิดอยู่และ
+      //     render Room_Result_Panel แทนฟอร์มเมื่อ `result !== null` (Req 1.5, 2.3).
+      setResult(selectResultLinks(formType, data, API_BASE));
     } catch (e: any) {
-      Alert.alert('เกิดข้อผิดพลาด', e.message || 'network');
+      // 4e) network error → Alert (Req 6.3 ครอบคลุมความล้มเหลวในการสร้างห้อง)
+      Alert.alert('เกิดข้อผิดพลาด', e?.message || 'network');
     } finally {
-      setCreating(false);
+      // reset เสมอ ไม่ว่าจะสำเร็จหรือล้มเหลว (Req 4.3)
+      setSubmitting(false);
     }
+  }
+
+  /**
+   * คัดลอก full URL ไป clipboard ด้วย expo-clipboard (Req 5.1, 5.2).
+   * จับ error เงียบ ๆ ไม่ให้กระทบสถานะ result panel (design: Clipboard/Share fail
+   * → swallow). แสดงข้อความยืนยันสั้น ๆ ผ่าน state `copiedLink`.
+   */
+  async function copyLink(fullUrl: string | null) {
+    if (!fullUrl) return;
+    try {
+      await Clipboard.setStringAsync(fullUrl);
+      setCopiedLink(fullUrl);
+      setTimeout(() => setCopiedLink(null), 1500);
+    } catch (_) {
+      // swallow clipboard error เงียบ ๆ (design: ไม่กระทบสถานะ result panel)
+    }
+  }
+
+  /**
+   * แชร์ full URL ผ่าน React Native Share API (Req 5.1). จับ error เงียบ ๆ
+   * (รวมกรณีผู้ใช้ยกเลิก share sheet) — ไม่กระทบสถานะ result panel.
+   */
+  async function shareLink(fullUrl: string | null) {
+    if (!fullUrl) return;
+    try {
+      await Share.share({ message: fullUrl });
+    } catch (_) {
+      // swallow share error เงียบ ๆ
+    }
+  }
+
+  /**
+   * ปิด Room_Result_Panel: ล้าง result + ปิด modal + reset ช่องเวลาในฟอร์ม
+   * (เตรียมฟอร์มให้สะอาดสำหรับการสร้างครั้งถัดไป; คงค่า date default ผ่าน openForm).
+   * รีเฟรชรายการนัดหมายเพื่อให้ห้องที่เพิ่งสร้างปรากฏ (parity กับเว็บที่ reload).
+   */
+  function closeResult() {
+    setResult(null);
+    setFormVisible(false);
+    setFormError(null);
+    setFormInput(prev => ({ ...prev, startTime: '', endTime: '' }));
+    if (token) fetchMeets(token);
   }
 
   function joinRoom(meet: Meet) {
@@ -204,17 +377,15 @@ export default function DashboardScreen() {
           <Text style={styles.actionsTitle}>เริ่มใช้งาน</Text>
           <View style={styles.actionRow}>
             <TouchableOpacity
-              style={[styles.actionBtn, styles.actionPrimary, creating && styles.actionDisabled]}
-              onPress={() => createRoom('exam')}
-              disabled={creating}
+              style={[styles.actionBtn, styles.actionPrimary]}
+              onPress={() => openForm('exam')}
             >
               <Icon name="exam" size={24} color="#fff" />
               <Text style={styles.actionLabel}>สร้างห้องตรวจ</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionBtn, styles.actionPrimary, creating && styles.actionDisabled]}
-              onPress={() => createRoom('meet')}
-              disabled={creating}
+              style={[styles.actionBtn, styles.actionPrimary]}
+              onPress={() => openForm('meet')}
             >
               <Icon name="meet" size={24} color="#fff" />
               <Text style={styles.actionLabel}>สร้างห้องประชุม</Text>
@@ -230,12 +401,6 @@ export default function DashboardScreen() {
               <Text style={styles.actionLabelDark}>อุปกรณ์การแพทย์</Text>
             </TouchableOpacity>
           </View>
-          {creating && (
-            <View style={styles.creatingRow}>
-              <ActivityIndicator color={GREEN} size="small" />
-              <Text style={styles.creatingText}>กำลังสร้างห้อง…</Text>
-            </View>
-          )}
         </View>
 
         {/* Calendar */}
@@ -299,6 +464,202 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* ── Create_Room_Form / Room_Result_Panel (Modal) — parity กับ modal บนเว็บ ──
+          เว็บสลับ modal-form-panel → modal-result-panel ใน modal เดียวกัน. ที่นี่ก็
+          เช่นกัน: modal ยังเปิดอยู่หลังสร้างสำเร็จ และ render Room_Result_Panel แทน
+          ฟอร์มเมื่อ `result !== null` (task 5.4). ปุ่ม/back จะปิด modal ผ่าน
+          closeResult (result panel) หรือ cancelForm (form). */}
+      <Modal
+        visible={formVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={result ? closeResult : cancelForm}
+      >
+        <View style={styles.modalOverlay}>
+          {result ? (
+            /* ── Room_Result_Panel (task 5.4) ── */
+            <View style={styles.modalCard}>
+              <View style={styles.resultSuccessAlert}>
+                <Text style={styles.resultSuccessText}>สร้างห้องสำเร็จแล้ว!</Text>
+              </View>
+
+              {/* ชื่อห้อง — '🏠 ' + roomName (parity กับเว็บ result-room-name).
+                  แสดงได้แม้ roomName = '' (empty result panel, ไม่เข้า error: Req 2.3, 8.3) */}
+              <Text style={styles.resultRoomName}>🏠 {result.roomName}</Text>
+
+              {/* meet → กล่องเขียวอ่อน: ลิงก์ + ปุ่มคัดลอก inline + ปุ่มเข้าห้องประชุม
+                  (mutual exclusivity ตามชนิดห้อง: Req 5.3, 5.4) */}
+              {(result.meetLink || result.meetRoute) && (
+                <View style={styles.resultLinkWrap}>
+                  {result.meetLink && (
+                    <>
+                      <Text style={styles.resultLinkLabel}>
+                        🔗 ลิงก์เข้าห้อง (ต้องล็อกอินด้วย Provider ID)
+                      </Text>
+                      <View style={styles.resultLinkRow}>
+                        <Text style={styles.resultLinkInput} numberOfLines={1} ellipsizeMode="tail" selectable>
+                          {result.meetLink}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.resultCopyBtn}
+                          onPress={() => copyLink(result.meetLink)}
+                        >
+                          <Text style={styles.resultCopyBtnText}>
+                            {copiedLink === result.meetLink ? 'คัดลอกแล้ว!' : 'คัดลอก'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                  {result.meetRoute && (
+                    <TouchableOpacity
+                      style={styles.resultNavBtn}
+                      onPress={() => { const route = result.meetRoute!; closeResult(); router.push(route as any); }}
+                    >
+                      <Text style={styles.resultNavBtnText}>📡 เข้าห้องประชุม</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* exam → กล่องเขียวอ่อน: ลิงก์คิวผู้ป่วย + ปุ่มคัดลอก inline + ปุ่มเข้าห้องตรวจ */}
+              {(result.patientLink || result.doctorRoute) && (
+                <View style={styles.resultLinkWrap}>
+                  {result.patientLink && (
+                    <>
+                      <Text style={styles.resultLinkLabel}>
+                        👤 ลิงก์คิวสำหรับผู้ป่วย (JWT, ไม่มีวันหมดอายุ)
+                      </Text>
+                      <View style={styles.resultLinkRow}>
+                        <Text style={styles.resultLinkInput} numberOfLines={1} ellipsizeMode="tail" selectable>
+                          {result.patientLink}
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.resultCopyBtn}
+                          onPress={() => copyLink(result.patientLink)}
+                        >
+                          <Text style={styles.resultCopyBtnText}>
+                            {copiedLink === result.patientLink ? 'คัดลอกแล้ว!' : 'คัดลอก'}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                  {result.doctorRoute && (
+                    <TouchableOpacity
+                      style={styles.resultNavBtn}
+                      onPress={() => { const route = result.doctorRoute!; closeResult(); router.push(route as any); }}
+                    >
+                      <Text style={styles.resultNavBtnText}>👨‍⚕️ เข้าห้องตรวจ</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+
+              {/* ปิด result panel + modal (reset result/times + refresh รายการ) */}
+              <TouchableOpacity
+                style={styles.resultDoneBtn}
+                onPress={closeResult}
+              >
+                <Text style={styles.resultDoneBtnText}>เสร็จ</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {formType === 'exam' ? '🦷 สร้างห้องตรวจ' : '📡 สร้างห้องประชุม'}
+            </Text>
+            <Text style={styles.modalDesc}>
+              {formType === 'exam'
+                ? 'ชื่อห้องสร้างอัตโนมัติ ระบบจะบันทึกวิดีโออัตโนมัติ'
+                : 'ชื่อห้องสร้างอัตโนมัติ ผู้เข้าร่วมต้องล็อกอินด้วย Provider ID'}
+            </Text>
+
+            {/* วันที่ — แตะเพื่อเปิด native date picker (parity กับ <input type="date"> บนเว็บ).
+                required เป็น visual hint เท่านั้น ไม่บล็อก submit เอง (Req 3.3) */}
+            <Text style={styles.fieldLabel}>
+              วันที่ <Text style={styles.requiredMark}>*</Text>
+            </Text>
+            <TouchableOpacity
+              testID="field-date"
+              style={styles.formInput}
+              onPress={() => setPickerField('date')}
+              disabled={submitting}
+            >
+              <Text style={formInput.date ? styles.formInputText : styles.formInputPlaceholder}>
+                {formInput.date || 'YYYY-MM-DD'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* เวลาเริ่ม — แตะเพื่อเปิด native time picker */}
+            <Text style={styles.fieldLabel}>
+              เวลาเริ่ม <Text style={styles.requiredMark}>*</Text>
+            </Text>
+            <TouchableOpacity
+              testID="field-startTime"
+              style={styles.formInput}
+              onPress={() => setPickerField('startTime')}
+              disabled={submitting}
+            >
+              <Text style={formInput.startTime ? styles.formInputText : styles.formInputPlaceholder}>
+                {formInput.startTime || 'HH:mm'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* เวลาสิ้นสุด — แตะเพื่อเปิด native time picker */}
+            <Text style={styles.fieldLabel}>
+              เวลาสิ้นสุด <Text style={styles.requiredMark}>*</Text>
+            </Text>
+            <TouchableOpacity
+              testID="field-endTime"
+              style={styles.formInput}
+              onPress={() => setPickerField('endTime')}
+              disabled={submitting}
+            >
+              <Text style={formInput.endTime ? styles.formInputText : styles.formInputPlaceholder}>
+                {formInput.endTime || 'HH:mm'}
+              </Text>
+            </TouchableOpacity>
+
+            {pickerField && (
+              <DateTimePicker
+                value={pickerValue()}
+                mode={pickerField === 'date' ? 'date' : 'time'}
+                is24Hour
+                // เวลา = spinner (เลื่อนเลขเป็นคอลัมน์ ชม.:นาที ใกล้เว็บ ใช้ง่ายกว่า clock face);
+                // วันที่ = calendar ปกติ (กดง่ายอยู่แล้ว)
+                display={pickerField === 'date' ? 'default' : 'spinner'}
+                onChange={onPickerChange}
+              />
+            )}
+
+            <Text style={styles.fieldHint}>* ช่องที่ต้องกรอก</Text>
+
+            {formError && <Text style={styles.formErrorText}>{formError}</Text>}
+
+            <View style={styles.formActions}>
+              <TouchableOpacity
+                style={[styles.formBtn, styles.formBtnCancel]}
+                onPress={cancelForm}
+                disabled={submitting}
+              >
+                <Text style={styles.formBtnCancelText}>ยกเลิก</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.formBtn, styles.formBtnSubmit, submitting && styles.actionDisabled]}
+                onPress={submitCreateRoom}
+                disabled={submitting}
+              >
+                <Text style={styles.formBtnSubmitText}>
+                  {formType === 'exam' ? 'สร้างห้องตรวจ' : 'สร้างห้องประชุม'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -342,8 +703,6 @@ const styles = StyleSheet.create({
   actionIcon: { fontSize: 24, marginBottom: 4 },
   actionLabel: { color: '#fff', fontWeight: '700', fontSize: 13 },
   actionLabelDark: { color: GREEN, fontWeight: '600', fontSize: 13 },
-  creatingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 },
-  creatingText: { color: GREEN, fontSize: 13 },
   emptyText:  { fontSize: 14, color: '#9ca3af', marginBottom: 16 },
   searchInput:{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#111', marginBottom: 10 },
   meetCard: {
@@ -359,4 +718,40 @@ const styles = StyleSheet.create({
   joinBtn:    { backgroundColor: GREEN, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, marginLeft: 8 },
   joinText:   { color: '#fff', fontWeight: '600', fontSize: 13 },
   pastLabel:  { fontSize: 12, color: '#9ca3af', marginLeft: 8 },
+
+  // ── Create_Room_Form (Modal) ──
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', paddingHorizontal: 24 },
+  modalCard:    { backgroundColor: '#fff', borderRadius: 14, padding: 20, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6 },
+  modalTitle:   { fontSize: 18, fontWeight: '700', color: GREEN, marginBottom: 6 },
+  modalDesc:    { fontSize: 13, color: '#64748b', marginBottom: 16, lineHeight: 18 },
+  fieldLabel:   { fontSize: 13, fontWeight: '600', color: '#1e293b', marginBottom: 4 },
+  requiredMark: { color: '#dc2626', fontWeight: '700' },
+  formInput:    { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 12, justifyContent: 'center' },
+  formInputText:{ fontSize: 14, color: '#111' },
+  formInputPlaceholder: { fontSize: 14, color: '#9ca3af' },
+  fieldHint:    { fontSize: 11, color: '#9ca3af', marginBottom: 8 },
+  formErrorText:{ fontSize: 13, color: '#dc2626', marginBottom: 10 },
+  formActions:  { flexDirection: 'row', gap: 10, marginTop: 4 },
+  formBtn:      { flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
+  formBtnCancel:{ backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
+  formBtnCancelText: { color: GREEN, fontWeight: '600', fontSize: 14 },
+  formBtnSubmit:{ backgroundColor: GREEN },
+  formBtnSubmitText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  // ── Room_Result_Panel ──
+  resultSuccessAlert: { backgroundColor: '#dcfce7', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 14 },
+  resultSuccessText:  { color: GREEN, fontWeight: '700', fontSize: 14 },
+  resultRoomName:     { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 14 },
+  resultLinkWrap:     { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#d1fae5', borderRadius: 10, padding: 12, marginBottom: 12 },
+  resultLinkLabel:    { fontSize: 12, color: '#64748b', marginBottom: 6 },
+  // แถวลิงก์ + ปุ่มคัดลอก inline (ขวา) — parity กับเว็บ
+  resultLinkRow:      { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  resultLinkInput:    { flex: 1, fontSize: 12, color: '#111', backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 10 },
+  resultCopyBtn:      { borderWidth: 1, borderColor: GREEN, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  resultCopyBtnText:  { color: GREEN, fontWeight: '700', fontSize: 13 },
+  resultNavBtn:       { backgroundColor: GREEN, borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+  resultNavBtnText:   { color: '#fff', fontWeight: '700', fontSize: 14 },
+  // ปุ่ม "เสร็จ" — เขียวเข้มเต็มความกว้าง (ตามภาพ)
+  resultDoneBtn:      { backgroundColor: '#14532d', borderRadius: 10, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  resultDoneBtnText:  { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

@@ -36,3 +36,9 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# build artifacts / native caches (do not commit)
+build-artifacts/
+android/.kotlin/
+android/.cxx/
+android/local.properties

@@ -22,10 +22,9 @@
     },
     "android": {
       "package": "th.go.moph.meet",
-      "targetSdkVersion": 35,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#1b7a43"
+        "backgroundColor": "#ffffff"
       },
       "permissions": [
         "CAMERA",
@@ -44,8 +43,18 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "./plugins/withFmtFix",
+      "./plugins/withUnsafeOkHttp",
+      "./plugins/withFrescoFlags",
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "targetSdkVersion": 35,
+            "compileSdkVersion": 35
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -64,7 +73,8 @@
             "central"
           ]
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true
