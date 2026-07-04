@@ -143,3 +143,81 @@ eas submit --profile production --platform ios       # → App Store Connect
 - `withUnsafeOkHttp` = **trust-all TLS** (MITM risk) — เป็น workaround ชั่วคราวสำหรับ
   cert ของ backend. TODO: เปลี่ยนเป็น cert pinning / trust เฉพาะ CA ก่อนขึ้น production จริง
 - อย่า commit keystore/credentials/`EXPO_TOKEN` ลง git — ให้ EAS จัดการ (managed credentials)
+
+---
+
+## 6. Mac Handover — สำหรับ Kiro บนเครื่อง Mac (โฟกัส iOS)
+
+โค้ดถูก push แล้วที่ branch **`update/expo-sdk53`** (commits: `de3811c` feature +
+`8b54632` sdk53 sync). Windows build เจอปม MAX_PATH — บน Mac ไม่มีปัญหานี้.
+
+### 6.1 Setup บน Mac
+```bash
+git clone https://github.com/githubsbws/moph-meet-mirror.git
+cd moph-meet-mirror && git checkout update/expo-sdk53
+cd moph-meet && npm install
+
+# prerequisites
+xcode-select --install                 # Xcode Command Line Tools
+sudo gem install cocoapods             # CocoaPods (สำหรับ iOS pods)
+brew install watchman                  # แนะนำสำหรับ Metro
+npm i -g eas-cli && eas login
+```
+> `data/*.db` ไม่ได้ถูก push (runtime/มี session token) — ไม่จำเป็นต่อ mobile build.
+> `ios/` folder ยังไม่ถูก commit → ต้อง gen ด้วย prebuild (ข้อ 6.2).
+
+### 6.2 สร้าง native iOS project
+```bash
+cd moph-meet
+npx expo prebuild -p ios     # gen ios/ จาก app.json + config plugins
+cd ios && pod install && cd ..
+```
+ตรวจหลัง prebuild:
+- [ ] `ios/` ถูกสร้าง, `Podfile.lock` มี
+- [ ] bundle id / display name ถูกต้อง (`th.go.moph.meet` / MOPH Meet)
+- [ ] icon: iOS ใช้ `assets/images/icon.png` (พื้นขาวทึบ ไม่มี alpha — เตรียมไว้แล้ว) ✓
+
+### 6.3 ⚠️ iOS TLS — จุดที่ต้องจัดการ (สำคัญ)
+บน **Android** เราแก้ปัญหา cert ของ backend (self-signed/private CA) ด้วย config
+plugin `withUnsafeOkHttp` (trust-all OkHttp). **plugin นี้เป็น Android เท่านั้น** —
+บน iOS (NSURLSession) จะ **ไม่ trust cert อัตโนมัติ** → `directLogin`/`apiFetch` อาจล้ม
+เหมือนตอนรัน Expo Go บน Android.
+
+ทางแก้บน iOS (เลือกอย่างใดอย่างหนึ่ง):
+1. **แนะนำ**: ให้ backend ใช้ cert ที่ trust ได้จริง (public CA) → ไม่ต้อง trust-all
+2. ชั่วคราว/เทสต์: เพิ่ม **ATS exception** ใน `Info.plist`
+   (`NSAppTransportSecurity` → `NSExceptionDomains` ของโดเมน backend) ผ่าน config
+   plugin ฝั่ง iOS (เช่น `withInfoPlist`) — **ยังไม่มีในโปรเจกต์ ต้องสร้างเพิ่ม**
+3. ทำ native module trust-all ฝั่ง iOS (ไม่แนะนำ — security risk เท่า Android)
+
+> Action สำหรับ Kiro บน Mac: ก่อน verify login บน iOS ให้เช็คว่า TLS ต่อ backend ได้
+> ถ้าล้มด้วย SSL error → เพิ่ม ATS exception (ข้อ 2) แล้ว rebuild. อย่า ship trust-all
+> ขึ้น production (ทั้ง iOS/Android) — ดูหมายเหตุความปลอดภัยข้อ 5
+
+### 6.4 Build iOS
+```bash
+# ทางเลือก A: local (เร็ว, ใช้ simulator/เครื่องต่อสาย)
+npx expo run:ios                       # debug บน simulator
+# หรือเปิด ios/*.xcworkspace ใน Xcode แล้ว Run
+
+# ทางเลือก B: EAS (แนะนำสำหรับ preview/production + signing อัตโนมัติ)
+eas build --profile preview    --platform ios
+eas build --profile production --platform ios
+eas credentials -p ios                 # จัดการ provisioning/cert ถ้าติด signing
+```
+
+### 6.5 Verify บน iOS (checklist)
+รัน pre-build gate เดิม (`tsc`, `jest 36/36`, `expo-doctor`) ก่อน แล้วบน artifact/simulator:
+- [ ] แอปเปิดไม่ crash (ดู Xcode console / `npx expo run:ios` log)
+- [ ] **login Username/Password ผ่าน** (ถ้าล้ม → iOS TLS ข้อ 6.3)
+- [ ] สร้างห้อง exam/meet → ฟอร์ม → date/time picker (iOS แสดง picker แบบ iOS)
+- [ ] validation (ช่องว่าง/end ≤ start) ระงับการยิง API
+- [ ] result panel: คัดลอกลิงก์ (Clipboard) + แชร์ (iOS share sheet) + เข้าห้อง
+- [ ] ไอคอนแอปพื้นขาว สัดส่วนถูก (iOS ไม่โชว์ alpha)
+- [ ] Cookie auth: ไม่มี header Authorization (Property 8)
+
+### 6.6 หมายเหตุ cross-platform
+- date/time picker: iOS render เป็น native iOS style เอง (spinner ที่ตั้งไว้เป็น
+  behavior ของ Android; iOS ใช้ UIDatePicker) — ไม่ต้องแก้โค้ด
+- `Share` / `Clipboard`: ใช้ได้ทั้งสอง platform (expo-clipboard + RN Share)
+- ถ้า EAS build iOS ล้มที่ pods → `cd ios && pod repo update && pod install`
