@@ -1,5 +1,7 @@
 package th.go.moph.meet
 
+import com.facebook.react.modules.network.OkHttpClientProvider
+
 import android.app.Application
 import android.content.res.Configuration
 
@@ -12,7 +14,6 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.react.soloader.OpenSourceMergedSoMapping
 import com.facebook.soloader.SoLoader
-import com.facebook.react.modules.network.OkHttpClientProvider  // เพิ่มตรงนี้
 
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
@@ -25,7 +26,7 @@ class MainApplication : Application(), ReactApplication {
           override fun getPackages(): List<ReactPackage> {
             val packages = PackageList(this).packages
             // Packages that cannot be autolinked yet can be added manually here, for example:
-            // packages.add(new MyReactNativePackage());
+            // packages.add(MyReactNativePackage())
             return packages
           }
 
@@ -43,7 +44,7 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-    OkHttpClientProvider.setOkHttpClientFactory(UnsafeOkHttpClientFactory())  // เพิ่มตรงนี้
+    OkHttpClientProvider.setOkHttpClientFactory(UnsafeOkHttpClientFactory())
     SoLoader.init(this, OpenSourceMergedSoMapping)
     if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
       // If you opted-in for the New Architecture, we load the native entry point for this app.

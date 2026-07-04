@@ -78,7 +78,7 @@ npx expo prebuild --clean
 - **ห้ามแตะ bundle identifier / package name** — ค่าที่ตั้งอยู่ถูกต้องแล้ว:
   iOS `bundleIdentifier` = `th.go.moph.moph-meet` (ลูกค้าแก้มาเอง), Android `package` = `th.go.moph.meet`.
   ถ้า `prebuild --clean` ทำให้ค่าเพี้ยน ต้องแก้กลับให้ตรงเดิม
-- custom config plugin `plugins/withFmtFix.js` (แก้ Podfile ฝั่ง iOS) — ตรวจว่ายังจำเป็น/ทำงานกับ RN 0.79 ไหม
+- config plugin `plugins/withFmtFix.js` (แก้ Podfile ฝั่ง iOS ด้วย `FMT_USE_CONSTEVAL=0`) — ถูกลบออกแล้ว เพราะเป็นการแก้ที่ผิด/ไม่จำเป็น; ยืนยันว่า iOS build ผ่านบน RN 0.79 โดยไม่ต้องใช้ plugin นี้
 - `newArchEnabled: true` อยู่แล้ว → SDK 53 เปิด New Arch เป็น default พอดี แต่ต้องเทสว่า native module ทุกตัวรองรับ New Arch
 
 ---
@@ -191,7 +191,7 @@ npx expo prebuild --clean --platform android
 
 - **build iOS บนเครื่อง Windows ไม่ได้** → ต้อง push ขึ้น git → ให้เครื่อง **Mac** เป็นคน build (Xcode / EAS)
 - workflow: `git push` branch `upgrade/expo-sdk53` → Mac pull → `npx expo prebuild --platform ios` → `pod install` → build/archive
-- ตรวจ config plugin `withFmtFix.js` ว่ายังทำงานกับ RN 0.79 (fmt/RCT-Folly patch)
+- config plugin `withFmtFix.js` (fmt/RCT-Folly patch) ถูกลบออกแล้ว — ยืนยันว่า `pod install` + build ผ่านบน RN 0.79 โดยไม่ต้องใช้ plugin นี้
 
 ### EAS build (ทางเลือก cloud)
 

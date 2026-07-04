@@ -7,6 +7,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { loadToken, loadUser } from '../../constants/storage';
 import { API_BASE, MEETING_DOMAIN } from '../../constants/api';
 import { buildJitsiEmbedHtml } from '../../constants/jitsiEmbed';
+import { shouldAllowNavigation } from '../../constants/hostWhitelist';
 
 const WebView = Platform.OS !== 'web'
   ? require('react-native-webview').default
@@ -146,6 +147,7 @@ export default function QueueScreen() {
           javaScriptEnabled
           domStorageEnabled
           originWhitelist={['*']}
+          onShouldStartLoadWithRequest={shouldAllowNavigation}
           mediaCapturePermissionGrantType="grant"
         />
       </View>

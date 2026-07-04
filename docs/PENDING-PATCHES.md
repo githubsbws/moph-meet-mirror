@@ -20,11 +20,16 @@
 
 ## 🔲 รอ Patch — Mobile App (iOS + Android)
 
-- [ ] รอ Patch API ให้พร้อมก่อน
-- [ ] นำส่งศูนย์คอมพิวเตอร์เพื่อขึ้น App Store / Play Store
-- [ ] Expo SDK 52 + React Native 0.76 (`moph-meet/`)
-- [ ] WebView-based Jitsi integration
-- [ ] ProviderID login flow ในแอป
+- [x] **Expo SDK 53 + RN 0.79 + React 19** (`moph-meet/`) — อัปเกรดจาก SDK 52 เสร็จ (branch `update/expo-sdk53`, ดู case 017)
+- [x] **16KB page size** — verify แล้วทั้ง static (`.so` 17 ตัว align `0x4000`) และ runtime (`getconf PAGE_SIZE`=16384 บน 16KB emulator)
+- [x] config plugin ใหม่ 2 ตัว: `withUnsafeOkHttp` (กู้ OkHttp SSL workaround), `withFrescoFlags` (ปิด gif/webp → เอา `libgifimage.so`/`libstatic-webp.so` ออก)
+- [x] `targetSdkVersion 35` ตั้งผ่าน `expo-build-properties` (ตั้งใน `app.json` ตรงๆ ไม่ได้แล้วใน SDK 53)
+- [x] ลบ plugin `withFmtFix.js` (เป็นการแก้ที่ผิด)
+- [ ] **Interactive smoke ยังค้าง:** login ProviderID/manual, สร้างห้องไม่เจอ 401, วิดีโอ camera/mic, back/offline — ต้องมี credential + backend จริง (dev เดินบน device/emulator)
+- [ ] **iOS build ค้าง:** push branch `update/expo-sdk53` → build บน Mac (Xcode/EAS)
+- [ ] **SECURITY ก่อน production/VA:** `UnsafeOkHttpClientFactory` ปิด TLS verify ทั้งหมด (MITM) → ยกระดับเป็น cert allow-list / pinning
+- [ ] Windows build: ต้องใช้ short path + SDK path ไม่มีช่องว่าง (env เท่านั้น ไม่แตะโค้ด)
+- [ ] รอ Patch API ให้พร้อม + นำส่งศูนย์คอมพิวเตอร์เพื่อขึ้น App Store / Play Store
 - [ ] อัปเดตเอกสาร `moph-meet-v1.1.html` → เปลี่ยนสถานะ Mobile App จาก "รอ Patch" → "✅"
 
 ## ❌ ไม่ทำ — WebSocket Realtime Queue

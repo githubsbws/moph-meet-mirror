@@ -260,7 +260,7 @@ export default function DevicesScreen() {
             ))}
 
             {!scanning && devices.length === 0 && (
-              <Text style={s.empty}>ยังไม่พบอุปกรณ์ — กด "สแกน" เพื่อค้นหา</Text>
+              <Text style={s.empty}>ยังไม่พบอุปกรณ์ — กด {'"สแกน"'} เพื่อค้นหา</Text>
             )}
 
             {readings.length > 0 && (

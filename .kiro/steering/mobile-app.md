@@ -37,7 +37,8 @@ deprecated — deprecated มีแค่ `tests/moph-meet/`). อ้างอ�
   Windows ได้) แล้วเปิดโฟลเดอร์ `moph-meet/android` ใน **Android Studio** เพื่อ run/
   build (หรือ `gradlew assembleRelease` สำหรับตรวจ 16KB).
 - **iOS:** build บน Windows ไม่ได้ — ต้อง push ขึ้น git แล้วให้เครื่อง **Mac** build
-  (Xcode / EAS). config plugin `plugins/withFmtFix.js` แก้ Podfile ฝั่ง iOS.
+  (Xcode / EAS). หมายเหตุ: config plugin `plugins/withFmtFix.js` (patch Podfile
+  ฝั่ง iOS ด้วย `FMT_USE_CONSTEVAL=0`) ถูกลบออกแล้ว เพราะเป็นการแก้ที่ผิด/ไม่จำเป็น.
 - **16KB page size:** Google Play บังคับ. ต้อง verify ด้วย 16KB emulator
   (`adb shell getconf PAGE_SIZE` = 16384) + ตรวจ ELF alignment ของ `.so` ทุกตัว
   ก่อนส่ง store. ระวัง lib ที่รู้ว่ามีปัญหา: `expo-image` (Glide/avif),

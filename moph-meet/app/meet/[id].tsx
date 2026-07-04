@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { loadToken, loadUser } from '../../constants/storage';
 import { apiFetch, MEETING_DOMAIN } from '../../constants/api';
 import { buildJitsiEmbedHtml } from '../../constants/jitsiEmbed';
+import { shouldAllowNavigation } from '../../constants/hostWhitelist';
 
 // WebView is native-only — import only on native to avoid web crash
 const WebView = Platform.OS !== 'web'
@@ -97,6 +98,7 @@ export default function MeetScreen() {
         javaScriptEnabled
         domStorageEnabled
         originWhitelist={['*']}
+        onShouldStartLoadWithRequest={shouldAllowNavigation}
         mediaCapturePermissionGrantType="grant"
         allowsBackForwardNavigationGestures={false}
       />

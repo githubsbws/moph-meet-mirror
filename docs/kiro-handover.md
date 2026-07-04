@@ -1,7 +1,7 @@
 # MOPH Meet — Handover Instructions (for Kiro / dev team)
 
 > เอกสารส่งต่องานให้ทีม dev อีกทีม (และ Kiro ของทีมนั้น) — อ่านให้จบก่อนแก้โค้ด
-> อัปเดตล่าสุด: 2026-06-30 · งานรอบนี้อยู่บน branch `delivery/update-Q2-26` (merged → master) + `delivery/mobile-parity`
+> อัปเดตล่าสุด: 2026-07-03 · งานรอบนี้: `delivery/update-Q2-26` (merged → master) + `delivery/mobile-parity` + `update/expo-sdk53` (SDK53 upgrade — ดู §4.3 / case 017)
 
 ---
 
@@ -63,6 +63,18 @@ nginx: `/api/` → 3500, อื่น ๆ → 3000.
 | 4.2/4.5/4.11.4/4.9 | unit search / queue ring / calendar color / media res | `index.js`, `meet.html`, `dashboard.js`, `app.css` | `GET /api/units/search?q=` |
 | 4.10.6 | Bluetooth ≥5 | `moph-meet/app/devices.tsx`, `constants/ble.ts`, `app.json` | (ใช้ /api/vitals) |
 
+### 4.3 Mobile SDK 53 upgrade + 16KB (branch `update/expo-sdk53`, base `delivery/mobile-parity`)
+รายละเอียดเต็มใน `cases/017_mobile-sdk53-upgrade/report.md`
+- **อัปเกรด Expo SDK 52 → 53** (RN 0.79 / React 19): `expo` ~53.0.0, `react`/`react-dom` 19.0.0, `react-native` 0.79.6, `expo-router` ~5.1.0, reanimated ~3.17.4, `jest-expo` ~53; เพิ่ม `.npmrc` (legacy-peer-deps), เพิ่ม `react-native-ble-plx` ^3.5.1
+- **16KB page size verify แล้ว:** static (`.so` 17 ตัว align `0x4000`, ไม่มี `libgifimage.so`/`libstatic-webp.so`) + runtime (`adb shell getconf PAGE_SIZE`=16384 บน 16KB emulator) — เอา workaround เดิม (`android.ndk.maxPageSize` / `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES`) ออก, ใช้ NDK r27
+- **config plugin ใหม่ 2 ตัว (durable ต่อ `expo prebuild --clean`):**
+  - `plugins/withUnsafeOkHttp.js` — กู้ `UnsafeOkHttpClientFactory` (direct-login SSL workaround) กลับ
+  - `plugins/withFrescoFlags.js` — ตั้ง `expo.gif.enabled`/`expo.webp.enabled=false`
+- **ลบ `plugins/withFmtFix.js`** (เป็นการแก้ที่ผิด/ไม่จำเป็น)
+- **`targetSdkVersion 35`** ย้ายไปตั้งผ่าน `expo-build-properties` (ตั้งใน `app.json` ตรงๆ ไม่ได้แล้วใน SDK 53)
+- **Cookie auth คงไว้** (`constants/api.ts`, ไม่ regress เป็น Bearer — case 016); host whitelist แยกไป `constants/hostWhitelist.ts`
+- **ค้าง:** interactive smoke (login/สร้างห้อง/วิดีโอ/offline — ต้อง credential+backend), iOS build (push → Mac), และยกระดับ TLS allow-list ก่อน production (ดูข้อ 7.1)
+
 ### 4.2 Mobile parity (branch `delivery/mobile-parity`)
 ทำ `moph-meet` ให้ feature เท่า `user-app-lite`:
 - `app/index.tsx` — ThaID button + OAuth robust (อ่าน result.url + getInitialURL)
@@ -117,15 +129,15 @@ pm2 reload user-app-lite
 1. **VA (TOR 4.13) — เร่งด่วน:** เอา trust-all TLS ออกก่อนทำ VA
    - `core-lite/src/index.js` บรรทัดต้น: `process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'`
    - `user-app-lite/server.js`: `rejectUnauthorized: false` (`_insecureAgent`)
-   - `moph-meet/.../OkHttpClientFactory.kt`: UnsafeOkHttpClient (ปิด TLS verify ทั้งหมด = MITM risk)
-   - แก้เป็น cert allow-list ไม่งั้น VA เจอ Critical/High
+   - `moph-meet/`: `UnsafeOkHttpClientFactory` (ปิด TLS verify ทั้งหมด = MITM risk) — หลัง SDK53 upgrade ถูกกู้กลับเป็น config plugin `plugins/withUnsafeOkHttp.js` (durable ต่อ `expo prebuild --clean`) ยังคง unsafe เหมือนเดิม
+   - แก้เป็น cert allow-list / pinning ไม่งั้น VA เจอ Critical/High
 2. **Credentials ที่ยังต้องกรอกใน `.env`** (โครงโค้ดพร้อมแล้ว):
    - ThaID: `THAID_CLIENT_ID/SECRET/REDIRECT_URI/TOKEN_URL/PROFILE_URL` (จาก DOPA/สธ)
    - LINE OA: `LINE_CHANNEL_TOKEN`, `LINE_TARGET`
    - HIS: `HIS_ENDPOINT` (default = demo-his)
-3. **BLE (4.10.6):** ต้อง `npm i react-native-ble-plx` ถ้าจะใช้ของจริง + native build; GATT parser ใน `devices.tsx` เป็นตัวอย่าง ต้อง validate กับ firmware จริง
+3. **BLE (4.10.6):** `react-native-ble-plx` ^3.5.1 เพิ่มใน `package.json` แล้ว (SDK53 upgrade) — ยังต้อง native build + validate GATT parser ใน `devices.tsx` กับ firmware จริง
 4. **hcode-to-area.js:** ยัง gen ไม่ครบ — รัน `core-lite/scripts/build-hcode-map.js` จากไฟล์ รพ. (TSV) ให้ province/region + unit search ทำงานเต็ม
-5. **Mobile UI verify:** งาน mobile-parity ยังไม่ได้รัน expo/tsc ในเครื่องที่ทำ — ทีมต้อง build ตรวจ UI จริง
+5. **Mobile verify (SDK53):** static gate ผ่าน (tsc/lint 0 error), Android build + 16KB ยืนยันแล้ว; **ยังค้าง** interactive smoke (login ProviderID/manual, สร้างห้องไม่ 401, วิดีโอ camera/mic, back/offline — ต้อง credential+backend จริงบน device/emulator) และ **iOS build** (push `update/expo-sdk53` → Mac). Windows build ต้องใช้ short path + SDK path ไม่มีช่องว่าง
 6. **Icon:** ใช้ `@expo/vector-icons` (mdi). ถ้าต้องการ Iconify จริง (set อื่น) เปลี่ยนที่ `components/Icon.tsx` ไฟล์เดียว + ลง `react-native-iconify` + babel plugin + rebuild
 
 ---
@@ -134,5 +146,5 @@ pm2 reload user-app-lite
 - `docs/tor-gap-analysis-lite-mobile.md` — เทียบ TOR รายข้อ (internal)
 - `docs/tor-completion-plan.md` — แผน task + สัญญา API + acceptance
 - `core-lite/docs/openapi.yaml` + `postman_collection.json` — API spec
-- `cases/001..015/report.md` — บันทึกแต่ละเคสที่แก้
+- `cases/001..017/report.md` — บันทึกแต่ละเคสที่แก้ (017 = SDK53 upgrade + 16KB)
 - `.kiro/steering/lite-only.md`, `.kiro/steering/case-reports.md` — กฎ
