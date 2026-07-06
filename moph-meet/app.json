@@ -18,6 +18,9 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSBluetoothPeripheralUsageDescription": "ใช้ Bluetooth เพื่อเชื่อมต่ออุปกรณ์ทางการแพทย์ (TOR 4.10.6)",
         "NSBluetoothAlwaysUsageDescription": "ใช้ Bluetooth เพื่อเชื่อมต่ออุปกรณ์ทางการแพทย์ (TOR 4.10.6)"
+      },
+      "runtimeVersion": {
+        "policy": "appVersion"
       }
     },
     "android": {
@@ -35,7 +38,8 @@
         "BLUETOOTH_SCAN",
         "BLUETOOTH_CONNECT",
         "ACCESS_FINE_LOCATION"
-      ]
+      ],
+      "runtimeVersion": "1.0.0"
     },
     "web": {
       "bundler": "metro",
@@ -86,6 +90,9 @@
       "eas": {
         "projectId": "2ba5fef6-62ca-4a4b-ac91-5775592a4df6"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2ba5fef6-62ca-4a4b-ac91-5775592a4df6"
     }
   }
 }
