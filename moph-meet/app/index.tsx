@@ -128,7 +128,7 @@ export default function LoginScreen() {
       <View style={styles.card}>
         {/* Logo */}
         <Image
-          source={require('../assets/images/icon.png')}
+          source={require('../assets/images/login-logo.png')}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  logo: { width: 96, height: 96, marginBottom: 12 },
+  logo: { width: 142, height: 66, marginBottom: 12 },
   appName: { fontSize: 22, fontWeight: '700', color: GREEN, marginBottom: 4 },
   subtitle: { fontSize: 13, color: '#6b7280', textAlign: 'center', marginBottom: 28 },
   btn: {
