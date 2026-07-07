@@ -1,9 +1,10 @@
 /**
  * BLE runtime permissions — TOR 4.10.6
  * Android requires runtime permission grants before scanning/connecting BLE:
- *   - API >= 31 (Android 12+): BLUETOOTH_SCAN + BLUETOOTH_CONNECT
- *                              (+ ACCESS_FINE_LOCATION for some OEMs / neverForLocation not set)
- *   - API <  31             : ACCESS_FINE_LOCATION
+ *   - API >= 31 (Android 12+): BLUETOOTH_SCAN + BLUETOOTH_CONNECT only.
+ *                              Manifest declares BLUETOOTH_SCAN with
+ *                              neverForLocation, so NO location prompt appears.
+ *   - API <  31             : ACCESS_FINE_LOCATION (OS-mandated for BLE scan)
  * iOS / web: no runtime request here (iOS handled via Info.plist usage descriptions).
  */
 import { Platform, PermissionsAndroid } from 'react-native';
@@ -20,20 +21,22 @@ export async function ensureBlePermissions(): Promise<boolean> {
 
   try {
     if (apiLevel >= 31) {
+      // Android 12+: only BLUETOOTH_SCAN + BLUETOOTH_CONNECT are needed.
+      // The manifest declares BLUETOOTH_SCAN with neverForLocation, so no
+      // location permission is requested here.
       const result = await PermissionsAndroid.requestMultiple([
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ]);
       const scan = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN];
       const connect = result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT];
-      // SCAN + CONNECT are mandatory; FINE_LOCATION is best-effort (OEM dependent).
       return (
         scan === PermissionsAndroid.RESULTS.GRANTED &&
         connect === PermissionsAndroid.RESULTS.GRANTED
       );
     }
 
+    // Android < 12: BLE scanning still requires location permission (OS mandated).
     const granted = await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     );
