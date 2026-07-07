@@ -18,8 +18,9 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { loadToken } from '../constants/storage';
-import { API_BASE } from '../constants/api';
-import { BLE_SERVICES, DEVICE_METRICS, DEVICE_LABELS, type DeviceType } from '../constants/ble';
+import { apiFetch } from '../constants/api';
+import { BLE_SERVICES, DEVICE_METRICS, DEVICE_LABELS, parseGATT, type DeviceType, type VitalReading } from '../constants/ble';
+import { ensureBlePermissions } from '../constants/blePermissions';
 
 const GREEN = '#1b7a43';
 
@@ -36,50 +37,6 @@ try {
 const BLE_AVAILABLE = !!BleManager && Platform.OS !== 'web';
 
 type ScannedDevice = { id: string; name: string | null; serviceUUIDs: string[] | null };
-type VitalReading  = { metric: string; unit: string; label: string; value: string };
-
-/** Attempt to parse a GATT characteristic value (base64) for known services */
-function parseGATT(serviceUUID: string, base64Value: string): VitalReading[] {
-  try {
-    const buf = Buffer.from(base64Value, 'base64');
-    // Minimal parsing for demo — real devices use proper GATT parsers
-    // thermometer: IEEE-11073 float in bytes 1-4
-    if (serviceUUID.startsWith('00001809')) {
-      const raw = ((buf[1] | (buf[2] << 8)) & 0x7fff) / 10;
-      return [{ metric: 'temp', unit: '°C', label: 'อุณหภูมิ', value: String(raw) }];
-    }
-    // blood pressure: sys = uint16 bytes 1-2, dia = uint16 bytes 3-4, pr = bytes 14-15
-    if (serviceUUID.startsWith('00001810')) {
-      const sys = buf[1] | (buf[2] << 8);
-      const dia = buf[3] | (buf[4] << 8);
-      const pr  = buf[14] | (buf[15] << 8);
-      return [
-        { metric: 'sys', unit: 'mmHg', label: 'SYS', value: String(sys) },
-        { metric: 'dia', unit: 'mmHg', label: 'DIA', value: String(dia) },
-        { metric: 'pr',  unit: '/min', label: 'ชีพจร', value: String(pr) },
-      ];
-    }
-    // pulse oximeter: SpO2 byte 3, PR byte 4
-    if (serviceUUID.startsWith('00001822')) {
-      return [
-        { metric: 'spo2', unit: '%',    label: 'SpO₂', value: String(buf[3]) },
-        { metric: 'pr',   unit: '/min', label: 'ชีพจร', value: String(buf[4]) },
-      ];
-    }
-    // weight scale: weight uint16 bytes 1-2 × 0.005 kg
-    if (serviceUUID.startsWith('0000181d')) {
-      const weight = ((buf[1] | (buf[2] << 8)) * 0.005).toFixed(1);
-      return [{ metric: 'weight', unit: 'kg', label: 'น้ำหนัก', value: weight }];
-    }
-    // glucose: concentration bytes 3-4 as mmol/L × 10, convert to mg/dL
-    if (serviceUUID.startsWith('00001808')) {
-      const mmol = (buf[3] | (buf[4] << 8)) / 10;
-      const mgdl = Math.round(mmol * 18.02).toString();
-      return [{ metric: 'glucose', unit: 'mg/dL', label: 'น้ำตาล', value: mgdl }];
-    }
-  } catch (_) {}
-  return [];
-}
 
 /** Manual entry panel for one device type */
 function ManualEntry({
@@ -99,11 +56,11 @@ function ManualEntry({
       source: 'manual',
     }));
     if (!records.length) { Alert.alert('กรุณากรอกอย่างน้อย 1 ค่า'); return; }
+    if (!token) { Alert.alert('กรุณาเข้าสู่ระบบก่อน'); return; }
     setSaving(true);
     try {
-      const r = await fetch(`${API_BASE}/api/vitals/batch`, {
+      const r = await apiFetch('/api/vitals/batch', token, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(records),
       });
       if (r.ok) { Alert.alert('บันทึกแล้ว'); setVals({}); onSaved(); }
@@ -147,14 +104,14 @@ export default function DevicesScreen() {
   const [showManual, setShowManual]   = useState(!BLE_AVAILABLE);
   const [saved, setSaved]             = useState(0);
   const scanSub = useRef<any>(null);
+  const stateSub = useRef<any>(null);
 
   useEffect(() => {
     loadToken().then(t => { if (!t) { router.replace('/'); return; } setToken(t); });
-    return () => { scanSub.current?.remove(); };
+    return () => { scanSub.current?.remove(); stateSub.current?.remove(); };
   }, []);
 
-  async function startScan() {
-    if (!BleManager) { setShowManual(true); return; }
+  function beginScan() {
     setScanning(true);
     setDevices([]);
     const allServiceUUIDs = Object.values(BLE_SERVICES);
@@ -170,29 +127,98 @@ export default function DevicesScreen() {
     setTimeout(() => { BleManager?.stopDeviceScan(); setScanning(false); }, 10000);
   }
 
+  async function startScan() {
+    if (!BleManager) { setShowManual(true); return; }
+
+    // Android runtime permissions (BLUETOOTH_SCAN/CONNECT or FINE_LOCATION)
+    const ok = await ensureBlePermissions();
+    if (!ok) {
+      Alert.alert(
+        'ต้องการสิทธิ์ Bluetooth',
+        'กรุณาอนุญาตสิทธิ์ Bluetooth/ตำแหน่ง เพื่อสแกนอุปกรณ์ หรือกรอกค่าด้วยตนเองด้านล่าง',
+      );
+      setShowManual(true);
+      return;
+    }
+
+    // Ensure the Bluetooth adapter is powered on before scanning
+    try {
+      const state = await BleManager.state();
+      if (state !== 'PoweredOn') {
+        const powered = await new Promise<boolean>((resolve) => {
+          const sub = BleManager.onStateChange((st: string) => {
+            if (st === 'PoweredOn') { sub.remove(); resolve(true); }
+          }, true);
+          stateSub.current = sub;
+          setTimeout(() => { sub.remove(); resolve(false); }, 3000);
+        });
+        if (!powered) {
+          Alert.alert('Bluetooth ปิดอยู่', 'กรุณาเปิด Bluetooth แล้วลองสแกนอีกครั้ง');
+          return;
+        }
+      }
+    } catch (e: any) {
+      Alert.alert('Bluetooth ไม่พร้อม', e?.message || 'ไม่สามารถตรวจสอบสถานะ Bluetooth');
+      setShowManual(true);
+      return;
+    }
+
+    beginScan();
+  }
+
   async function connectDevice(dev: ScannedDevice) {
     if (!BleManager || !token) return;
+    const monitors: any[] = [];
     try {
       const d = await BleManager.connectToDevice(dev.id);
       await d.discoverAllServicesAndCharacteristics();
       setConnected(dev.id);
 
-      // Try to read from all known services
       const newReadings: VitalReading[] = [];
-      for (const [type, svcUUID] of Object.entries(BLE_SERVICES)) {
+      const notifyChars: { svc: string; char: string }[] = [];
+
+      // Pass 1 — read readable characteristics; collect notify/indicate ones
+      for (const svcUUID of Object.values(BLE_SERVICES)) {
         try {
           const chars = await d.characteristicsForService(svcUUID);
           for (const c of chars) {
-            if (!c.isReadable) continue;
-            const cr = await c.read();
-            if (cr.value) newReadings.push(...parseGATT(svcUUID, cr.value));
+            if (c.isReadable) {
+              try {
+                const cr = await c.read();
+                if (cr.value) newReadings.push(...parseGATT(svcUUID, cr.value));
+              } catch (_) {}
+            }
+            if (c.isNotifiable || c.isIndicatable) {
+              notifyChars.push({ svc: svcUUID, char: c.uuid });
+            }
           }
         } catch (_) {}
       }
 
+      // Pass 2 — if nothing from reads, subscribe to notify/indicate and wait
+      // for the first value (medical devices usually push via NOTIFY/INDICATE).
+      if (newReadings.length === 0 && notifyChars.length > 0) {
+        const notified = await new Promise<VitalReading[]>((resolve) => {
+          let done = false;
+          const finish = (v: VitalReading[]) => { if (!done) { done = true; resolve(v); } };
+          for (const { svc, char } of notifyChars) {
+            const sub = d.monitorCharacteristicForService(
+              svc, char,
+              (err: any, c: any) => {
+                if (err || !c?.value) return;
+                const parsed = parseGATT(svc, c.value);
+                if (parsed.length > 0) finish(parsed);
+              },
+            );
+            monitors.push(sub);
+          }
+          setTimeout(() => finish([]), 15000); // 15s timeout
+        });
+        newReadings.push(...notified);
+      }
+
       if (newReadings.length > 0) {
         setReadings(newReadings);
-        // Auto-send to /api/vitals/batch
         const records = newReadings.map(r => ({
           roomId,
           deviceId: dev.id,
@@ -202,9 +228,8 @@ export default function DevicesScreen() {
           unit: r.unit,
           source: 'ble',
         }));
-        await fetch(`${API_BASE}/api/vitals/batch`, {
+        await apiFetch('/api/vitals/batch', token, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(records),
         });
         setSaved(p => p + records.length);
@@ -213,12 +238,12 @@ export default function DevicesScreen() {
         Alert.alert('ไม่พบข้อมูล', 'ไม่มีค่าที่อ่านได้จากอุปกรณ์นี้ กรุณากรอกเอง');
         setShowManual(true);
       }
-
-      await BleManager.cancelDeviceConnection(dev.id);
-      setConnected(null);
     } catch (e: any) {
-      Alert.alert('เชื่อมต่อล้มเหลว', e.message + '\nกรุณากรอกค่าด้วยตนเอง');
+      Alert.alert('เชื่อมต่อล้มเหลว', (e?.message || '') + '\nกรุณากรอกค่าด้วยตนเอง');
       setShowManual(true);
+    } finally {
+      for (const m of monitors) { try { m.remove(); } catch (_) {} }
+      try { await BleManager.cancelDeviceConnection(dev.id); } catch (_) {}
       setConnected(null);
     }
   }
