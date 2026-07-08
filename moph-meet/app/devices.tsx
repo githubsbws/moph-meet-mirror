@@ -36,6 +36,10 @@ try {
 
 const BLE_AVAILABLE = !!BleManager && Platform.OS !== 'web';
 
+// Temporarily hide manual vital-signs entry until the backend vitals API
+// (POST /api/vitals/batch) is deployed to production. Set back to true to re-enable.
+const MANUAL_ENTRY_ENABLED = false;
+
 type ScannedDevice = { id: string; name: string | null; serviceUUIDs: string[] | null };
 
 /** Manual entry panel for one device type */
@@ -307,7 +311,10 @@ export default function DevicesScreen() {
           </View>
         )}
 
-        {/* Manual fallback (always available per TOR requirement) */}
+        {/* Manual fallback — temporarily disabled until the vitals API
+            (POST /api/vitals/batch) is deployed to production (returns 404
+            otherwise). Flip MANUAL_ENTRY_ENABLED back to true to re-enable. */}
+        {MANUAL_ENTRY_ENABLED && (
         <View style={s.section}>
           <View style={s.manualToggleRow}>
             <Text style={s.sectionTitle}>กรอกค่าด้วยตนเอง (fallback)</Text>
@@ -341,6 +348,7 @@ export default function DevicesScreen() {
             </>
           )}
         </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
