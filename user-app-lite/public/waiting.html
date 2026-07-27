@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ห้องรอเข้าประชุม — MOPH Meet</title>
+  <style>
+    body { margin:0; min-height:100vh; display:grid; place-items:center; background:#edf8f0; font-family:system-ui,sans-serif; color:#173425; }
+    main { width:min(420px, calc(100% - 32px)); background:#fff; border-radius:20px; padding:32px; text-align:center; box-shadow:0 8px 30px #185e3530; }
+    h1 { margin:0 0 10px; color:#056839; font-size:22px; }
+    #status { margin:18px 0; padding:14px; border-radius:12px; background:#f1f5f9; }
+    .waiting { color:#92400e; background:#fffbeb !important; }
+    .approved { color:#065f46; background:#ecfdf5 !important; }
+    .rejected { color:#991b1b; background:#fef2f2 !important; }
+    button { border:0; border-radius:9px; padding:11px 16px; background:#056839; color:white; font:inherit; cursor:pointer; }
+    button[hidden] { display:none; }
+    small { display:block; color:#64748b; margin-top:16px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ห้องรอเข้าประชุม</h1>
+    <p id="room">กำลังตรวจสอบคำเชิญ…</p>
+    <div id="status">กำลังเชื่อมต่อ…</div>
+    <button id="join" hidden>เข้าสู่ห้องประชุม</button>
+    <small>หน้านี้จะตรวจสถานะทุก 5 วินาที</small>
+  </main>
+  <script>
+    const roomId = location.pathname.split('/').filter(Boolean).pop();
+    const token = new URLSearchParams(location.search).get('jwt');
+    const statusEl = document.getElementById('status');
+    const roomEl = document.getElementById('room');
+    const join = document.getElementById('join');
+    if (!token) { statusEl.textContent = 'ไม่พบลิงก์คำเชิญ'; statusEl.className = 'rejected'; }
+    async function poll() {
+      if (!token) return;
+      try {
+        const r = await fetch(`/api/rooms/${encodeURIComponent(roomId)}/waiting-room?jwt=${encodeURIComponent(token)}`);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.message || 'ไม่สามารถใช้คำเชิญนี้ได้');
+        roomEl.textContent = data.roomName || 'ห้องประชุม';
+        const message = { active: 'กำลังลงทะเบียนเข้าห้องรอ…', waiting: 'กำลังรอผู้ดูแลอนุมัติ', approved: 'ได้รับอนุมัติให้เข้าห้องประชุมแล้ว', rejected: 'คำขอเข้าร่วมถูกปฏิเสธ', revoked: 'คำเชิญถูกยกเลิก' }[data.status] || data.status;
+        statusEl.textContent = message;
+        statusEl.className = data.status === 'approved' ? 'approved' : ['rejected','revoked'].includes(data.status) ? 'rejected' : 'waiting';
+        join.hidden = data.status !== 'approved';
+        if (['rejected','revoked'].includes(data.status)) clearInterval(timer);
+      } catch (error) {
+        statusEl.textContent = error.message || 'เชื่อมต่อไม่สำเร็จ'; statusEl.className = 'rejected'; clearInterval(timer);
+      }
+    }
+    join.addEventListener('click', async () => {
+      try {
+        const cfg = await fetch('/config').then(r => r.json());
+        if (!cfg.meetingDomain) throw new Error('ยังไม่ได้ตั้งค่า Video Conference');
+        location.href = `https://${cfg.meetingDomain}/${encodeURIComponent(roomId)}`;
+      } catch (error) {
+        statusEl.textContent = error.message || 'ไม่สามารถเปิดห้องประชุม'; statusEl.className = 'rejected';
+      }
+    });
+    poll(); const timer = setInterval(poll, 5000);
+  </script>
+</body>
+</html>

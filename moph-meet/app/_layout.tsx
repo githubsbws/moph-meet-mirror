@@ -17,7 +17,7 @@ async function handleUrl({ url }: { url: string }) {
   try {
     const user = userRaw ? JSON.parse(decodeURIComponent(userRaw)) : {};
     await saveAuth(decodeURIComponent(token), user);
-    router.replace('/dashboard');
+    router.replace('/consent');
   } catch (_) {}
 }
 
@@ -35,6 +35,7 @@ export default function RootLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index"      options={{ animation: 'fade' }} />
+      <Stack.Screen name="consent"    options={{ animation: 'fade' }} />
       <Stack.Screen name="dashboard"  options={{ animation: 'fade' }} />
       <Stack.Screen name="exam/[id]"  options={{ animation: 'slide_from_right' }} />
       <Stack.Screen name="meet/[id]"  options={{ animation: 'slide_from_right' }} />

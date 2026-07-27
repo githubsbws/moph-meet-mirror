@@ -44,6 +44,11 @@
     background: #056839; color: #fff; text-align: center;
     padding: .5rem 1rem; font-size: .9rem; font-weight: 600;
   }
+  .enter-exam-btn {
+    width:100%; margin-top:1rem; padding:.8rem 1rem; border:0; border-radius:.55rem;
+    background:#056839; color:#fff; font:inherit; font-weight:700; font-size:1rem; cursor:pointer;
+  }
+  .enter-exam-btn:disabled { background:#94a3b8; cursor:default; }
 </style>
 </head>
 <body>
@@ -61,6 +66,12 @@
     <div id="status-waiting">
       <div class="spinner"></div>
       <p class="poll-note">ระบบตรวจสอบคิวทุก 5 วินาที</p>
+    </div>
+    <div id="status-called" style="display:none">
+      <p style="color:#056839;font-weight:700;font-size:1rem;margin:.5rem 0 0">📞 คุณหมอเรียกแล้ว</p>
+      <p class="poll-note" style="margin:.35rem 0 0">กดปุ่มเพื่อเข้าห้องตรวจ</p>
+      <button type="button" class="enter-exam-btn" id="btn-enter-exam" onclick="enterExam()">เข้าห้องตรวจ</button>
+      <p class="poll-note" id="enter-exam-note" style="margin:.5rem 0 0"></p>
     </div>
     <div id="status-admitted" style="display:none">
       <p style="color:#056839;font-weight:700;font-size:1rem;margin:.5rem 0 0">✅ ถึงคิวของคุณแล้ว! กำลังเข้าห้องตรวจ…</p>
@@ -102,6 +113,8 @@ try {
 }
 
 let admitted    = false;
+let called      = false;
+let entering    = false;
 let pollInterval;
 let domain      = '';
 let jitsiApi    = null;
@@ -134,9 +147,23 @@ async function pollQueue() {
     const d = await r.json();
     document.getElementById('room-name-label').textContent = d.roomName || '';
     document.getElementById('my-position').textContent =
-      d.status === 'admitted' ? '✅' : (d.position != null ? d.position : '—');
+      d.status === 'admitted' ? '✅' : d.status === 'called' ? '📞' : (d.position != null ? d.position : '—');
     document.getElementById('queue-total').textContent =
       d.total != null ? ('จากทั้งหมด ' + d.total + ' คน') : '';
+    if (d.status === 'called') {
+      called = true;
+      document.getElementById('status-waiting').style.display = 'none';
+      document.getElementById('status-called').style.display = 'block';
+      return;
+    }
+    if (called) {
+      // The doctor may choose another patient before this patient accepts.
+      called = false;
+      entering = false;
+      document.getElementById('btn-enter-exam').disabled = false;
+      document.getElementById('status-called').style.display = 'none';
+      document.getElementById('status-waiting').style.display = 'block';
+    }
     if (d.status === 'admitted') {
       admitted = true;
       clearInterval(pollInterval);
@@ -145,8 +172,37 @@ async function pollQueue() {
   } catch (_) {}
 }
 
+async function enterExam() {
+  if (entering || admitted) return;
+  entering = true;
+  const button = document.getElementById('btn-enter-exam');
+  const note = document.getElementById('enter-exam-note');
+  button.disabled = true;
+  note.textContent = 'กำลังเข้าห้องตรวจ…';
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/queue/enter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jwt: jwtToken, pid: patientId })
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.message || 'ไม่สามารถเข้าห้องตรวจได้');
+    }
+    admitted = true;
+    clearInterval(pollInterval);
+    showAdmitted();
+  } catch (error) {
+    entering = false;
+    button.disabled = false;
+    note.textContent = error.message || 'ไม่สามารถเข้าห้องตรวจได้ โปรดลองอีกครั้ง';
+    pollQueue();
+  }
+}
+
 function showAdmitted() {
   document.getElementById('status-waiting').style.display = 'none';
+  document.getElementById('status-called').style.display = 'none';
   document.getElementById('status-admitted').style.display = 'block';
   document.getElementById('admitted-banner').textContent = '🩺 เข้าห้องตรวจแล้ว – ' + patientName;
   setTimeout(() => {

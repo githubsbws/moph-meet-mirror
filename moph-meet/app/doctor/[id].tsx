@@ -1,7 +1,7 @@
 /**
  * Doctor exam control — parity with user-app-lite meet.html (doctor side).
- * Features: live queue, invite patient (get link), call next patient, enter video.
- * APIs: GET /api/exam/:id/doctor · POST /api/exam/:id/invite · POST /api/exam/:id/next
+ * Features: live queue, invite patient (get link), call a selected patient, enter video.
+ * APIs: GET /api/exam/:id/doctor · POST /api/exam/:id/invite · POST /api/exam/:id/call/:entryId
  */
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -16,8 +16,9 @@ import { Icon } from '../../components/Icon';
 const GREEN = '#1b7a43';
 const POLL = 5000;
 
-type QueueEntry = { key?: string; token?: string; patientName?: string; status?: string; joinedAt?: string };
-type Room = { id: string; name?: string; queue?: QueueEntry[]; currentPatientToken?: string | null };
+type QueueEntry = { key?: string; token?: string; invitationId?: string; patientName?: string; status?: string; joinedAt?: string };
+type PatientInvitation = { id: string; patientName?: string; status?: string };
+type Room = { id: string; name?: string; queue?: QueueEntry[]; patientInvitations?: PatientInvitation[]; currentPatientToken?: string | null };
 
 export default function DoctorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -31,6 +32,9 @@ export default function DoctorScreen() {
   const [invCid, setInvCid]   = useState('');
   const [invLink, setInvLink] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [patientCallOpen, setPatientCallOpen] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [callingPatientId, setCallingPatientId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -58,7 +62,7 @@ export default function DoctorScreen() {
     try {
       const r = await apiFetch(`/api/exam/${id}/next`, token, { method: 'POST' });
       const d = await r.json();
-      Alert.alert('เรียกคิว', d.admitted ? `เรียก: ${d.admitted}` : 'ไม่มีผู้ป่วยในคิว');
+      Alert.alert('เรียกคิว', d.called ? `เรียก: ${d.called}\nรอผู้ป่วยกดเข้าห้องตรวจ` : 'ไม่มีผู้ป่วยในคิว');
       await fetchRoom(token);
     } catch (e: any) {
       Alert.alert('ผิดพลาด', e.message || 'network');
@@ -67,8 +71,43 @@ export default function DoctorScreen() {
     }
   }
 
+  async function callPatient(invitation: PatientInvitation) {
+    if (!token || callingPatientId) return;
+    setCallingPatientId(invitation.id);
+    try {
+      const r = await apiFetch(`/api/exam/${id}/call/${encodeURIComponent(invitation.id)}`, token, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) { Alert.alert('เรียกผู้ป่วยไม่สำเร็จ', d.message || `รหัส ${r.status}`); return; }
+      setSelectedPatientId(invitation.id);
+      Alert.alert('เรียกผู้ป่วยแล้ว', `เรียก: ${d.called || invitation.patientName || 'ผู้ป่วย'}\nรอผู้ป่วยกดเข้าห้องตรวจ`);
+      await fetchRoom(token);
+    } catch (e: any) {
+      Alert.alert('ผิดพลาด', e.message || 'network');
+    } finally {
+      setCallingPatientId(null);
+    }
+  }
+
+  function updateQueueStatus(entry: QueueEntry, status: 'cancelled' | 'no_show') {
+    if (!token) return;
+    const entryId = entry.invitationId || entry.key || entry.token;
+    if (!entryId) return;
+    Alert.alert(status === 'no_show' ? 'ไม่มาตามนัด' : 'ยกเลิกคิว', `ยืนยันการ${status === 'no_show' ? 'ระบุว่าไม่มาตามนัด' : 'ยกเลิกคิว'}?`, [
+      { text: 'กลับ', style: 'cancel' },
+      { text: 'ยืนยัน', style: 'destructive', onPress: async () => {
+        const r = await apiFetch(`/api/exam/${id}/queue/${encodeURIComponent(entryId)}`, token, { method: 'PATCH', body: JSON.stringify({ status }) });
+        if (!r.ok) { Alert.alert('เปลี่ยนสถานะไม่สำเร็จ', `รหัส ${r.status}`); return; }
+        await fetchRoom(token);
+      } },
+    ]);
+  }
+
   async function doInvite() {
     if (!token) return;
+    if (!/^\d{13}$/.test(invCid.trim())) {
+      Alert.alert('ข้อมูลไม่ครบ', 'กรุณากรอกเลขบัตรประชาชน 13 หลัก');
+      return;
+    }
     setInviting(true);
     try {
       const r = await apiFetch(`/api/exam/${id}/invite`, token, {
@@ -100,8 +139,11 @@ export default function DoctorScreen() {
   }
 
   const queue = room?.queue || [];
+  const invitations = room?.patientInvitations || [];
   const waiting = queue.filter(q => q.status === 'waiting');
   const admitted = queue.find(q => q.status === 'admitted');
+  const called = queue.find(q => q.status === 'called');
+  const selectedPatient = invitations.find(invitation => invitation.id === selectedPatientId);
 
   return (
     <SafeAreaView style={s.bg}>
@@ -134,7 +176,7 @@ export default function DoctorScreen() {
         )}
 
         {/* Call next */}
-        <TouchableOpacity style={[s.callBtn, (calling || waiting.length === 0) && s.btnDis]} onPress={callNext} disabled={calling || waiting.length === 0}>
+        <TouchableOpacity style={[s.callBtn, (calling || waiting.length === 0 || !!called) && s.btnDis]} onPress={callNext} disabled={calling || waiting.length === 0 || !!called}>
           {calling ? <ActivityIndicator color="#fff" /> : (
             <>
               <Icon name="next" size={18} color="#fff" />
@@ -142,6 +184,11 @@ export default function DoctorScreen() {
             </>
           )}
         </TouchableOpacity>
+
+        <TouchableOpacity style={s.selectPatientBtn} onPress={() => setPatientCallOpen(true)}>
+          <Text style={s.selectPatientText}>📞 เรียกผู้ป่วยตามนัด ({invitations.length})</Text>
+        </TouchableOpacity>
+        {selectedPatient && <Text style={s.patientCallNote}>เรียก “{selectedPatient.patientName || 'ผู้ป่วย'}” แล้ว — รอผู้ป่วยกดเข้าห้องตรวจ</Text>}
 
         {/* Queue */}
         <Text style={s.section}>คิวผู้ป่วย ({queue.length})</Text>
@@ -156,7 +203,8 @@ export default function DoctorScreen() {
                 </Text>
               </View>
               <Text style={s.qName}>{p.patientName || 'ผู้ป่วย'}</Text>
-              <Text style={s.qTime}>{p.joinedAt ? new Date(p.joinedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''}</Text>
+              <Text style={s.qTime}>{p.status === 'no_show' ? 'ไม่มาตามนัด' : p.status === 'cancelled' ? 'ยกเลิก' : (p.joinedAt ? new Date(p.joinedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '')}</Text>
+              {p.status === 'waiting' && <TouchableOpacity onPress={() => updateQueueStatus(p, 'no_show')}><Text style={s.noShow}>ไม่มา</Text></TouchableOpacity>}
             </View>
           ))
         )}
@@ -170,7 +218,7 @@ export default function DoctorScreen() {
             {!invLink ? (
               <>
                 <TextInput style={s.input} value={invName} onChangeText={setInvName} placeholder="ชื่อผู้ป่วย (ถ้ามี)" placeholderTextColor="#9ca3af" />
-                <TextInput style={s.input} value={invCid} onChangeText={setInvCid} placeholder="เลขบัตร ปชช. (ถ้ามี)" placeholderTextColor="#9ca3af" keyboardType="number-pad" />
+                <TextInput style={s.input} value={invCid} onChangeText={setInvCid} placeholder="เลขบัตรประชาชน 13 หลัก *" placeholderTextColor="#9ca3af" keyboardType="number-pad" maxLength={13} />
                 <View style={s.modalActions}>
                   <TouchableOpacity style={s.modalCancel} onPress={resetInvite}><Text style={s.modalCancelText}>ยกเลิก</Text></TouchableOpacity>
                   <TouchableOpacity style={[s.modalOk, inviting && s.btnDis]} onPress={doInvite} disabled={inviting}>
@@ -191,8 +239,55 @@ export default function DoctorScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={patientCallOpen} transparent animationType="slide" onRequestClose={() => setPatientCallOpen(false)}>
+        <View style={s.modalBg}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>📞 เรียกผู้ป่วยตามนัด</Text>
+            <Text style={s.modalHint}>เรียกผู้ป่วยที่พร้อม แล้วผู้ป่วยจะกดเข้าห้องตรวจจากหน้ารอของตนเอง</Text>
+            <ScrollView style={s.patientList}>
+              {invitations.length === 0 && <Text style={s.empty}>ยังไม่มีผู้ป่วยนัดหมาย</Text>}
+              {invitations.map(invitation => {
+                const state = patientInvitationState(invitation, queue);
+                const selected = invitation.id === selectedPatientId;
+                return (
+                  <View key={invitation.id} style={[s.patientRow, selected && s.patientRowSelected]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.patientName}>{invitation.patientName || 'ผู้ป่วย'}</Text>
+                      <Text style={s.patientStatus}>{state.label}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[s.patientCallButton, (!state.canCall || !!callingPatientId) && s.patientCallButtonDisabled]}
+                      disabled={!state.canCall || !!callingPatientId}
+                      onPress={() => callPatient(invitation)}
+                    >
+                      <Text style={[s.patientCallButtonText, (!state.canCall || !!callingPatientId) && s.patientCallButtonTextDisabled]}>{callingPatientId === invitation.id ? 'กำลังเรียก…' : state.label === 'กำลังเรียก' ? 'รอเข้าห้อง' : 'เรียกผู้ป่วย'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            {selectedPatient && <Text style={s.patientCallNote}>เรียก “{selectedPatient.patientName || 'ผู้ป่วย'}” แล้ว — รอผู้ป่วยกดเข้าห้องตรวจ</Text>}
+            <TouchableOpacity style={s.closeButton} onPress={() => setPatientCallOpen(false)}><Text style={s.closeButtonText}>ปิด</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
+}
+
+function patientInvitationState(invitation: PatientInvitation, queue: QueueEntry[]) {
+  const entry = queue.find(item => item.invitationId === invitation.id);
+  const status = entry?.status || invitation.status || 'active';
+  if (status === 'waiting' || status === 'joined') return { label: 'พร้อม', canCall: true };
+  if (status === 'called') return { label: 'กำลังเรียก', canCall: false };
+  if (status === 'admitted') return { label: 'กำลังตรวจ', canCall: false };
+  if (status === 'done') return { label: 'ตรวจเสร็จ', canCall: false };
+  if (status === 'cancelled') return { label: 'ยกเลิกแล้ว', canCall: false };
+  if (status === 'no_show') return { label: 'ไม่มาตามนัด', canCall: false };
+  // An invitation by itself is not proof that the patient has logged in.
+  // Queue/waiting-room entry is the current reliable ready signal.
+  return { label: 'ยังไม่เข้าห้องรอ', canCall: false };
 }
 
 const s = StyleSheet.create({
@@ -212,6 +307,9 @@ const s = StyleSheet.create({
   admitLabel: { fontSize: 12, color: '#6b7280' },
   admitName: { fontSize: 18, fontWeight: '700', color: GREEN, marginTop: 2 },
   callBtn: { backgroundColor: GREEN, borderRadius: 10, paddingVertical: 15, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', marginBottom: 20 },
+  selectPatientBtn: { borderWidth: 1, borderColor: GREEN, borderRadius: 10, backgroundColor: '#fff', paddingVertical: 13, alignItems: 'center', marginTop: -10, marginBottom: 10 },
+  selectPatientText: { color: GREEN, fontWeight: '700', fontSize: 15 },
+  patientCallNote: { color: '#64748b', fontSize: 12, lineHeight: 17, marginBottom: 14 },
   btnDis: { opacity: 0.5 },
   callText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   section: { fontSize: 15, fontWeight: '700', color: '#1e293b', marginBottom: 8 },
@@ -224,9 +322,11 @@ const s = StyleSheet.create({
   qBadgeText: { fontSize: 11, color: '#fff', fontWeight: '600' },
   qName:  { flex: 1, fontSize: 14, color: '#1e293b' },
   qTime:  { fontSize: 11, color: '#9ca3af' },
+  noShow: { color: '#b45309', fontSize: 11, fontWeight: '700' },
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,.4)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20 },
   modalTitle: { fontSize: 17, fontWeight: '700', color: '#1e293b', marginBottom: 14 },
+  modalHint: { color: '#64748b', fontSize: 12, lineHeight: 17, marginTop: -7, marginBottom: 10 },
   input: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, color: '#111', marginBottom: 10 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 6 },
   modalCancel: { flex: 1, borderRadius: 8, paddingVertical: 12, alignItems: 'center', backgroundColor: '#f1f5f9' },
@@ -235,4 +335,15 @@ const s = StyleSheet.create({
   modalOkText: { color: '#fff', fontWeight: '700' },
   linkLabel: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
   linkText: { fontSize: 13, color: GREEN, backgroundColor: '#f0fdf4', padding: 10, borderRadius: 8, marginBottom: 4 },
+  patientList: { maxHeight: 360 },
+  patientRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, borderTopWidth: 1, borderColor: '#f1f5f9' },
+  patientRowSelected: { backgroundColor: '#f0fdf4', marginHorizontal: -8, paddingHorizontal: 8 },
+  patientName: { color: '#1e293b', fontSize: 14, fontWeight: '600' },
+  patientStatus: { color: '#64748b', fontSize: 12, marginTop: 2 },
+  patientCallButton: { backgroundColor: GREEN, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 },
+  patientCallButtonDisabled: { backgroundColor: '#e5e7eb' },
+  patientCallButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  patientCallButtonTextDisabled: { color: '#94a3b8' },
+  closeButton: { alignItems: 'center', backgroundColor: '#f1f5f9', borderRadius: 8, paddingVertical: 12, marginTop: 10 },
+  closeButtonText: { color: '#475569', fontWeight: '700' },
 });

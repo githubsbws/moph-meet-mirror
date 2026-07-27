@@ -56,6 +56,7 @@ body, html { font-family: 'Sarabun', sans-serif; }
 #mini-calendar td:hover { background: var(--color-base-200); }
 #mini-calendar td.today { background: var(--color-primary); color: var(--color-primary-content); }
 #mini-calendar td.has-meet { font-weight: 700; text-decoration: underline dotted; }
+#mini-calendar td.holiday { color: #b42318; font-weight: 700; }
 #mini-calendar td.selected { outline: 2px solid var(--color-accent); background: color-mix(in oklch, var(--color-accent) 15%, transparent); }
 #mini-calendar .cal-nav {
   display: flex; justify-content: space-between; align-items: center;
@@ -74,3 +75,4 @@ body, html { font-family: 'Sarabun', sans-serif; }
 /* Calendar exam-type color dot (TOR 4.11.4) */
 .has-exam::after { content:''; display:block; width:5px; height:5px; border-radius:50%; background:#2563eb; margin:2px auto 0; }
 .has-meet.has-exam::after { background: linear-gradient(90deg, #1b7a43 50%, #2563eb 50%); }
+#mini-calendar td.holiday::before { content:''; display:block; width:4px; height:4px; border-radius:50%; background:#dc2626; margin:0 auto 1px; }

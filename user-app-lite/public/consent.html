@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ขอความยินยอม – MOPH Meet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --green:#056839; --ink:#173126; --muted:#64748b; --line:#dce8e1; --soft:#f0faf4; }
+    * { box-sizing:border-box; } body { margin:0; min-height:100vh; background:linear-gradient(140deg,#eef9f1,#f8fbf9); color:var(--ink); font-family:Sarabun,sans-serif; }
+    main { width:min(720px,calc(100% - 2rem)); margin:2rem auto; } .brand { display:flex; gap:.7rem; align-items:center; justify-content:center; margin-bottom:1rem; color:var(--green); font-weight:700; }
+    .brand-mark { width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:#fff; } .card { background:#fff; border-radius:18px; box-shadow:0 16px 44px rgba(5,104,57,.12); overflow:hidden; }
+    header { padding:1.5rem 1.5rem 1.15rem; border-bottom:1px solid var(--line); } h1 { margin:0;color:#123b27;font-size:1.35rem; } .subtitle { margin:.3rem 0 0;color:var(--muted);font-size:.9rem; }
+    .notice { margin:1rem 1.5rem; padding:.8rem 1rem; border-radius:10px; background:#fff8df; border:1px solid #f3dc8b; font-size:.9rem; line-height:1.45; }
+    .content { padding:0 1.5rem 1.25rem; max-height:48vh; overflow:auto; } h2 { font-size:1rem;margin:1.1rem 0 .35rem;color:var(--green); } p,li { font-size:.9rem;line-height:1.55; } p { margin:.3rem 0; } ul { margin:.25rem 0;padding-left:1.2rem; }
+    .contact { border-left:3px solid #72b892;background:var(--soft);padding:.7rem .85rem;margin:.8rem 0;border-radius:0 8px 8px 0;font-size:.85rem;line-height:1.5; }
+    .action { padding:1rem 1.5rem 1.4rem;border-top:1px solid var(--line); } label { display:flex;align-items:flex-start;gap:.65rem;cursor:pointer;font-size:.9rem;line-height:1.45; } input { width:19px;height:19px;accent-color:var(--green);margin-top:.1rem;flex:none; }
+    .buttons { display:flex;gap:.75rem;margin-top:1rem; } button { border:0;border-radius:9px;padding:.75rem 1rem;font:600 .95rem Sarabun,sans-serif;cursor:pointer; } #accept { flex:1;background:var(--green);color:white; } #accept:disabled { background:#9ab8a7;cursor:not-allowed; } #decline { background:#fff;color:#9f1239;border:1px solid #fecdd3; } #error { color:#b91c1c;font-size:.85rem;margin:.65rem 0 0;min-height:1.2rem; }
+    footer { text-align:center;color:#809187;font-size:.75rem;padding:1rem; } @media(max-width:540px){ main{width:100%;margin:0}.card{border-radius:0;min-height:100vh}header,.action{padding-left:1.15rem;padding-right:1.15rem}.content{padding-left:1.15rem;padding-right:1.15rem;max-height:none}.buttons{flex-direction:column-reverse}}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand"><span class="brand-mark">✓</span> MOPH Meet</div>
+    <section class="card" aria-labelledby="title">
+      <header><h1 id="title">ขอความยินยอมใช้บริการแพทย์ทางไกล</h1><p class="subtitle">โปรดอ่านรายละเอียดก่อนเข้าสู่ระบบ</p></header>
+      <p class="notice"><strong>การยืนยันของคุณมีผลทางอิเล็กทรอนิกส์</strong> ระบบจะบันทึกเวลาและเวอร์ชันเอกสารที่คุณยินยอมไว้เป็นหลักฐาน</p>
+      <div class="content">
+        <p>ข้าพเจ้ายินยอมให้<strong>สำนักงานปลัดกระทรวงสาธารณสุข</strong> ในฐานะผู้ควบคุมข้อมูลส่วนบุคคล เก็บรวบรวม ใช้ หรือเปิดเผยข้อมูลเพื่อให้บริการระบบการแพทย์ทางไกลและเภสัชกรรมทางไกล</p>
+        <h2>ข้อมูลที่ประมวลผล</h2><ul><li>ข้อมูลทั่วไป: ชื่อ-นามสกุล เลขประจำตัวประชาชน วันเกิด ที่อยู่ เบอร์โทรศัพท์ และข้อมูลติดต่อออนไลน์</li><li>ข้อมูลอ่อนไหว: ข้อมูลสุขภาพ อาการเจ็บป่วย ประวัติการรักษา และผลตรวจทางห้องปฏิบัติการ</li><li>ข้อมูลภาพและเสียง: ภาพนิ่ง ภาพเคลื่อนไหว และเสียงระหว่างรับบริการ</li></ul>
+        <h2>วัตถุประสงค์</h2><ul><li>วินิจฉัย บำบัดรักษา และให้คำปรึกษาทางการแพทย์ผ่านระบบดิจิทัล</li><li>จัดทำประวัติการรักษาเพื่อความต่อเนื่องในการรักษา</li><li>เบิกจ่ายค่ารักษากับหน่วยงานที่เกี่ยวข้อง เช่น ประกันสังคมและ สปสช.</li><li>ตรวจสอบคุณภาพบริการและความปลอดภัยของผู้ป่วยและบุคลากร</li></ul>
+        <h2>ระยะเวลาจัดเก็บและสิทธิของท่าน</h2><p>ข้อมูลจัดเก็บ 10 ปีนับแต่สิ้นสุดการรักษา หรือตามกฎหมายว่าด้วยสถานพยาบาล ท่านขอถอนความยินยอม เข้าถึง แก้ไข คัดค้าน หรือลบข้อมูลได้ตามสิทธิ โดยการถอนความยินยอมอาจทำให้ใช้บางฟังก์ชันไม่ได้ และไม่มีผลย้อนหลังต่อการประมวลผลที่เสร็จสิ้นแล้ว</p>
+        <div class="contact"><strong>ติดต่อสำนักสุขภาพดิจิทัล</strong><br>สำนักงานปลัดกระทรวงสาธารณสุข โทร. 0 2590 2077 · bdh.moph@moph.go.th · bdh.moph.go.th/site/<br><strong>DPO:</strong> 0 2590 2180 ต่อ 112, 316 หรือ 0 2590 1213 · dpo@moph.go.th · pdpa.moph.go.th</div>
+      </div>
+      <div class="action"><label><input id="confirm" type="checkbox" /><span>ข้าพเจ้าได้อ่านและเข้าใจรายละเอียดข้างต้น และยินยอมให้ประมวลผลข้อมูลส่วนบุคคลเพื่อใช้บริการแพทย์ทางไกล</span></label><div class="buttons"><button id="decline" type="button">ไม่ให้ความยินยอม</button><button id="accept" type="button" disabled>ยืนยันและเข้าสู่ระบบ</button></div><p id="error" role="alert"></p></div>
+    </section><footer>เอกสารแสดงความยินยอมสำหรับระบบการแพทย์ทางไกลและเภสัชกรรมทางไกล</footer>
+  </main>
+<script>
+const confirmBox=document.getElementById('confirm'), accept=document.getElementById('accept'), error=document.getElementById('error');
+confirmBox.addEventListener('change',()=>accept.disabled=!confirmBox.checked);
+async function decision(value, confirmed=false){ const r=await fetch('/api/telemed-consent',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision:value,confirmed})}); const data=await r.json().catch(()=>({})); if(!r.ok) throw new Error(data.message||'บันทึกการตัดสินใจไม่สำเร็จ'); return data; }
+accept.addEventListener('click',async()=>{ if(!confirmBox.checked)return; accept.disabled=true;accept.textContent='กำลังบันทึก…';try{await decision('accepted',true);location.replace('/');}catch(e){error.textContent=e.message;accept.disabled=false;accept.textContent='ยืนยันและเข้าสู่ระบบ';} });
+document.getElementById('decline').addEventListener('click',async()=>{ if(!confirm('หากไม่ให้ความยินยอม ระบบจะออกจากระบบ คุณต้องการดำเนินการต่อหรือไม่?'))return;try{await decision('declined');await fetch('/logout',{method:'POST',credentials:'include'});}finally{location.replace('/login.html');} });
+(async()=>{try{const r=await fetch('/api/telemed-consent',{credentials:'include'});if(!r.ok){location.replace('/login.html');return;}const d=await r.json();if(d.accepted)location.replace('/');}catch(_){error.textContent='ไม่สามารถตรวจสอบสถานะการยินยอมได้';}})();
+</script>
+</body></html>

@@ -3,13 +3,15 @@ require('dotenv').config();
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const express = require('express');
 const cors = require('cors');
-const { createHash, randomInt } = require('crypto');
+const { createHash, randomInt, randomUUID } = require('crypto');
 const NodeCache = require('node-cache');
 const jwt = require('jsonwebtoken');
-const { tokenStorage, roomStore, profileStore, logStore, vitalStore } = require('./store');
+const { tokenStorage, roomStore, profileStore, consentStore, providerStore, holidayStore, logStore, vitalStore } = require('./store');
 const { auth } = require('./middlewares/auth');
+const { createMophAlertClient } = require('./moph-alert');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_me_jwt_secret';
+const TELEMED_CONSENT_VERSION = process.env.TELEMED_CONSENT_VERSION || 'telemed-consent-v1';
 
 // Short-lived cache for ProviderID code exchange (handles slow-network retries)
 const codeCache = new NodeCache({ stdTTL: 10, checkperiod: 5 });
@@ -22,6 +24,8 @@ const PROVIDER_ID_REDIRECT_URI = process.env.PROVIDER_ID_REDIRECT_URI;
 const PROVIDER_SERVICE_CLIENT_ID = process.env.PROVIDER_SERVICE_CLIENT_ID;
 const PROVIDER_SERVICE_SECRET_KEY = process.env.PROVIDER_SERVICE_SECRET_KEY;
 const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/$/, ''); // e.g. https://moph-meet.moph.go.th
+const HOLIDAY_API_BASE = (process.env.HOLIDAY_API_BASE || 'https://thailandformats.com/api/v1/holidays').replace(/\/$/, '');
+const HOLIDAY_SOURCE = 'thailandformats.com/api/v1/holidays';
 
 function parseManualAccounts() {
     const fallback = [
@@ -63,9 +67,89 @@ function buildManualUser(account) {
         roleMaps: roles.map(roleName => ({ roleName })),
         organization: null,
         providerIDProfile: null,
+        hcode5: String(account.hcode5 || account.hcode || '').trim(),
         isReviewAccount: Boolean(account.isReviewAccount),
         authMode: 'manual',
     };
+}
+
+function hcodeOf(user) {
+    return String(user?.organization?.[0]?.hcode || user?.hcode5 || '').trim();
+}
+
+function isAdmin(user) {
+    return Array.isArray(user?.roles) && user.roles.includes('admin');
+}
+
+async function syncProvider(user) {
+    if (!user?.username || !providerStore?.upsertSeen) return undefined;
+    return providerStore.upsertSeen({
+        providerId: user.username,
+        displayName: user.display || user.username,
+        role: isAdmin(user) ? 'admin' : 'staff',
+        hcode: hcodeOf(user),
+    });
+}
+
+function isValidThaiCid(cid) {
+    if (!/^\d{13}$/.test(cid)) return false;
+    let sum = 0;
+    for (let i = 0; i < 12; i += 1) sum += Number(cid[i]) * (13 - i);
+    return (11 - (sum % 11)) % 10 === Number(cid[12]);
+}
+
+function cidHash(cid) {
+    return createHash('sha256').update(`${JWT_SECRET}:${cid}`).digest('hex');
+}
+
+function makeInvitationId() {
+    return randomUUID().replace(/-/g, '');
+}
+
+function validHolidayYear(value) {
+    const year = Number(value || new Date().getFullYear());
+    return Number.isInteger(year) && year >= 2020 && year <= 2100 ? year : null;
+}
+
+function expandHoliday({ title, start_date: startDate, end_date: endDate, type, slug }) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || '') || !/^\d{4}-\d{2}-\d{2}$/.test(endDate || startDate || '')) return [];
+    const from = new Date(`${startDate}T00:00:00.000Z`);
+    const until = new Date(`${endDate || startDate}T00:00:00.000Z`);
+    if (until < from || until - from > 31 * 86400000) return [];
+    const days = [];
+    for (let date = from; date <= until; date = new Date(date.getTime() + 86400000)) {
+        days.push({ date: date.toISOString().slice(0, 10), name: String(title || 'วันหยุดราชการ').slice(0, 200), type: String(type || 'holiday'), slug: String(slug || '').slice(0, 100) });
+    }
+    return days;
+}
+
+async function syncHolidayCalendar(year) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+        const response = await fetch(`${HOLIDAY_API_BASE}/${year}`, { signal: controller.signal, headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error(`holidaySourceStatus:${response.status}`);
+        const payload = await response.json();
+        if (!payload || !Array.isArray(payload.holidays)) throw new Error('holidaySourceInvalidPayload');
+        const holidays = payload.holidays.flatMap(expandHoliday);
+        if (holidays.length === 0) throw new Error('holidaySourceEmpty');
+        return holidayStore.setYear(year, holidays, HOLIDAY_SOURCE);
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+function canManageRoom(room, user) {
+    if (!room || !user?.username) return false;
+    if (isAdmin(user) || room.ownerId === user.username) return true;
+    return (room.invitedProviders || []).some(inv => inv.providerId === user.username && inv.status === 'accepted');
+}
+
+function canOpenRoom(room, user) {
+    if (!room || !user?.username) return false;
+    if (isAdmin(user) || room.ownerId === user.username) return true;
+    return (room.invitedProviders || []).some(inv => inv.providerId === user.username && inv.status !== 'revoked') ||
+        (room.joinedProviders || []).some(provider => provider.userId === user.username);
 }
 
 
@@ -75,6 +159,44 @@ function buildManualUser(account) {
 
 const LINE_CHANNEL_TOKEN = process.env.LINE_CHANNEL_TOKEN || '';
 const LINE_TARGET        = process.env.LINE_TARGET        || '';
+const mophAlert = createMophAlertClient();
+
+function validHcode(value) {
+    return /^\d{5}$/.test(String(value || '').trim()) ? String(value).trim() : null;
+}
+
+function uniqueValidCids(values) {
+    return [...new Set((Array.isArray(values) ? values : [])
+        .map(value => String(value || '').trim())
+        .filter(isValidThaiCid))];
+}
+
+function appUrl(path) {
+    return APP_BASE_URL ? `${APP_BASE_URL}${path}` : path;
+}
+
+async function notifyMophAlert(hcode, cids, text, event) {
+    try {
+        const normalizedHcode = validHcode(hcode);
+        if (!normalizedHcode) return { skipped: true, reason: 'roomHcodeMissing' };
+        const result = await mophAlert.sendText({ hospitalCode: normalizedHcode, cids: uniqueValidCids(cids), text });
+        if (result.sent) console.log(`[notify] MOPH Alert sent (${event})`);
+        else if (result.reason === 'notConfigured') mophAlert.logConfigurationHint();
+        else if (result.reason === 'noRecipients') console.log(`[notify] MOPH Alert skipped (${event}): no recipients`);
+        return result;
+    } catch (error) {
+        console.warn(`[notify] MOPH Alert failed (${event}):`, error.message);
+        return { skipped: true, reason: 'sendFailed' };
+    }
+}
+
+function meetingMophAlertText(room) {
+    return `📅 สร้างห้องประชุม: ${room.name}\nวันเวลา: ${room.starttime} – ${room.endtime}\nลิงก์: ${appUrl(`/room/${room.id}`)}`;
+}
+
+function patientMophAlertText(room, patientJoinUrl) {
+    return `📅 คุณมีนัดหมายห้องตรวจ: ${room.name}\nวันเวลา: ${room.starttime} – ${room.endtime}\nเข้าห้องรอคิว: ${appUrl(patientJoinUrl)}`;
+}
 
 async function notifyLine(message) {
     if (!LINE_CHANNEL_TOKEN || !LINE_TARGET) {
@@ -82,7 +204,7 @@ async function notifyLine(message) {
         return;
     }
     try {
-        await fetch('https://api.line.me/v2/bot/message/push', {
+        const response = await fetch('https://api.line.me/v2/bot/message/push', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -93,6 +215,7 @@ async function notifyLine(message) {
                 messages: [{ type: 'text', text: message }],
             }),
         });
+        if (!response.ok) throw new Error(`LINE response ${response.status}`);
         console.log('[notify] LINE push sent');
     } catch (e) {
         console.warn('[notify] LINE push failed:', e.message);
@@ -124,6 +247,7 @@ app.post('/api/auth', async (req, res) => {
     }
 
     const user = buildManualUser(account);
+    await syncProvider(user);
     const token = createHash('sha256')
         .update(new Date().toISOString() + user.username + randomInt(1000))
         .digest('hex');
@@ -222,6 +346,8 @@ app.post('/api/auth/providerID', async (req, res, next) => {
             gender: extraProfile.gender || '',
         };
 
+        await syncProvider(user);
+
         const token = createHash('sha256')
             .update(new Date().toISOString() + user.username + randomInt(1000))
             .digest('hex');
@@ -310,6 +436,7 @@ app.post('/api/auth/thaiD', async (req, res, next) => {
             thaiDProfile: { pid: profile.pid, name_th: name },
             authMode: 'thaiD',
         };
+        await syncProvider(user);
         const token = require('crypto').createHash('sha256')
             .update(new Date().toISOString() + uid + require('crypto').randomInt(1000))
             .digest('hex');
@@ -356,9 +483,28 @@ app.post('/api/logout', async (req, res) => {
     res.json({ token: req.body.token });
 });
 
+// ── Telemedicine consent ─────────────────────────────────────────────────────
+// Consent text is rendered by the web/mobile clients. This endpoint stores the
+// user's affirmative or declined decision with a versioned audit record.
+app.get('/api/telemed-consent', auth(), async (req, res) => {
+    const consent = await consentStore.get(res.locals.user.username);
+    const accepted = consent.decision === 'accepted' && consent.version === TELEMED_CONSENT_VERSION;
+    res.json({ version: TELEMED_CONSENT_VERSION, accepted, decision: consent.decision || null, recordedAt: consent.recordedAt || null });
+});
+
+app.post('/api/telemed-consent', auth(), async (req, res) => {
+    const decision = String(req.body?.decision || '');
+    if (!['accepted', 'declined'].includes(decision)) return res.status(400).json({ error: 400, message: 'invalidConsentDecision' });
+    if (decision === 'accepted' && req.body?.confirmed !== true) {
+        return res.status(400).json({ error: 400, message: 'consentConfirmationRequired' });
+    }
+    const consent = await consentStore.record(res.locals.user.username, { version: TELEMED_CONSENT_VERSION, decision });
+    res.json({ ok: true, ...consent });
+});
+
 // ── Auth: update extra profile fields ─────────────────────────────────────────
 app.patch('/api/auth/profile', auth(), async (req, res) => {
-    const token = req.headers['authorization']?.replace('Bearer ', '');
+    const token = res.locals.token;
     const user = res.locals.user;
     if (!user?.username) return res.status(401).json({ error: 401, message: 'unauthorized' });
     const { hcode5, hcode9, clinicCode, dateOfBirth, gender } = req.body;
@@ -366,7 +512,40 @@ app.patch('/api/auth/profile', auth(), async (req, res) => {
     // Update in-memory session too
     const updated = { ...user, hcode5: (hcode5 || '').trim(), hcode9: (hcode9 || '').trim(), clinicCode: (clinicCode || '').trim(), dateOfBirth: (dateOfBirth || '').trim(), gender: (gender || '').trim() };
     await tokenStorage.set(token, updated);
+    await syncProvider(updated);
     res.json({ ok: true, user: updated });
+});
+
+// ── Personnel directory (local MOPH Meet data) ───────────────────────────────
+// Personnel are created/updated when they sign in. A regular user searches only
+// their H-Code; a system admin may search the aggregate or pass ?hcode=xxxxx.
+// A regular user without an H-Code gets an empty result rather than an API error
+// because no safe hospital scope can be inferred yet.
+app.get('/api/providers', auth(), async (req, res) => {
+    const caller = res.locals.user;
+    const hcode = isAdmin(caller)
+        ? String(req.query.hcode || '').trim()
+        : hcodeOf(caller);
+    if (!isAdmin(caller) && !hcode) return res.json([]);
+    const role = ['doctor', 'nurse', 'staff', 'admin'].includes(req.query.role) ? req.query.role : '';
+    const query = String(req.query.q || '');
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    res.json(await providerStore.search({ hcode, role, query, limit }));
+});
+
+// Only a local administrator can classify personnel as doctor/nurse or correct
+// their H-Code. ProviderID is used for sign-in only, not for this local role.
+app.patch('/api/providers/:providerId', auth(), async (req, res) => {
+    if (!isAdmin(res.locals.user)) return res.status(403).json({ error: 403, message: 'adminRequired' });
+    const role = String(req.body?.role || '');
+    const hcode = String(req.body?.hcode || '').trim();
+    const active = req.body?.active !== false;
+    if (!['doctor', 'nurse', 'staff', 'admin'].includes(role) || !hcode) {
+        return res.status(400).json({ error: 400, message: 'role and hcode are required' });
+    }
+    const provider = await providerStore.update(req.params.providerId, { role, hcode, active });
+    if (!provider) return res.status(404).json({ error: 404, message: 'providerNotFound' });
+    res.json({ provider });
 });
 
 // Rooms are persistent in SQL — no TTL expiry
@@ -388,6 +567,27 @@ function autoRoomName(type, ownerDisplay) {
     return `ประชุม-${ownerDisplay || 'ผู้นัด'}-${dateStr}-${timeStr}`;
 }
 
+// Creates a revocable, PII-safe patient invitation. The CID is validated by
+// callers and persisted only as a hash; the signed queue link carries neither
+// the CID nor the patient's name.
+function addPatientInvitation(room, { patientName, cid, createdBy }) {
+    const invitationId = makeInvitationId();
+    const exp = Math.floor(new Date(room.endtime).getTime() / 1000) + 86400;
+    const queueToken = jwt.sign({ roomId: room.id, role: 'patient', invitationId, exp }, JWT_SECRET);
+    const createdAt = new Date().toISOString();
+    room.patientInvitations = room.patientInvitations || [];
+    room.patientInvitations.push({
+        id: invitationId,
+        patientName: patientName || 'ผู้ป่วย',
+        cidHash: cidHash(cid),
+        status: 'active',
+        createdAt,
+        createdBy,
+        expiresAt: new Date(exp * 1000).toISOString(),
+    });
+    return { patientJoinUrl: `/queue/${room.id}?jwt=${queueToken}`, invitationId, expiresAt: new Date(exp * 1000).toISOString() };
+}
+
 // ── Meets – proxied from token cache (no DB) ─────────────────────────────────
 app.get('/api/meets', auth(), async (req, res) => {
     const userId = res.locals.user?.username;
@@ -405,7 +605,8 @@ app.get('/api/meets', auth(), async (req, res) => {
         const r = await roomStore.get(k);
         if (!r) continue;
         const mine = r.ownerId === userId ||
-            (Array.isArray(r.joinedProviders) && r.joinedProviders.some(p => p.userId === userId));
+            (Array.isArray(r.joinedProviders) && r.joinedProviders.some(p => p.userId === userId)) ||
+            (Array.isArray(r.invitedProviders) && r.invitedProviders.some(p => p.providerId === userId && p.status !== 'revoked'));
         if (mine) rooms.push(r);
     }
     rooms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -418,12 +619,46 @@ app.post('/api/rooms', auth(), async (req, res) => {
     if (!['meet', 'exam'].includes(type)) {
         return res.status(400).json({ error: 400, message: 'type must be meet or exam' });
     }
+    const accessMode = req.body.accessMode || 'restricted';
+    if (!['public', 'restricted'].includes(accessMode)) {
+        return res.status(400).json({ error: 400, message: 'accessMode must be public or restricted' });
+    }
     // Platform hint from client (allow-list); default 'web' for backward compatibility.
     const platform = ['web', 'mobile'].includes(req.body.platform) ? req.body.platform : 'web';
 
     const user = res.locals.user;
     const id   = makeRoomId();
-    const name = autoRoomName(type, user.display);
+    const requestedName = String(req.body.name || '').trim();
+    if (requestedName.length > 160) return res.status(400).json({ error: 400, message: 'room name is too long' });
+    const name = requestedName || autoRoomName(type, user.display);
+    const ownerHcode = hcodeOf(user);
+    const requestedPatientName = String(req.body.patientName || req.body.displayName || '').trim();
+    const requestedPatientCid = String(req.body.patientCid || req.body.cid || '').trim();
+    const hasPatientInvitation = Boolean(requestedPatientName || requestedPatientCid);
+    if (type !== 'exam' && hasPatientInvitation) {
+        return res.status(400).json({ error: 400, message: 'patient invitation requires an exam room' });
+    }
+    if (hasPatientInvitation && !isValidThaiCid(requestedPatientCid)) {
+        return res.status(400).json({ error: 400, message: 'valid 13-digit cid required' });
+    }
+    const invitedProviders = [];
+    const requestedProviderIds = Array.isArray(req.body.providerIds) ? [...new Set(req.body.providerIds.map(String).map(v => v.trim()).filter(Boolean))] : [];
+    for (const providerId of requestedProviderIds) {
+        if (providerId === user.username) continue;
+        const provider = await providerStore.get(providerId);
+        if (!provider || !provider.active) {
+            return res.status(400).json({ error: 400, message: `providerNotFound:${providerId}` });
+        }
+        invitedProviders.push({
+            providerId,
+            display: provider.displayName,
+            hcode: provider.hcode,
+            role: provider.role,
+            status: 'pending',
+            invitedAt: new Date().toISOString(),
+            invitedBy: user.username,
+        });
+    }
 
     const room = {
         id,
@@ -433,34 +668,82 @@ app.post('/api/rooms', auth(), async (req, res) => {
         endtime:   endtime   || new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         ownerId:      user.username,
         ownerDisplay: user.display,
+        ownerHcode,
+        accessMode,
         createdAt:    new Date().toISOString(),
+        invitedProviders,
         joinedProviders: [],
         queue:               [],
+        patientInvitations:  [],
+        meetingInvitations:  [],
         currentPatientToken: null,
+        calledPatientToken:  null,
         recording:           type === 'exam',
     };
 
+    // Nurse/staff can create the room and invite the patient in the same
+    // request, alongside the provider invitations above.
+    const patientInvitation = hasPatientInvitation
+        ? addPatientInvitation(room, { patientName: requestedPatientName, cid: requestedPatientCid, createdBy: user.username })
+        : null;
+
     await roomStore.set(id, room);
     console.log(`[rooms] created ${type} room ${id} for ${user.display}`);
+    if (type === 'meet') {
+        const link = `${APP_BASE_URL}/room/${id}`;
+        notifyLine(`📅 สร้างห้องประชุม: ${name}\nวันเวลา: ${room.starttime} – ${room.endtime}\nประเภท: ${accessMode === 'public' ? 'Public (เชิญผ่านลิงก์)' : 'Restricted (Provider ID)'}\nลิงก์: ${link}`).catch(() => {});
+        notifyMophAlert(ownerHcode, [], meetingMophAlertText(room), 'meetingCreated').catch(() => {});
+    }
+    if (patientInvitation) {
+        notifyMophAlert(ownerHcode, [requestedPatientCid], patientMophAlertText(room, patientInvitation.patientJoinUrl), 'patientInvitation').catch(() => {});
+    }
     // Service unit (hcode) from the provider's ProviderID org, when present.
-    const unitHcode = user.organization?.[0]?.hcode || user.hcode5 || null;
+    const unitHcode = ownerHcode || null;
     const durationSec = Math.max(0, Math.round((new Date(room.endtime) - new Date(room.starttime)) / 1000)) || null;
     await logStore.insert('room_created', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display, platform, unitHcode, durationSec, meta: { startTime: room.starttime, endTime: room.endtime } });
-
-    // Build patient join URL for exam rooms (JWT, no expiry)
-    let patientJoinUrl = null;
-    if (type === 'exam') {
-        const jwt_token = jwt.sign(
-            { roomId: id, role: 'patient', ownerId: user.username },
-            JWT_SECRET
-        );
-        patientJoinUrl = `/queue/${id}?jwt=${jwt_token}`;
+    if (patientInvitation) {
+        await logStore.insert('invite_generated', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display, patientName: requestedPatientName || 'ผู้ป่วย', unitHcode });
     }
 
-    // Meet rooms: join URL uses provider token (already authenticated)
+    // Exam invitations must be created with a verified 13-digit CID.  A generic
+    // patient link is intentionally no longer emitted at room creation.
+    const patientJoinUrl = patientInvitation?.patientJoinUrl || null;
+    // Meet rooms: the provider URL remains authenticated. Public/restricted
+    // guest invitations are created explicitly and are never guessable room IDs.
     const meetJoinUrl = type === 'meet' ? `/room/${id}` : null;
 
-    res.json({ room, patientJoinUrl, meetJoinUrl });
+    res.json({ room, patientJoinUrl, patientInvitationId: patientInvitation?.invitationId || null, meetJoinUrl });
+});
+
+// ── PATCH /api/rooms/:id – edit room details ─────────────────────────────────
+app.patch('/api/rooms/:id', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+
+    if (req.body.name !== undefined) {
+        const name = String(req.body.name || '').trim();
+        if (!name || name.length > 160) return res.status(400).json({ error: 400, message: 'invalid room name' });
+        room.name = name;
+    }
+    if (req.body.starttime !== undefined) {
+        const date = new Date(req.body.starttime);
+        if (Number.isNaN(date.getTime())) return res.status(400).json({ error: 400, message: 'invalid starttime' });
+        room.starttime = date.toISOString();
+    }
+    if (req.body.endtime !== undefined) {
+        const date = new Date(req.body.endtime);
+        if (Number.isNaN(date.getTime())) return res.status(400).json({ error: 400, message: 'invalid endtime' });
+        room.endtime = date.toISOString();
+    }
+    if (new Date(room.endtime) <= new Date(room.starttime)) return res.status(400).json({ error: 400, message: 'endtime must be after starttime' });
+    if (req.body.accessMode !== undefined) {
+        if (!['public', 'restricted'].includes(req.body.accessMode)) return res.status(400).json({ error: 400, message: 'invalid accessMode' });
+        room.accessMode = req.body.accessMode;
+    }
+    room.updatedAt = new Date().toISOString();
+    await roomStore.set(room.id, room);
+    res.json({ room });
 });
 
 // ── GET /api/rooms/:id ────────────────────────────────────────────────────────
@@ -469,7 +752,12 @@ app.get('/api/rooms/:id', auth(), async (req, res) => {
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
 
     const userId = res.locals.user?.username;
+    if (!canOpenRoom(room, res.locals.user)) {
+        return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    }
     if (userId && room.ownerId !== userId) {
+        const invitation = (room.invitedProviders || []).find(item => item.providerId === userId && item.status !== 'revoked');
+        if (invitation && invitation.status === 'pending') invitation.status = 'accepted';
         if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
         if (!room.joinedProviders.some(p => p.userId === userId)) {
             room.joinedProviders.push({
@@ -483,6 +771,133 @@ app.get('/api/rooms/:id', auth(), async (req, res) => {
     }
 
     res.json(room);
+});
+
+// ── Provider invitations ─────────────────────────────────────────────────────
+// Cross-H-Code access is possible only through this explicit invitation record.
+app.post('/api/rooms/:id/providers', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+
+    const providerId = String(req.body?.providerId || '').trim();
+    if (!providerId) return res.status(400).json({ error: 400, message: 'providerId required' });
+    if (providerId === room.ownerId) return res.status(400).json({ error: 400, message: 'ownerAlreadyHasAccess' });
+    const provider = await providerStore.get(providerId);
+    if (!provider || !provider.active) return res.status(404).json({ error: 404, message: 'providerNotFound' });
+
+    room.invitedProviders = room.invitedProviders || [];
+    const existing = room.invitedProviders.find(item => item.providerId === providerId);
+    if (existing) {
+        existing.status = 'pending';
+        existing.invitedAt = new Date().toISOString();
+        existing.invitedBy = res.locals.user.username;
+    } else {
+        room.invitedProviders.push({
+            providerId,
+            display: provider.displayName,
+            hcode: provider.hcode,
+            role: provider.role,
+            status: 'pending',
+            invitedAt: new Date().toISOString(),
+            invitedBy: res.locals.user.username,
+        });
+    }
+    await roomStore.set(room.id, room);
+    res.status(201).json({ invitation: room.invitedProviders.find(item => item.providerId === providerId) });
+});
+
+app.delete('/api/rooms/:id/providers/:providerId', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    const invitation = (room.invitedProviders || []).find(item => item.providerId === req.params.providerId);
+    if (!invitation) return res.status(404).json({ error: 404, message: 'invitationNotFound' });
+    invitation.status = 'revoked';
+    invitation.revokedAt = new Date().toISOString();
+    room.joinedProviders = (room.joinedProviders || []).filter(item => item.userId !== req.params.providerId);
+    await roomStore.set(room.id, room);
+    res.json({ ok: true });
+});
+
+// ── Meeting invitation + waiting room ────────────────────────────────────────
+// A "public" meeting still requires this opaque, signed invitation link. A
+// restricted meeting does not create guest links: its participants must use a
+// ProviderID session and an explicit provider invitation above.
+app.post('/api/rooms/:id/meeting-invitations', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (room.type !== 'meet') return res.status(400).json({ error: 400, message: 'meeting invitation requires a meeting room' });
+    if (room.accessMode !== 'public') return res.status(400).json({ error: 400, message: 'guest links are only allowed for public rooms' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+
+    const invitationId = makeInvitationId();
+    const exp = Math.floor(new Date(room.endtime).getTime() / 1000) + 86400;
+    const guestName = String(req.body?.displayName || 'ผู้เข้าร่วม').trim().slice(0, 160) || 'ผู้เข้าร่วม';
+    const token = jwt.sign({ roomId: room.id, role: 'meeting_guest', invitationId, exp }, JWT_SECRET);
+    room.meetingInvitations = room.meetingInvitations || [];
+    room.meetingInvitations.push({
+        id: invitationId,
+        displayName: guestName,
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        createdBy: res.locals.user.username,
+        expiresAt: new Date(exp * 1000).toISOString(),
+    });
+    await roomStore.set(room.id, room);
+    res.status(201).json({
+        invitationId,
+        waitingRoomUrl: `${APP_BASE_URL}/waiting/${room.id}?jwt=${token}`,
+        expiresAt: new Date(exp * 1000).toISOString(),
+    });
+});
+
+// Guest uses the signed link to register and poll. This endpoint deliberately
+// returns only their own status and never exposes the participant list.
+app.get('/api/rooms/:id/waiting-room', async (req, res) => {
+    const token = String(req.query.jwt || '');
+    if (!token) return res.status(401).json({ error: 401, message: 'jwt required' });
+    let payload;
+    try { payload = jwt.verify(token, JWT_SECRET); }
+    catch (_) { return res.status(401).json({ error: 401, message: 'invalid jwt' }); }
+    if (payload.roomId !== req.params.id || payload.role !== 'meeting_guest') {
+        return res.status(403).json({ error: 403, message: 'invitationMismatch' });
+    }
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+    const invitation = (room.meetingInvitations || []).find(item => item.id === payload.invitationId);
+    if (!invitation || invitation.status === 'revoked') return res.status(403).json({ error: 403, message: 'invitationInactive' });
+    if (invitation.status === 'active') {
+        invitation.status = 'waiting';
+        invitation.waitingAt = new Date().toISOString();
+        await roomStore.set(room.id, room);
+    }
+    res.json({ roomName: room.name, status: invitation.status, displayName: invitation.displayName });
+});
+
+app.get('/api/rooms/:id/waiting-room/participants', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    const participants = (room.meetingInvitations || []).map(({ id, displayName, status, createdAt, waitingAt, approvedAt, rejectedAt }) => ({
+        id, displayName, status, createdAt, waitingAt, approvedAt, rejectedAt,
+    }));
+    res.json(participants);
+});
+
+app.patch('/api/rooms/:id/waiting-room/:invitationId', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    const status = String(req.body?.status || '');
+    if (!['approved', 'rejected', 'revoked'].includes(status)) return res.status(400).json({ error: 400, message: 'invalid waiting-room status' });
+    const invitation = (room.meetingInvitations || []).find(item => item.id === req.params.invitationId);
+    if (!invitation) return res.status(404).json({ error: 404, message: 'invitationNotFound' });
+    invitation.status = status;
+    invitation[`${status}At`] = new Date().toISOString();
+    invitation.decidedBy = res.locals.user.username;
+    await roomStore.set(room.id, room);
+    res.json({ id: invitation.id, status: invitation.status });
 });
 
 // ── GET /api/exam/:id/queue – patient polls this ──────────────────────────────
@@ -499,19 +914,39 @@ app.get('/api/exam/:id/queue', async (req, res) => {
     if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
     if (!room.queue) room.queue = [];
 
+    const invitationId = payload.invitationId;
+    const invitation = invitationId && (room.patientInvitations || []).find(item => item.id === invitationId);
+    // New invitations are revocable and do not expose a CID in the JWT/query.
+    // Retain legacy JWT support so existing appointment links are not broken.
+    if (invitationId && (!invitation || !['active', 'joined'].includes(invitation.status))) {
+        return res.status(403).json({ error: 403, message: 'invitationInactive' });
+    }
+
     // Multiple patients may share ONE pre-generated token. Key each queue entry by
     // a per-patient id (from the queue page) so they stay distinct; fall back to
     // the token for older links that don't send a pid. The token is still fully
     // verified above — this only changes how we de-duplicate queue entries.
     const pid      = (req.query.pid || '').trim();
-    const entryKey = pid || jwtToken;
+    const entryKey = invitationId || pid || jwtToken;
 
     if (!room.queue.find(q => (q.key || q.token) === entryKey)) {
-        const patientName = (req.query.name || '').trim() || payload.patientName || 'ผู้ป่วย';
-        room.queue.push({ key: entryKey, token: jwtToken, patientName, joinedAt: new Date().toISOString(), status: 'waiting' });
+        const patientName = invitation?.patientName || (req.query.name || '').trim() || payload.patientName || 'ผู้ป่วย';
+        room.queue.push({
+            key: entryKey,
+            invitationId: invitationId || null,
+            token: jwtToken,
+            patientName,
+            cidHash: invitation?.cidHash || null,
+            joinedAt: new Date().toISOString(),
+            status: 'waiting',
+        });
+        if (invitation?.status === 'active') {
+            invitation.status = 'joined';
+            invitation.joinedAt = new Date().toISOString();
+        }
         await roomStore.set(req.params.id, room);
         console.log(`[exam] patient "${patientName}" joined queue for room ${req.params.id}`);
-        await logStore.insert('patient_joined_queue', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName, patientCid: payload.cid || '' });
+        await logStore.insert('patient_joined_queue', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName, unitHcode: room.ownerHcode || null });
     }
 
     const myEntry  = room.queue.find(q => (q.key || q.token) === entryKey);
@@ -525,45 +960,116 @@ app.get('/api/exam/:id/queue', async (req, res) => {
     });
 });
 
-// ── POST /api/exam/:id/next – doctor calls next patient ───────────────────────
+// ── POST /api/exam/:id/call/:entryId – doctor calls a ready patient ──────────
+// This is an internal queue-state API, not an external Calling API. The patient
+// stays on the queue page until they explicitly press "enter examination room".
+app.post('/api/exam/:id/call/:entryId', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    if (room.currentPatientToken) return res.status(409).json({ error: 409, message: 'examinationInProgress' });
+
+    const entry = (room.queue || []).find(item =>
+        (item.key || item.token) === req.params.entryId || item.invitationId === req.params.entryId
+    );
+    if (!entry) return res.status(404).json({ error: 404, message: 'queueEntryNotFound' });
+    const entryToken = entry.key || entry.token;
+    if (entry.status !== 'waiting' && !(entry.status === 'called' && room.calledPatientToken === entryToken)) {
+        return res.status(409).json({ error: 409, message: 'patientNotReady' });
+    }
+
+    // Only one patient can be waiting to enter at a time. Calling another ready
+    // patient returns the previously called patient to the ordinary waiting queue.
+    const previouslyCalled = (room.queue || []).find(item => (item.key || item.token) === room.calledPatientToken);
+    if (previouslyCalled && previouslyCalled !== entry && previouslyCalled.status === 'called') {
+        previouslyCalled.status = 'waiting';
+        previouslyCalled.callCancelledAt = new Date().toISOString();
+    }
+    entry.status = 'called';
+    entry.calledAt = new Date().toISOString();
+    entry.calledBy = res.locals.user.username;
+    room.calledPatientToken = entryToken;
+    await roomStore.set(room.id, room);
+    await logStore.insert('patient_called', { roomId: room.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user.username, doctorName: res.locals.user.display, patientName: entry.patientName, unitHcode: room.ownerHcode || null });
+    res.json({ called: entry.patientName, queueLength: (room.queue || []).filter(item => item.status === 'waiting').length });
+});
+
+// ── POST /api/exam/:id/queue/enter – patient accepts the doctor's call ────────
+// Auth is the patient invitation JWT, supplied in the request body. A patient
+// cannot enter until the doctor has selected their waiting queue entry.
+app.post('/api/exam/:id/queue/enter', async (req, res) => {
+    const jwtToken = String(req.body?.jwt || '');
+    if (!jwtToken) return res.status(401).json({ error: 401, message: 'jwt required' });
+
+    let payload;
+    try { payload = jwt.verify(jwtToken, JWT_SECRET); }
+    catch (e) { return res.status(401).json({ error: 401, message: 'invalid jwt' }); }
+    if (payload.roomId !== req.params.id || payload.role !== 'patient') {
+        return res.status(403).json({ error: 403, message: 'queueAccessDenied' });
+    }
+
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+    const invitationId = payload.invitationId;
+    const entryKey = invitationId || String(req.body?.pid || '').trim() || jwtToken;
+    const entry = (room.queue || []).find(item => (item.key || item.token) === entryKey);
+    if (!entry) return res.status(404).json({ error: 404, message: 'queueEntryNotFound' });
+    if (entry.status !== 'called' || room.calledPatientToken !== (entry.key || entry.token)) {
+        return res.status(409).json({ error: 409, message: 'patientNotCalled' });
+    }
+    if (room.currentPatientToken) return res.status(409).json({ error: 409, message: 'examinationInProgress' });
+
+    entry.status = 'admitted';
+    entry.admittedAt = new Date().toISOString();
+    room.currentPatientToken = entry.key || entry.token;
+    room.calledPatientToken = null;
+    await roomStore.set(room.id, room);
+    await logStore.insert('patient_admitted', { roomId: room.id, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName: entry.patientName, unitHcode: room.ownerHcode || null });
+    res.json({ admitted: true, patientName: entry.patientName });
+});
+
+// ── POST /api/exam/:id/next – doctor calls the first ready patient ───────────
 app.post('/api/exam/:id/next', auth(), async (req, res) => {
     const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
 
-    const userId = res.locals.user?.username;
-    if (userId && room.ownerId !== userId) {
-        if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
-        if (!room.joinedProviders.some(p => p.userId === userId)) {
-            room.joinedProviders.push({ userId, display: res.locals.user?.display || userId, joinedAt: new Date().toISOString() });
-            await roomStore.set(req.params.id, room);
-        }
-    }
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
 
     if (room.currentPatientToken) {
         const prev = room.queue.find(q => (q.key || q.token) === room.currentPatientToken);
-        if (prev) prev.status = 'done';
+        if (prev) {
+            prev.status = 'done';
+            prev.completedAt = new Date().toISOString();
+        }
     }
 
+    const previouslyCalled = room.queue.find(q => (q.key || q.token) === room.calledPatientToken);
+    if (previouslyCalled?.status === 'called') previouslyCalled.status = 'waiting';
     const next = room.queue.find(q => q.status === 'waiting');
     if (!next) {
         room.currentPatientToken = null;
+        room.calledPatientToken = null;
         await roomStore.set(req.params.id, room);
-        return res.json({ admitted: null, queueLength: 0 });
+        return res.json({ called: null, queueLength: 0 });
     }
 
-    next.status = 'admitted';
-    room.currentPatientToken = next.key || next.token;
+    next.status = 'called';
+    next.calledAt = new Date().toISOString();
+    next.calledBy = res.locals.user.username;
+    room.currentPatientToken = null;
+    room.calledPatientToken = next.key || next.token;
     await roomStore.set(req.params.id, room);
 
-    console.log(`[exam] admitted patient "${next.patientName}" for room ${req.params.id}`);
-    await logStore.insert('patient_admitted', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName: next.patientName });
-    res.json({ admitted: next.patientName, queueLength: room.queue.filter(q => q.status === 'waiting').length });
+    console.log(`[exam] called patient "${next.patientName}" for room ${req.params.id}`);
+    await logStore.insert('patient_called', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName: next.patientName, unitHcode: room.ownerHcode || null });
+    res.json({ called: next.patientName, queueLength: room.queue.filter(q => q.status === 'waiting').length });
 });
 
 // ── GET /api/exam/:id/doctor – room info for doctor ───────────────────────────
 app.get('/api/exam/:id/doctor', auth(), async (req, res) => {
     const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canOpenRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
     res.json(room);
 });
 
@@ -573,28 +1079,40 @@ app.get('/api/exam/:id/doctor', auth(), async (req, res) => {
 app.post('/api/exam/:id/invite', auth(), async (req, res) => {
     const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
-
-    const userId = res.locals.user?.username;
-    if (userId && room.ownerId !== userId) {
-        if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
-        if (!room.joinedProviders.some(p => p.userId === userId)) {
-            room.joinedProviders.push({ userId, display: res.locals.user?.display || userId, joinedAt: new Date().toISOString() });
-            await roomStore.set(req.params.id, room);
-        }
-    }
+    if (room.type !== 'exam') return res.status(400).json({ error: 400, message: 'patient invitations require an exam room' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
 
     const patientName = (req.body.displayName || req.body.patientName || '').trim() || 'ผู้ป่วย';
     const cid         = (req.body.cid || '').trim();
+    if (!isValidThaiCid(cid)) return res.status(400).json({ error: 400, message: 'valid 13-digit cid required' });
+    const invitation = addPatientInvitation(room, { patientName, cid, createdBy: res.locals.user.username });
+    await roomStore.set(room.id, room);
 
-    const queue_token = jwt.sign(
-        { roomId: req.params.id, role: 'patient', ownerId: room.ownerId, patientName, cid },
-        JWT_SECRET
-    );
-    const patientJoinUrl = `/queue/${req.params.id}?jwt=${queue_token}`;
+    notifyMophAlert(room.ownerHcode, [cid], patientMophAlertText(room, invitation.patientJoinUrl), 'patientInvitation').catch(() => {});
 
-    console.log(`[exam] invite generated for "${patientName}"${cid ? ` (${cid})` : ''} in room ${req.params.id}`);
-    await logStore.insert('invite_generated', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName, patientCid: cid });
-    res.json({ patientJoinUrl, patientName, cid });
+    console.log(`[exam] invite generated for "${patientName}" in room ${req.params.id}`);
+    await logStore.insert('invite_generated', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName, unitHcode: room.ownerHcode || null });
+    res.status(201).json({ patientJoinUrl: invitation.patientJoinUrl, patientName, invitationId: invitation.invitationId, expiresAt: invitation.expiresAt });
+});
+
+// ── PATCH queue status – cancellation / no-show ──────────────────────────────
+app.patch('/api/exam/:id/queue/:entryId', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    const status = String(req.body?.status || '');
+    if (!['cancelled', 'no_show'].includes(status)) return res.status(400).json({ error: 400, message: 'status must be cancelled or no_show' });
+    const entry = (room.queue || []).find(item => (item.key || item.token) === req.params.entryId || item.invitationId === req.params.entryId);
+    const invitation = (room.patientInvitations || []).find(item => item.id === req.params.entryId || item.id === entry?.invitationId);
+    if (!entry && !invitation) return res.status(404).json({ error: 404, message: 'queueEntryNotFound' });
+    const changedAt = new Date().toISOString();
+    if (entry) { entry.status = status; entry.statusChangedAt = changedAt; entry.statusChangedBy = res.locals.user.username; }
+    if (invitation) { invitation.status = status; invitation.statusChangedAt = changedAt; }
+    if (room.currentPatientToken === (entry?.key || entry?.token)) room.currentPatientToken = null;
+    if (room.calledPatientToken === (entry?.key || entry?.token)) room.calledPatientToken = null;
+    await roomStore.set(room.id, room);
+    await logStore.insert(`patient_${status}`, { roomId: room.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user.username, doctorName: res.locals.user.display, patientName: entry?.patientName || invitation?.patientName, unitHcode: room.ownerHcode || null });
+    res.json({ ok: true, status });
 });
 
 // Legacy stubs kept for compatibility
@@ -609,7 +1127,10 @@ app.post('/api/rooms/:id/join', auth(), async (req, res) => {
     const userId = res.locals.user?.username;
     if (!userId) return res.status(401).json({ error: 401, message: 'unauthorized' });
     if (room.ownerId === userId) return res.json({ joined: false, reason: 'owner', room });
+    if (!canOpenRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
 
+    const invitation = (room.invitedProviders || []).find(item => item.providerId === userId && item.status !== 'revoked');
+    if (invitation && invitation.status === 'pending') invitation.status = 'accepted';
     if (!Array.isArray(room.joinedProviders)) room.joinedProviders = [];
     if (!room.joinedProviders.some(p => p.userId === userId)) {
         room.joinedProviders.push({ userId, display: res.locals.user?.display || userId, joinedAt: new Date().toISOString() });
@@ -622,7 +1143,7 @@ app.post('/api/rooms/:id/join', auth(), async (req, res) => {
 // ── POST /api/meet/reserved – backward-compat: create exam room via API key ───
 // Called by appointment system to pre-create a room for a specific doctor.
 // Body: { sessionName?, startTime, endTime, cid?, displayName?, account_id? }
-// Returns: { sessionID, meet: <full doctor URL>, patientJoinUrl: <full patient URL> }
+// Returns: { sessionID, meet: <full doctor URL>, patientJoinUrl: null }
 // Auth: open temporarily (no key required) for 3rd-party onboarding
 app.post('/api/meet/reserved', async (req, res) => {
     const { sessionName, startTime, endTime, cid, displayName, account_id } = req.body;
@@ -642,10 +1163,16 @@ app.post('/api/meet/reserved', async (req, res) => {
         endtime:      endTime   ? new Date(endTime).toISOString()   : new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
         ownerId:      doctorId,       // doctor's CID — must match their ProviderID login
         ownerDisplay: doctorDisplay,
+        ownerHcode:   (req.body.hcode || req.body.hospitalCode || req.body.account_hcode || '').toString().trim(),
+        accessMode:   'restricted',
         createdAt:    new Date().toISOString(),
+        invitedProviders: [],
         joinedProviders: [],
         queue:               [],
+        patientInvitations:  [],
+        meetingInvitations:  [],
         currentPatientToken: null,
+        calledPatientToken:  null,
         recording:           true,
     };
 
@@ -675,22 +1202,16 @@ app.post('/api/meet/reserved', async (req, res) => {
     // `meet` URL can auto-authenticate the doctor without a separate login step.
     const doctorUrl = `${APP_BASE_URL}/exam/${id}?token=${doctorToken}`;
 
-    // exp = 24 hr after session end (iat = now, so token is valid immediately)
-    const reservedExp = Math.floor(new Date(room.endtime).getTime() / 1000) + 86400;
-    const queue_token = jwt.sign(
-        { roomId: id, role: 'patient', ownerId: doctorId, patientName: 'ผู้ป่วย', cid: '', exp: reservedExp },
-        JWT_SECRET
-    );
-    const patientJoinUrl = `${APP_BASE_URL}/queue/${id}?jwt=${queue_token}`;
-
-    res.json({ sessionID: id, meet: doctorUrl, patientJoinUrl, doctorToken });
+    // A patient invitation is issued only after a valid CID is supplied through
+    // /api/meet/reserved/token. Never create a reusable generic patient link.
+    res.json({ sessionID: id, meet: doctorUrl, patientJoinUrl: null, doctorToken });
 });
 
 // ── POST /api/meet/reserved/token – generate patient queue link (same as doctor invite)
 // Body: { sessionID, displayName?, patientName?, cid? }
 // Returns: { sessionID, meet: patientJoinUrl, patientJoinUrl }
 // Auth: open – called from 3rd-party appointment systems (no session required)
-// Note: cid is optional — works without it
+// CID is required and stored only as a hash. The JWT contains no patient PII.
 app.post('/api/meet/reserved/token', async (req, res) => {
     const { sessionID, displayName, patientName, cid } = req.body;
     if (!sessionID) return res.status(400).json({ error: 400, message: 'sessionID required' });
@@ -700,16 +1221,33 @@ app.post('/api/meet/reserved/token', async (req, res) => {
 
     const name       = (displayName || patientName || '').trim() || 'ผู้ป่วย';
     const patientCid = (cid || '').trim();
+    if (!isValidThaiCid(patientCid)) return res.status(400).json({ error: 400, message: 'valid 13-digit cid required' });
 
     const reservedExp = Math.floor(new Date(room.endtime).getTime() / 1000) + 86400;
+    const invitationId = makeInvitationId();
     const queue_token = jwt.sign(
-        { roomId: sessionID, role: 'patient', ownerId: room.ownerId, patientName: name, cid: patientCid, exp: reservedExp },
+        { roomId: sessionID, role: 'patient', invitationId, exp: reservedExp },
         JWT_SECRET
     );
     const patientJoinUrl = `${APP_BASE_URL}/queue/${sessionID}?jwt=${queue_token}`;
 
-    console.log(`[reserved/token] queue link issued for "${name}"${patientCid ? ` (${patientCid})` : ''} in room ${sessionID}`);
-    await logStore.insert('reserved_token_issued', { roomId: sessionID, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName: name, patientCid });
+    room.patientInvitations = room.patientInvitations || [];
+    room.patientInvitations.push({
+        id: invitationId,
+        patientName: name,
+        cidHash: cidHash(patientCid),
+        status: 'active',
+        createdAt: new Date().toISOString(),
+        createdBy: 'appointment-system',
+        expiresAt: new Date(reservedExp * 1000).toISOString(),
+    });
+    await roomStore.set(room.id, room);
+    // This compatibility endpoint is currently unauthenticated for third-party
+    // appointment onboarding. Do not let it trigger an MOPH Alert send: that
+    // would allow an untrusted caller to message arbitrary CIDs. Trusted HIS
+    // integrations can use the authenticated room/invite flow instead.
+    console.log(`[reserved/token] queue link issued for room ${sessionID}`);
+    await logStore.insert('reserved_token_issued', { roomId: sessionID, roomType: room.type, roomName: room.name, doctorId: room.ownerId, doctorName: room.ownerDisplay, patientName: name, unitHcode: room.ownerHcode || null });
     res.json({ sessionID, meet: patientJoinUrl, patientJoinUrl });
 });
 
@@ -747,31 +1285,88 @@ app.post('/api/jwt/verify', (req, res) => {
     }
 });
 
-// ── Usage Log API (public – for transparency dashboard) ────────────────────────
+// ── Official holiday calendar ─────────────────────────────────────────────────
+// Data is fetched from the configured free source once per year, then served
+// from local storage. This avoids making normal calendar views dependent on an
+// external service and gives administrators an explicit re-sync control.
+app.get('/api/holidays', auth(), async (req, res) => {
+    const year = validHolidayYear(req.query.year);
+    if (!year) return res.status(400).json({ error: 400, message: 'year must be between 2020 and 2100' });
+    const cached = await holidayStore.getYear(year);
+    if (cached) return res.json({ ...cached, cached: true });
+    try {
+        const synced = await syncHolidayCalendar(year);
+        res.json({ ...synced, cached: false });
+    } catch (error) {
+        console.warn('[holidays] initial sync failed:', error.message);
+        res.status(503).json({ error: 503, message: 'holidaySyncUnavailable' });
+    }
+});
 
-// GET /api/logs/summary – overall stats
-app.get('/api/logs/summary', async (_req, res) => {
-    res.json(await logStore.summary());
+app.post('/api/holidays/sync', auth(), async (req, res) => {
+    if (!isAdmin(res.locals.user)) return res.status(403).json({ error: 403, message: 'adminRequired' });
+    const year = validHolidayYear(req.body?.year);
+    if (!year) return res.status(400).json({ error: 400, message: 'year must be between 2020 and 2100' });
+    try {
+        const synced = await syncHolidayCalendar(year);
+        console.log(`[holidays] synced ${synced.holidays.length} dates for ${year}`);
+        res.json({ ...synced, cached: false });
+    } catch (error) {
+        console.warn('[holidays] sync failed:', error.message);
+        res.status(502).json({ error: 502, message: 'holidaySyncFailed' });
+    }
+});
+
+// ── Usage Log API ─────────────────────────────────────────────────────────────
+// Dashboard figures are scoped to a regular caller's H-Code. System admins may
+// view the aggregate, or explicitly choose one H-Code with ?hcode=xxxxx.
+function dashboardOptions(req, res) {
+    const caller = res.locals.user;
+    if (isAdmin(caller)) {
+        const requestedHcode = String(req.query.hcode || '').trim();
+        return { ...rangeParams(req.query), hcode: requestedHcode || undefined };
+    }
+    const hcode = hcodeOf(caller);
+    if (!hcode) {
+        res.status(400).json({ error: 400, message: 'hcodeRequired' });
+        return null;
+    }
+    return { ...rangeParams(req.query), hcode };
+}
+
+// GET /api/logs/summary – H-Code-scoped overall stats
+app.get('/api/logs/summary', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.summary(opts.hcode));
 });
 
 // GET /api/logs/daily?days=30 – events per day
-app.get('/api/logs/daily', async (req, res) => {
-    res.json(await logStore.daily(parseInt(req.query.days) || 30));
+app.get('/api/logs/daily', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.daily(parseInt(req.query.days) || 30, opts.hcode));
 });
 
 // GET /api/logs/monthly?months=12 – events per month
-app.get('/api/logs/monthly', async (req, res) => {
-    res.json(await logStore.monthly(parseInt(req.query.months) || 12));
+app.get('/api/logs/monthly', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.monthly(parseInt(req.query.months) || 12, opts.hcode));
 });
 
 // GET /api/logs/by-doctor?months=3 – usage grouped by doctor
-app.get('/api/logs/by-doctor', async (req, res) => {
-    res.json(await logStore.byDoctor(parseInt(req.query.months) || 3));
+app.get('/api/logs/by-doctor', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.byDoctor(parseInt(req.query.months) || 3, opts.hcode));
 });
 
 // GET /api/logs/recent?limit=50 – recent event log
-app.get('/api/logs/recent', async (req, res) => {
-    res.json(await logStore.recent(parseInt(req.query.limit) || 50));
+app.get('/api/logs/recent', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.recent(parseInt(req.query.limit) || 50, opts.hcode));
 });
 
 // ── Dashboard API (TOR 4.12.x) ─────────────────────────────────────────────────
@@ -790,42 +1385,53 @@ function rangeParams(q) {
 }
 
 // 4.12.x.1 — usage per day (date range + time-of-day window)
-app.get('/api/logs/by-day', async (req, res) => {
-    res.json(await logStore.byDay(rangeParams(req.query)));
+app.get('/api/logs/by-day', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.byDay(opts));
 });
 
 // 4.12.x.1 — usage by hour of day
-app.get('/api/logs/by-hour', async (req, res) => {
-    res.json(await logStore.byHour(rangeParams(req.query)));
+app.get('/api/logs/by-hour', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.byHour(opts));
 });
 
 // 4.12.x.2 — usage by health region (เขตสุขภาพ)
-app.get('/api/logs/by-region', async (req, res) => {
-    res.json(await logStore.byRegion(rangeParams(req.query)));
+app.get('/api/logs/by-region', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.byRegion(opts));
 });
 
 // 4.12.x.2 — usage by province (จังหวัด); optional ?region=N
-app.get('/api/logs/by-province', async (req, res) => {
-    const opts = rangeParams(req.query);
+app.get('/api/logs/by-province', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
     if (req.query.region != null && req.query.region !== '') opts.region = parseInt(req.query.region, 10);
     res.json(await logStore.byProvince(opts));
 });
 
 // 4.12.x.3 — usage by platform (mobile vs web)
-app.get('/api/logs/by-platform', async (req, res) => {
-    res.json(await logStore.byPlatform(rangeParams(req.query)));
+app.get('/api/logs/by-platform', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
+    res.json(await logStore.byPlatform(opts));
 });
 
 // 4.12.x.4 / 4.12.2.5 — service units called (top N via ?limit=)
-app.get('/api/logs/by-unit', async (req, res) => {
-    const opts = rangeParams(req.query);
+app.get('/api/logs/by-unit', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
     if (req.query.limit) opts.limit = parseInt(req.query.limit, 10);
     res.json(await logStore.byUnit(opts));
 });
 
 // 4.12.2.6 — top N rooms by conversation duration (?limit=, default 5)
-app.get('/api/logs/longest-rooms', async (req, res) => {
-    const opts = rangeParams(req.query);
+app.get('/api/logs/longest-rooms', auth(), async (req, res) => {
+    const opts = dashboardOptions(req, res);
+    if (!opts) return;
     opts.limit = req.query.limit ? parseInt(req.query.limit, 10) : 5;
     res.json(await logStore.longestRooms(opts));
 });
@@ -902,6 +1508,7 @@ app.post('/api/his/export', auth(), async (req, res) => {
 
     const room = await roomStore.get(roomId);
     if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
 
     const vitals = vitalStore.byRoom(roomId);
     if (!vitals || vitals.length === 0) {
@@ -966,12 +1573,16 @@ app.post('/api/vitals', auth(), (req, res) => {
     if (!metric || value === undefined || value === null || value === '') {
         return res.status(400).json({ error: 400, message: 'metric and value are required' });
     }
-    vitalStore.insert({ roomId, patientKey, deviceId, deviceType, metric, value, unit, source, organization, recordedAt });
-    res.status(201).json({ ok: true });
+    Promise.resolve(roomStore.get(roomId)).then(room => {
+        if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+        if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+        vitalStore.insert({ roomId, patientKey, deviceId, deviceType, metric, value, unit, source, organization, recordedAt });
+        return res.status(201).json({ ok: true });
+    }).catch(err => res.status(500).json({ error: 500, message: err.message }));
 });
 
 // POST /api/vitals/batch — record multiple readings at once (BLE device dump)
-app.post('/api/vitals/batch', auth(), (req, res) => {
+app.post('/api/vitals/batch', auth(), async (req, res) => {
     const records = req.body;
     if (!Array.isArray(records) || records.length === 0) {
         return res.status(400).json({ error: 400, message: 'body must be a non-empty array' });
@@ -984,22 +1595,36 @@ app.post('/api/vitals/batch', auth(), (req, res) => {
             return res.status(400).json({ error: 400, message: 'each record needs metric + value' });
         }
     }
+    const roomIds = [...new Set(records.map(record => record.roomId).filter(Boolean))];
+    if (roomIds.length === 0) return res.status(400).json({ error: 400, message: 'each record needs roomId' });
+    for (const roomId of roomIds) {
+        const room = await roomStore.get(roomId);
+        if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+        if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    }
     vitalStore.insertBatch(records);
     res.status(201).json({ ok: true, count: records.length });
 });
 
 // GET /api/vitals?roomId= — list vitals for a room
-app.get('/api/vitals', auth(), (req, res) => {
+app.get('/api/vitals', auth(), async (req, res) => {
     const { roomId, patientKey } = req.query;
     if (!roomId && !patientKey) {
         return res.status(400).json({ error: 400, message: 'roomId or patientKey required' });
     }
-    const rows = roomId ? vitalStore.byRoom(roomId) : vitalStore.byPatient(patientKey);
+    if (!roomId) return res.status(400).json({ error: 400, message: 'roomId required' });
+    const room = await roomStore.get(roomId);
+    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+    if (!canOpenRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+    const rows = vitalStore.byRoom(roomId);
     res.json(rows);
 });
 
 // GET /api/rooms/:id/vitals/latest — latest value per metric for a room
-app.get('/api/rooms/:id/vitals/latest', auth(), (req, res) => {
+app.get('/api/rooms/:id/vitals/latest', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'room not found' });
+    if (!canOpenRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
     res.json(vitalStore.latestByRoom(req.params.id));
 });
 

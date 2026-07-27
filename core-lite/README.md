@@ -31,6 +31,17 @@ npm install
 | `PROVIDER_ID_REDIRECT_URI` | Redirect URI หลัง OAuth | — |
 | `PROVIDER_SERVICE_CLIENT_ID` | Client ID สำหรับ Provider Service | — |
 | `PROVIDER_SERVICE_SECRET_KEY` | Secret Key สำหรับ Provider Service | — |
+| `MOPH_ALERT_ENABLED` | เปิดใช้ MOPH Alert (`true`) | `false` |
+| `MOPH_ALERT_USERNAME` | บัญชี MOPH Account Center ของระบบกลาง | — |
+| `MOPH_ALERT_PASSWORD_HASH` | password hash จาก MOPH Account Center | — |
+| `MOPH_ALERT_TOKEN_URL` | endpoint ขอ JWT | `https://cvp1.moph.go.th/token` |
+| `MOPH_ALERT_API_BASE_URL` | endpoint MOPH Alert | `https://morpromt2c.moph.go.th` |
+
+### MOPH Alert และ H-Code
+
+credential MOPH Alert ตั้งครั้งเดียวใน `.env` ส่วน `hospital_code` ไม่ต้องตั้งซ้ำ:
+ระบบใช้ H-Code ของเจ้าของห้อง (`room.ownerHcode`) อัตโนมัติขณะขอ JWT เพื่อให้แต่ละ
+นัดหมายอ้างอิงสถานพยาบาลที่สร้างห้องจริง
 
 ## การรัน
 

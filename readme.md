@@ -59,6 +59,10 @@ API กลาง (`core-lite`), แอปมือถือ MOPH Meet (`moph-mee
 
 > หมายเหตุการเชื่อมต่อภายนอก (ThaID, LINE OA, HIS) เปิดใช้งานได้ทันทีเมื่อกรอก credential
 > ที่ออกโดยหน่วยงานเจ้าของระบบลงใน `.env` — โครงสร้างโค้ดพร้อมรองรับครบแล้ว
+>
+> MOPH Alert ใช้ API แยกจาก LINE OA: ตั้ง `MOPH_ALERT_ENABLED`,
+> `MOPH_ALERT_USERNAME` และ `MOPH_ALERT_PASSWORD_HASH` ของบัญชี MOPH Alert กลางใน `.env`.
+> ระบบนำ H-Code ของเจ้าของห้องมาใส่เป็น `hospital_code` ตอนขอ token โดยอัตโนมัติ
 
 ---
 

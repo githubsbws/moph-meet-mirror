@@ -7,6 +7,12 @@ import pytest
 import requests
 
 
+def valid_thai_cid():
+    first_twelve = "110170020345"
+    total = sum(int(digit) * (13 - index) for index, digit in enumerate(first_twelve))
+    return first_twelve + str((11 - (total % 11)) % 10)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1. HEALTH CHECK
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -88,7 +94,19 @@ class TestRooms:
         assert r.status_code == 200
         data = r.json()
         assert data["room"]["type"] == "exam"
-        assert data["patientJoinUrl"] is not None
+        assert data["patientJoinUrl"] is None
+
+    def test_create_exam_and_invite_patient_together(self, api, auth_headers):
+        cid = valid_thai_cid()
+        r = api.post("/api/rooms", json={
+            "type": "exam", "patientName": "Initial Queue Patient", "patientCid": cid,
+        }, headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["patientJoinUrl"]
+        invitation = data["room"]["patientInvitations"][0]
+        assert invitation["cidHash"]
+        assert cid not in str(invitation)
 
     def test_create_room_invalid_type(self, api, auth_headers):
         r = api.post("/api/rooms", json={"type": "invalid"}, headers=auth_headers)
@@ -157,17 +175,16 @@ class TestExamQueue:
     def test_exam_invite_patient(self, api, auth_headers, exam_room_id):
         r = api.post(f"/api/exam/{exam_room_id}/invite", json={
             "patientName": "Test Patient",
-            "cid": "1234567890123"
+            "cid": valid_thai_cid()
         }, headers=auth_headers)
-        assert r.status_code == 200
+        assert r.status_code == 201
         data = r.json()
         assert "patientJoinUrl" in data
         assert data["patientName"] == "Test Patient"
 
-    def test_exam_invite_default_name(self, api, auth_headers, exam_room_id):
-        r = api.post(f"/api/exam/{exam_room_id}/invite", json={}, headers=auth_headers)
-        assert r.status_code == 200
-        assert r.json()["patientName"] == "ผู้ป่วย"
+    def test_exam_invite_requires_valid_cid(self, api, auth_headers, exam_room_id):
+        r = api.post(f"/api/exam/{exam_room_id}/invite", json={"patientName": "No CID"}, headers=auth_headers)
+        assert r.status_code == 400
 
     def test_exam_invite_no_auth(self, api, exam_room_id):
         r = api.post(f"/api/exam/{exam_room_id}/invite", json={})
@@ -184,7 +201,7 @@ class TestExamQueue:
     def test_queue_poll_valid_jwt(self, api, auth_headers, exam_room_id):
         """Invite a patient, extract the JWT, then poll queue."""
         inv = api.post(f"/api/exam/{exam_room_id}/invite", json={
-            "patientName": "Queue Patient"
+            "patientName": "Queue Patient", "cid": valid_thai_cid()
         }, headers=auth_headers)
         url = inv.json()["patientJoinUrl"]
         jwt_token = url.split("jwt=")[1]
@@ -194,20 +211,23 @@ class TestExamQueue:
         assert data["status"] == "waiting"
         assert data["position"] >= 1
 
-    def test_call_next_patient(self, api, auth_headers, exam_room_id):
-        """Invite a patient, then doctor calls next."""
+    def test_call_selected_patient_then_patient_enters(self, api, auth_headers, exam_room_id):
+        """The doctor calls a ready patient; the patient explicitly enters."""
         inv = api.post(f"/api/exam/{exam_room_id}/invite", json={
-            "patientName": "Next Patient"
+            "patientName": "Next Patient", "cid": valid_thai_cid()
         }, headers=auth_headers)
         url = inv.json()["patientJoinUrl"]
         jwt_token = url.split("jwt=")[1]
         # Register patient in queue by polling
         api.get(f"/api/exam/{exam_room_id}/queue?jwt={jwt_token}")
-        # Doctor calls next
-        r = api.post(f"/api/exam/{exam_room_id}/next", headers=auth_headers)
-        assert r.status_code == 200
-        data = r.json()
-        assert "admitted" in data
+        # Doctor calls this particular invitation.
+        call = api.post(f"/api/exam/{exam_room_id}/call/{inv.json()['invitationId']}", headers=auth_headers)
+        assert call.status_code == 200
+        assert call.json()["called"] == "Next Patient"
+        assert api.get(f"/api/exam/{exam_room_id}/queue?jwt={jwt_token}").json()["status"] == "called"
+        enter = api.post(f"/api/exam/{exam_room_id}/queue/enter", json={"jwt": jwt_token})
+        assert enter.status_code == 200
+        assert enter.json()["admitted"] is True
 
     def test_call_next_no_auth(self, api, exam_room_id):
         r = api.post(f"/api/exam/{exam_room_id}/next")
@@ -309,7 +329,7 @@ class TestGuestToken:
 class TestJwtVerify:
     def test_verify_valid_jwt(self, api, auth_headers, exam_room_id):
         inv = api.post(f"/api/exam/{exam_room_id}/invite", json={
-            "patientName": "JWT Test"
+            "patientName": "JWT Test", "cid": valid_thai_cid()
         }, headers=auth_headers)
         url = inv.json()["patientJoinUrl"]
         jwt_token = url.split("jwt=")[1]
@@ -317,7 +337,7 @@ class TestJwtVerify:
         assert r.status_code == 200
         data = r.json()
         assert data["valid"] is True
-        assert data["payload"]["patientName"] == "JWT Test"
+        assert data["payload"]["invitationId"]
 
     def test_verify_invalid_jwt(self, api, wait_for_server):
         r = api.post("/api/jwt/verify", json={"token": "not.a.jwt"})

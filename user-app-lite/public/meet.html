@@ -59,6 +59,20 @@
     box-shadow: 0 -1px 4px rgba(0,0,0,.08); z-index: 99;
   }
   .queue-list { flex: 1; overflow-y: auto; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; }
+  .appointment-list { flex: 1; overflow-y: auto; padding: .75rem; display: flex; flex-direction: column; gap: .5rem; }
+  .appointment-item { background:#f8fafc; border:1px solid #e5e7eb; border-radius:.55rem; padding:.7rem; }
+  .appointment-item.selected { border-color:#056839; background:#ecfdf3; }
+  .appointment-head { display:flex; align-items:center; gap:.5rem; }
+  .appointment-name { flex:1; font-size:.9rem; font-weight:600; color:#1f2937; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .appointment-status { font-size:.7rem; border-radius:999px; padding:.15rem .45rem; white-space:nowrap; }
+  .appointment-status.waiting { color:#a16207; background:#fef3c7; }
+  .appointment-status.active { color:#475569; background:#e2e8f0; }
+  .appointment-status.admitted { color:#047857; background:#d1fae5; }
+  .appointment-status.done, .appointment-status.inactive { color:#6b7280; background:#f3f4f6; }
+  .btn-call-patient { width:100%; margin-top:.6rem; padding:.48rem .6rem; background:#056839; color:#fff; border:0; border-radius:.4rem; cursor:pointer; font:inherit; font-size:.82rem; font-weight:600; }
+  .btn-call-patient:hover { background:#044d2b; }
+  .btn-call-patient:disabled { color:#9ca3af; background:#e5e7eb; cursor:default; }
+  #patient-call-note { min-height:1.25rem; padding:.25rem .75rem .7rem; color:#64748b; font-size:.75rem; line-height:1.35; }
   .meet-bar.with-sidebar { right: 370px; }
   #btn-rec-start, #btn-rec-stop {
     border: none; border-radius: 1.5rem; padding: .3rem .85rem;
@@ -132,6 +146,7 @@
   </div>
   <div class="sidebar-tabs">
     <button class="active" onclick="switchTab('queue',this)">🩺 คิว</button>
+    <button onclick="switchTab('appointments',this)">📅 ผู้ป่วยนัด</button>
     <button onclick="switchTab('phr',this)">📋 PHR</button>
     <button onclick="switchTab('iot',this)">📡 IOT</button>
   </div>
@@ -150,6 +165,13 @@
       </button>
       <p style="font-size:.75rem;text-align:center;color:#9ca3af;margin:.5rem 0 0" id="last-called"></p>
     </div>
+  </div>
+  <!-- Tab: Appointments / patient calling placeholder -->
+  <div id="tab-appointments" class="tab-panel" style="flex-direction:column">
+    <div class="appointment-list" id="appointment-list">
+      <p class="text-center text-gray-400 text-sm mt-4">ยังไม่มีผู้ป่วยนัดหมาย</p>
+    </div>
+    <p id="patient-call-note" aria-live="polite">ปุ่มเรียกผู้ป่วยเป็นการเตรียมความพร้อมเท่านั้น ยังไม่มีการส่งข้อความหรือเปลี่ยนสถานะคิว</p>
   </div>
   <!-- Tab: PHR -->
   <div id="tab-phr" class="tab-panel" style="padding:.75rem;flex-direction:column;gap:.5rem">
@@ -190,8 +212,8 @@
              border-radius:.5rem;font-size:1rem;font-family:'Sarabun',sans-serif;outline:none;margin-bottom:.6rem"
       onkeydown="if(event.key==='Enter')doAddPatient()"
     />
-    <label style="font-size:.875rem;color:#374151;display:block;margin-bottom:.35rem">เลขบัตรประชาชน (CID, ไม่บังคับ)</label>
-    <input id="invite-cid" type="text" placeholder="เช่น 1234567890123" maxlength="13"
+    <label style="font-size:.875rem;color:#374151;display:block;margin-bottom:.35rem">เลขบัตรประชาชน 13 หลัก <span style="color:#dc2626">*</span></label>
+    <input id="invite-cid" type="text" inputmode="numeric" pattern="[0-9]{13}" placeholder="เช่น 1234567890123" maxlength="13" required
       style="width:100%;box-sizing:border-box;padding:.65rem .75rem;border:1px solid #d1d5db;
              border-radius:.5rem;font-size:1rem;font-family:'Sarabun',sans-serif;outline:none"
       onkeydown="if(event.key==='Enter')doAddPatient()"
@@ -222,6 +244,17 @@
         ปิด
       </button>
     </div>
+  </div>
+</div>
+
+<!-- Meeting Waiting Room Modal -->
+<div id="meeting-waiting-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.45);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:1rem;padding:1.5rem;width:380px;max-width:calc(100vw - 2rem);font-family:'Sarabun',sans-serif">
+    <h3 style="margin:0 0 .35rem;font-size:1.1rem;font-weight:700;color:#056839">👥 ห้องรอเข้าประชุม</h3>
+    <p style="font-size:.8rem;color:#6b7280;margin:.25rem 0 .8rem">สำหรับห้อง Public: สร้างลิงก์เชิญ แล้วอนุมัติผู้เข้าร่วมก่อนเข้าห้อง</p>
+    <button type="button" onclick="createMeetingInvitation()" style="width:100%;padding:.6rem;background:#056839;color:#fff;border:0;border-radius:.5rem;font:inherit;font-weight:600;cursor:pointer">➕ สร้างลิงก์เชิญผู้เข้าร่วม</button>
+    <div id="meeting-waiting-list" style="margin-top:.8rem;max-height:260px;overflow:auto"></div>
+    <div style="margin-top:1rem;text-align:right"><button type="button" onclick="closeMeetingWaiting()" style="padding:.5rem .9rem;border:0;border-radius:.5rem;cursor:pointer">ปิด</button></div>
   </div>
 </div>
 
@@ -256,6 +289,7 @@
   <span id="rec-timer">00:00</span>
   <button id="btn-rec-start" onclick="startDocRecord()">🎙 อัดบันทึก</button>
   <button id="btn-rec-stop"  onclick="stopDocRecord()">⏹ หยุด &amp; บันทึก</button>
+  <button id="btn-waiting-room" onclick="openMeetingWaiting()" style="display:none;border:1px solid #056839;border-radius:1.5rem;padding:.3rem .7rem;background:#fff;color:#056839;font:inherit;font-size:.8rem;font-weight:600;cursor:pointer">👥 ห้องรอ</button>
   <a href="/" style="font-size:.85rem;color:#056839;white-space:nowrap">← กลับ</a>
 </div>
 
@@ -305,8 +339,58 @@ function switchTab(name, btn) {
     document.getElementById('bubble-queue-count').style.display = '';
     document.getElementById('meet-bar-icon').textContent = '🩺';
     document.getElementById('btn-rec-stop').innerHTML = '⏹ หยุด &amp; สรุป AI';
+  } else {
+    document.getElementById('btn-waiting-room').style.display = '';
   }
 })();
+
+function closeMeetingWaiting() {
+  document.getElementById('meeting-waiting-modal').style.display = 'none';
+}
+function waitingLabel(status) {
+  return ({ active: 'ยังไม่เปิดลิงก์', waiting: 'กำลังรอ', approved: 'อนุมัติแล้ว', rejected: 'ปฏิเสธแล้ว', revoked: 'ยกเลิกแล้ว' })[status] || status;
+}
+async function openMeetingWaiting() {
+  if (isExam) return;
+  const modal = document.getElementById('meeting-waiting-modal');
+  const list = document.getElementById('meeting-waiting-list');
+  modal.style.display = 'flex'; list.textContent = 'กำลังโหลด…';
+  try {
+    const r = await fetch('/api/rooms/' + roomId + '/waiting-room/participants', { credentials: 'include' });
+    const people = await r.json();
+    if (!r.ok) throw new Error(people.message || 'ไม่สามารถโหลดรายชื่อ');
+    if (!people.length) { list.innerHTML = '<p style="color:#9ca3af;text-align:center;font-size:.85rem">ยังไม่มีผู้ได้รับเชิญ</p>'; return; }
+    list.innerHTML = '';
+    people.forEach(person => {
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;align-items:center;gap:.5rem;padding:.55rem;border-bottom:1px solid #e5e7eb;font-size:.85rem';
+      const name = document.createElement('span'); name.textContent = person.displayName; name.style.flex = '1';
+      const status = document.createElement('span'); status.textContent = waitingLabel(person.status); status.style.color = person.status === 'waiting' ? '#92400e' : '#64748b';
+      row.append(name, status);
+      if (person.status === 'waiting') {
+        for (const [text, nextStatus, color] of [['อนุมัติ','approved','#056839'], ['ปฏิเสธ','rejected','#dc2626']]) {
+          const button = document.createElement('button'); button.textContent = text; button.style.cssText = `border:0;border-radius:.35rem;padding:.3rem .45rem;background:${color};color:#fff;cursor:pointer;font-size:.75rem`;
+          button.addEventListener('click', () => updateMeetingWaiting(person.id, nextStatus)); row.append(button);
+        }
+      }
+      list.append(row);
+    });
+  } catch (error) { list.textContent = error.message || 'เกิดข้อผิดพลาด'; }
+}
+async function updateMeetingWaiting(invitationId, status) {
+  const r = await fetch('/api/rooms/' + roomId + '/waiting-room/' + encodeURIComponent(invitationId), { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status}) });
+  if (!r.ok) { const d = await r.json(); alert(d.message || 'อัปเดตไม่สำเร็จ'); return; }
+  openMeetingWaiting();
+}
+async function createMeetingInvitation() {
+  const displayName = prompt('ชื่อผู้เข้าร่วม', 'ผู้เข้าร่วม');
+  if (displayName === null) return;
+  const r = await fetch('/api/rooms/' + roomId + '/meeting-invitations', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({displayName}) });
+  const d = await r.json();
+  if (!r.ok) { alert(d.message || 'สร้างลิงก์ไม่สำเร็จ'); return; }
+  const link = d.waitingRoomUrl.startsWith('http') ? d.waitingRoomUrl : location.origin + d.waitingRoomUrl;
+  try { await navigator.clipboard.writeText(link); alert('สร้างและคัดลอกลิงก์เชิญแล้ว'); } catch (_) { prompt('คัดลอกลิงก์นี้', link); }
+  openMeetingWaiting();
+}
 
 // ── Jitsi init (called after external_api.js loads) ──────────────────────────
 function initJitsi() {
@@ -352,6 +436,9 @@ function initJitsi() {
       if (r.ok) {
         const room = await r.json();
         roomName = room.name || room.title || roomId;
+        if (!isExam && room.accessMode !== 'public') {
+          document.getElementById('btn-waiting-room').style.display = 'none';
+        }
       }
     } catch (_) {}
 
@@ -398,18 +485,82 @@ async function refreshQueue() {
     const room = await r.json();
     queueData = room.queue || [];
     renderQueue(queueData, room.currentPatientToken);
+    renderAppointments(room.patientInvitations || [], queueData);
   } catch (_) {}
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[char]);
+}
+
+function appointmentState(invitation, queue) {
+  const entry = queue.find(item => item.invitationId === invitation.id);
+  const status = entry?.status || invitation.status || 'active';
+  if (status === 'waiting' || status === 'joined') return { key: 'waiting', label: 'พร้อม', canCall: true };
+  if (status === 'called') return { key: 'waiting', label: 'กำลังเรียก', canCall: false };
+  if (status === 'admitted') return { key: 'admitted', label: 'กำลังตรวจ', canCall: false };
+  if (status === 'done') return { key: 'done', label: 'ตรวจเสร็จ', canCall: false };
+  if (status === 'cancelled') return { key: 'inactive', label: 'ยกเลิกแล้ว', canCall: false };
+  if (status === 'no_show') return { key: 'inactive', label: 'ไม่มาตามนัด', canCall: false };
+  // The system's reliable "ready" signal is entering the queue/waiting room;
+  // an active invitation alone does not tell us that the patient is logged in.
+  return { key: 'active', label: 'ยังไม่เข้าห้องรอ', canCall: false };
+}
+
+function renderAppointments(invitations, queue) {
+  const list = document.getElementById('appointment-list');
+  if (!list) return;
+  if (invitations.length === 0) {
+    list.innerHTML = '<p class="text-center text-gray-400 text-sm mt-4">ยังไม่มีผู้ป่วยนัดหมาย</p>';
+    return;
+  }
+  list.innerHTML = '';
+  invitations.forEach(invitation => {
+    const state = appointmentState(invitation, queue);
+    const item = document.createElement('div');
+    item.className = 'appointment-item';
+    item.innerHTML = '<div class="appointment-head"><span class="appointment-name">' + escapeHtml(invitation.patientName || 'ผู้ป่วย') + '</span><span class="appointment-status ' + state.key + '">' + state.label + '</span></div>';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-call-patient';
+    button.textContent = state.key === 'waiting' && !state.canCall ? '📞 รอผู้ป่วยเข้าห้อง' : '📞 เรียกผู้ป่วย';
+    button.disabled = !state.canCall;
+    button.addEventListener('click', () => callSelectedPatient(invitation, item, button));
+    item.appendChild(button);
+    list.appendChild(item);
+  });
+}
+
+async function callSelectedPatient(invitation, item, button) {
+  button.disabled = true;
+  button.textContent = 'กำลังเรียก…';
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/call/' + encodeURIComponent(invitation.id), {
+      method: 'POST', credentials: 'include'
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || 'ไม่สามารถเรียกผู้ป่วยได้');
+    document.querySelectorAll('.appointment-item.selected').forEach(element => element.classList.remove('selected'));
+    item.classList.add('selected');
+    document.getElementById('patient-call-note').textContent = 'เรียก “' + (d.called || invitation.patientName || 'ผู้ป่วย') + '” แล้ว — รอผู้ป่วยกด “เข้าห้องตรวจ”';
+    await refreshQueue();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = '📞 เรียกผู้ป่วย';
+    document.getElementById('patient-call-note').textContent = error.message || 'ไม่สามารถเรียกผู้ป่วยได้';
+  }
 }
 
 function renderQueue(queue, currentToken) {
   const waiting  = queue.filter(q => q.status === 'waiting');
   const admitted = queue.find(q => q.status === 'admitted');
+  const called   = queue.find(q => q.status === 'called');
   const listEl   = document.getElementById('queue-list');
   const countEl  = document.getElementById('queue-count');
   const nextBtn  = document.getElementById('btn-next-patient');
 
   countEl.textContent = 'คิวรอ: ' + waiting.length + ' คน';
-  nextBtn.disabled    = waiting.length === 0;
+  nextBtn.disabled    = waiting.length === 0 || Boolean(called);
 
   const bubbleBadge = document.getElementById('bubble-queue-count');
   if (bubbleBadge) bubbleBadge.textContent = waiting.length;
@@ -425,12 +576,45 @@ function renderQueue(queue, currentToken) {
     div.innerHTML = '<span class="queue-num">✅</span><span style="flex:1">' + (admitted.patientName||'') + '</span><span class="text-xs text-green-700">กำลังตรวจ</span>';
     listEl.appendChild(div);
   }
+  if (called) {
+    const div = document.createElement('div');
+    div.className = 'queue-item current';
+    div.innerHTML = '<span class="queue-num">📞</span><span style="flex:1">' + (called.patientName||'') + '</span><span class="text-xs text-amber-700">กำลังรอเข้าห้อง</span>';
+    listEl.appendChild(div);
+  }
   waiting.forEach((p, i) => {
     const div = document.createElement('div');
     div.className = 'queue-item';
+    const entryId = p.invitationId || p.key || p.token;
     div.innerHTML = '<span class="queue-num">' + (i + 1) + '</span><span style="flex:1">' + (p.patientName||'') + '</span><span class="text-xs text-gray-400">รอ</span>';
+    const noShow = document.createElement('button');
+    noShow.type = 'button'; noShow.className = 'text-xs text-amber-700'; noShow.textContent = 'ไม่มาตามนัด';
+    noShow.addEventListener('click', () => setQueueStatus(entryId, 'no_show'));
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'text-xs text-red-600'; cancel.textContent = 'ยกเลิก';
+    cancel.addEventListener('click', () => setQueueStatus(entryId, 'cancelled'));
+    div.append(noShow, cancel);
     listEl.appendChild(div);
   });
+  queue.filter(p => ['cancelled', 'no_show'].includes(p.status)).forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'queue-item';
+    div.innerHTML = '<span class="queue-num">—</span><span style="flex:1">' + (p.patientName||'') + '</span><span class="text-xs text-gray-400">' + (p.status === 'no_show' ? 'ไม่มาตามนัด' : 'ยกเลิกแล้ว') + '</span>';
+    listEl.appendChild(div);
+  });
+}
+
+async function setQueueStatus(entryId, status) {
+  const label = status === 'no_show' ? 'เปลี่ยนสถานะเป็นไม่มาตามนัด' : 'ยกเลิกคิว';
+  if (!confirm(label + ' ใช่หรือไม่?')) return;
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/queue/' + encodeURIComponent(entryId), {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.message || 'error'); }
+    await refreshQueue();
+  } catch (e) { alert('เปลี่ยนสถานะคิวไม่สำเร็จ: ' + e.message); }
 }
 
 
@@ -464,15 +648,12 @@ async function callNextPatient() {
   const btn = document.getElementById('btn-next-patient');
   btn.disabled    = true;
   btn.textContent = 'กำลังเรียก…';
-  const wasRecording = !!_recRecorder;
-  if (wasRecording) stopDocRecord();
   try {
     const r = await fetch('/api/exam/' + roomId + '/next', { method: 'POST', credentials: 'include' });
     const d = await r.json();
     document.getElementById('last-called').textContent =
-      d.admitted ? ('เรียก: ' + d.admitted) : 'ไม่มีผู้ป่วยในคิว';
+      d.called ? ('เรียก: ' + d.called + ' — รอผู้ป่วยเข้าห้อง') : 'ไม่มีผู้ป่วยในคิว';
     await refreshQueue();
-    if (wasRecording && d.admitted) startDocRecord();
   } catch (e) { btn.disabled = false; }
   btn.textContent = '▶ เรียกผู้ป่วยคนถัดไป';
 }
@@ -497,6 +678,7 @@ async function doAddPatient() {
   const btn  = document.getElementById('btn-do-invite');
   const name = document.getElementById('invite-name').value.trim();
   const cid  = document.getElementById('invite-cid').value.trim();
+  if (!/^\d{13}$/.test(cid)) { alert('กรุณากรอกเลขบัตรประชาชน 13 หลัก'); return; }
   btn.disabled = true;
   btn.textContent = 'กำลังสร้าง…';
   try {

@@ -14,6 +14,10 @@ export type RoomType = 'exam' | 'meet';
 /** ค่าจากฟอร์ม Create_Room_Form (client form state). */
 export type CreateRoomInput = {
   type: RoomType;
+  name?: string;
+  accessMode?: 'public' | 'restricted';
+  patientName?: string;
+  patientCid?: string;
   date: string;        // 'YYYY-MM-DD'
   startTime: string;   // 'HH:mm'
   endTime: string;     // 'HH:mm'
@@ -22,6 +26,10 @@ export type CreateRoomInput = {
 /** payload ของ POST /api/rooms (parity contract กับเว็บ). */
 export type CreateRoomBody = {
   type: RoomType;
+  name?: string;
+  accessMode?: 'public' | 'restricted';
+  patientName?: string;
+  patientCid?: string;
   starttime: string;   // 'YYYY-MM-DDTHH:mm:00'
   endtime: string;     // 'YYYY-MM-DDTHH:mm:00'
   platform?: 'mobile'; // Requirement 9 (optional platform hint)
@@ -67,6 +75,10 @@ export function buildCreateRoomBody(
     starttime: toDatetimeString(input.date, input.startTime),
     endtime: toDatetimeString(input.date, input.endTime),
   };
+  if (input.name?.trim()) body.name = input.name.trim();
+  if (input.accessMode === 'public') body.accessMode = 'public';
+  if (input.patientName?.trim()) body.patientName = input.patientName.trim();
+  if (input.patientCid?.trim()) body.patientCid = input.patientCid.trim();
   // เพิ่ม platform hint เฉพาะเมื่อร้องขอ 'mobile' (Requirement 9). เมื่อไม่ส่ง opts
   // ต้องไม่มี field `platform` เลย เพื่อคง parity กับเว็บ (backward-compat default
   // 'web' ฝั่ง core).
@@ -97,7 +109,21 @@ export function validateCreateRoomInput(input: CreateRoomInput): ValidationResul
     return { ok: false, message: 'เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม' };
   }
 
+  const patientName = input.patientName?.trim() ?? '';
+  const patientCid = input.patientCid?.trim() ?? '';
+  if ((patientName || patientCid) && !isValidThaiCid(patientCid)) {
+    return { ok: false, message: 'กรุณากรอกเลขบัตรประชาชนผู้ป่วย 13 หลักให้ถูกต้อง' };
+  }
+
   return { ok: true };
+}
+
+/** ตรวจ checksum เลขบัตรประชาชนไทย 13 หลัก (ใช้เมื่อออกคำเชิญผู้ป่วย). */
+export function isValidThaiCid(cid: string): boolean {
+  if (!/^\d{13}$/.test(cid)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i += 1) sum += Number(cid[i]) * (13 - i);
+  return (11 - (sum % 11)) % 10 === Number(cid[12]);
 }
 
 /** แปลง relative path เป็น URL เต็มด้วย API_BASE (absolute ผ่านตรง ๆ). */

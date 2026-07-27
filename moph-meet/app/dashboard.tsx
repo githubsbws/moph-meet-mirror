@@ -113,6 +113,10 @@ export default function DashboardScreen() {
   const [formType, setFormType] = useState<RoomType>('exam');
   const [formInput, setFormInput] = useState<CreateRoomInput>({
     type: 'exam',
+    name: '',
+    accessMode: 'restricted',
+    patientName: '',
+    patientCid: '',
     date: '',
     startTime: '',
     endTime: '',
@@ -159,6 +163,9 @@ export default function DashboardScreen() {
     setFormInput(prev => ({
       ...prev,
       type,
+      accessMode: type === 'meet' ? prev.accessMode || 'restricted' : 'restricted',
+      patientName: '',
+      patientCid: '',
       date: prev.date && prev.date.trim() !== '' ? prev.date : todayDateString(),
     }));
     setFormVisible(true);
@@ -523,13 +530,14 @@ export default function DashboardScreen() {
                 </View>
               )}
 
-              {/* exam → กล่องเขียวอ่อน: ลิงก์คิวผู้ป่วย + ปุ่มคัดลอก inline + ปุ่มเข้าห้องตรวจ */}
+              {/* exam → ไม่มีลิงก์ผู้ป่วยแบบทั่วไป: ผู้สร้างต้องกรอก CID 13 หลัก
+                  ตอนเชิญจากหน้าห้องตรวจ จึงแสดงทางลัดไปหน้าจัดการห้องแทน. */}
               {(result.patientLink || result.doctorRoute) && (
                 <View style={styles.resultLinkWrap}>
                   {result.patientLink && (
                     <>
                       <Text style={styles.resultLinkLabel}>
-                        👤 ลิงก์คิวสำหรับผู้ป่วย (JWT, ไม่มีวันหมดอายุ)
+                        👤 ลิงก์คิวสำหรับผู้ป่วยที่ได้รับเชิญ
                       </Text>
                       <View style={styles.resultLinkRow}>
                         <Text style={styles.resultLinkInput} numberOfLines={1} ellipsizeMode="tail" selectable>
@@ -547,12 +555,19 @@ export default function DashboardScreen() {
                     </>
                   )}
                   {result.doctorRoute && (
-                    <TouchableOpacity
-                      style={styles.resultNavBtn}
-                      onPress={() => { const route = result.doctorRoute!; closeResult(); router.push(route as any); }}
-                    >
-                      <Text style={styles.resultNavBtnText}>👨‍⚕️ เข้าห้องตรวจ</Text>
-                    </TouchableOpacity>
+                    <>
+                      {!result.patientLink && (
+                        <Text style={styles.resultLinkLabel}>
+                          เพื่อความปลอดภัย ให้เชิญผู้ป่วยจากในห้องตรวจพร้อมเลขบัตรประชาชน 13 หลัก
+                        </Text>
+                      )}
+                      <TouchableOpacity
+                        style={styles.resultNavBtn}
+                        onPress={() => { const route = result.doctorRoute!; closeResult(); router.push(route as any); }}
+                      >
+                        <Text style={styles.resultNavBtnText}>👨‍⚕️ เข้าห้องตรวจและเชิญผู้ป่วย</Text>
+                      </TouchableOpacity>
+                    </>
                   )}
                 </View>
               )}
@@ -572,9 +587,60 @@ export default function DashboardScreen() {
             </Text>
             <Text style={styles.modalDesc}>
               {formType === 'exam'
-                ? 'ชื่อห้องสร้างอัตโนมัติ ระบบจะบันทึกวิดีโออัตโนมัติ'
-                : 'ชื่อห้องสร้างอัตโนมัติ ผู้เข้าร่วมต้องล็อกอินด้วย Provider ID'}
+                ? 'ตั้งชื่อ เวลา และเชิญผู้ป่วยพร้อมสร้างห้องได้'
+                : 'ตั้งชื่อ เวลา และสิทธิ์เข้าร่วมห้องได้'}
             </Text>
+
+            <Text style={styles.fieldLabel}>ชื่อห้อง</Text>
+            <TextInput
+              style={styles.textFormInput}
+              value={formInput.name || ''}
+              onChangeText={(name) => setFormInput(prev => ({ ...prev, name }))}
+              placeholder="เว้นว่างเพื่อให้ระบบตั้งชื่ออัตโนมัติ"
+              placeholderTextColor="#94a3b8"
+              maxLength={160}
+              editable={!submitting}
+            />
+
+            {formType === 'meet' && (
+              <>
+                <Text style={styles.fieldLabel}>สิทธิ์การเข้าร่วม</Text>
+                <View style={styles.accessModeRow}>
+                  <TouchableOpacity style={[styles.accessModeBtn, formInput.accessMode !== 'public' && styles.accessModeActive]} onPress={() => setFormInput(prev => ({ ...prev, accessMode: 'restricted' }))}>
+                    <Text style={[styles.accessModeText, formInput.accessMode !== 'public' && styles.accessModeTextActive]}>Restricted</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.accessModeBtn, formInput.accessMode === 'public' && styles.accessModeActive]} onPress={() => setFormInput(prev => ({ ...prev, accessMode: 'public' }))}>
+                    <Text style={[styles.accessModeText, formInput.accessMode === 'public' && styles.accessModeTextActive]}>Public</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {formType === 'exam' && (
+              <View style={styles.patientInviteBox}>
+                <Text style={styles.patientInviteTitle}>เชิญผู้ป่วยพร้อมสร้างห้อง</Text>
+                <TextInput
+                  style={styles.textFormInput}
+                  value={formInput.patientName || ''}
+                  onChangeText={(patientName) => setFormInput(prev => ({ ...prev, patientName }))}
+                  placeholder="ชื่อผู้ป่วย"
+                  placeholderTextColor="#94a3b8"
+                  maxLength={160}
+                  editable={!submitting}
+                />
+                <TextInput
+                  style={styles.textFormInput}
+                  value={formInput.patientCid || ''}
+                  onChangeText={(patientCid) => setFormInput(prev => ({ ...prev, patientCid: patientCid.replace(/\D/g, '') }))}
+                  placeholder="เลขบัตรประชาชน 13 หลัก (กรอกเมื่อเชิญ)"
+                  placeholderTextColor="#94a3b8"
+                  keyboardType="number-pad"
+                  maxLength={13}
+                  editable={!submitting}
+                />
+                <Text style={styles.patientInviteHint}>เว้นทั้งสองช่องได้ หากต้องการเชิญผู้ป่วยภายหลัง</Text>
+              </View>
+            )}
 
             {/* วันที่ — แตะเพื่อเปิด native date picker (parity กับ <input type="date"> บนเว็บ).
                 required เป็น visual hint เท่านั้น ไม่บล็อก submit เอง (Req 3.3) */}
@@ -727,6 +793,15 @@ const styles = StyleSheet.create({
   fieldLabel:   { fontSize: 13, fontWeight: '600', color: '#1e293b', marginBottom: 4 },
   requiredMark: { color: '#dc2626', fontWeight: '700' },
   formInput:    { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 12, justifyContent: 'center' },
+  textFormInput:{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: '#111', marginBottom: 12 },
+  accessModeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  accessModeBtn: { flex: 1, borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 8, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fff' },
+  accessModeActive: { backgroundColor: GREEN, borderColor: GREEN },
+  accessModeText: { color: GREEN, fontWeight: '600', fontSize: 13 },
+  accessModeTextActive: { color: '#fff' },
+  patientInviteBox: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0', borderRadius: 8, padding: 10, marginBottom: 12 },
+  patientInviteTitle: { color: GREEN, fontWeight: '700', fontSize: 13, marginBottom: 8 },
+  patientInviteHint: { color: '#64748b', fontSize: 11, marginTop: -4 },
   formInputText:{ fontSize: 14, color: '#111' },
   formInputPlaceholder: { fontSize: 14, color: '#9ca3af' },
   fieldHint:    { fontSize: 11, color: '#9ca3af', marginBottom: 8 },

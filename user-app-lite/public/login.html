@@ -90,7 +90,7 @@
   if (token) {
     try {
       const r = await fetch('/api/auth/me', { credentials: 'include' });
-      if (r.ok) { location.href = '/'; return; }
+      if (r.ok) { location.href = '/consent.html'; return; }
       // Token is stale — clear it so form shows clean
       document.cookie = 'token=; Max-Age=0; Path=/';
       document.cookie = 'user_json=; Max-Age=0; Path=/';

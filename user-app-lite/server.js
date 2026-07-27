@@ -124,7 +124,7 @@ app.post('/login/manual', async (req, res) => {
     if (!r.ok) return res.redirect('/login.html?error=invalid');
     const data = await r.json();
     setAuthCookies(res, data.token, data.user);
-    return res.redirect('/');
+    return res.redirect('/consent.html');
   } catch (err) {
     console.error('[manual-login]', err.message);
     return res.redirect('/login.html?error=server');
@@ -156,7 +156,7 @@ app.get('/auth/providerid/callback', async (req, res) => {
     }
     const user = { ...data.data.user, roles: ['admin', 'staff'] };
     setAuthCookies(res, data.data.token, user);
-    return res.redirect('/');
+    return res.redirect('/consent.html');
   } catch (err) {
     console.error('[ProviderID] error:', err.message);
     return res.redirect('/login.html?error=server');
@@ -191,7 +191,7 @@ app.get('/auth/thaid/callback', async (req, res) => {
       return res.redirect(`mophmeet://auth?token=${token}&user=${user}`);
     }
     setAuthCookies(res, data.token, data.user);
-    return res.redirect('/');
+    return res.redirect('/consent.html');
   } catch (err) {
     console.error('[ThaID] error:', err.message);
     return res.redirect('/login.html?error=server');
@@ -251,6 +251,7 @@ app.get('/login',     (_req, res) => res.redirect('/login.html'));
 app.get('/room/:id',  (_req, res) => res.sendFile(path.join(__dirname, 'public', 'meet.html')));
 app.get('/exam/:id',  (_req, res) => res.sendFile(path.join(__dirname, 'public', 'meet.html')));
 app.get('/queue/:id', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'queue.html')));
+app.get('/waiting/:id', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'waiting.html')));
 app.get('/usage-logs',(_req, res) => res.sendFile(path.join(__dirname, 'public', 'usage-logs.html')));
 app.get('/vitals',    (_req, res) => res.sendFile(path.join(__dirname, 'public', 'vitals.html')));
 app.get('/vitals/:id',(_req, res) => res.sendFile(path.join(__dirname, 'public', 'vitals.html')));
@@ -323,7 +324,8 @@ app.get('/api/usage-logs/:endpoint', async (req, res) => {
   try {
     const qs  = new URLSearchParams(req.query).toString();
     const url = `${CORE_BASE}/api/logs/${req.params.endpoint}${qs ? '?' + qs : ''}`;
-    const r   = await apiFetch(url);
+    const token = req.cookies?.token;
+    const r   = await apiFetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
     res.status(r.status).json(await r.json());
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -353,5 +355,3 @@ app.use('/api', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`user-app-lite (static) running on http://localhost:${PORT}`);
 });
-
-

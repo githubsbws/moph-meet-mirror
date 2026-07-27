@@ -172,6 +172,38 @@
       <form id="create-room-form" class="flex flex-col gap-3">
         <input type="hidden" id="room-type" name="type" value="meet" />
         <label class="form-control w-full">
+          <div class="label"><span class="label-text">ชื่อห้องตรวจ/ห้องประชุม</span></div>
+          <input type="text" name="name" maxlength="160" class="input input-bordered w-full" placeholder="เว้นว่างเพื่อให้ระบบตั้งชื่ออัตโนมัติ" />
+        </label>
+        <label id="access-mode-field" class="form-control w-full">
+          <div class="label"><span class="label-text">สิทธิ์การเข้าร่วม</span></div>
+          <select name="accessMode" class="select select-bordered w-full">
+            <option value="restricted">Restricted — ต้องได้รับคำเชิญและล็อกอิน Provider ID</option>
+            <option value="public">Public — สร้างลิงก์เชิญสำหรับผู้เข้าร่วม</option>
+          </select>
+        </label>
+        <div class="form-control w-full">
+          <div class="label"><span class="label-text">เชิญหมอ/พยาบาล</span><span class="label-text-alt">เฉพาะ H-Code เดียวกัน</span></div>
+          <div class="flex gap-2">
+            <input id="provider-search" type="search" class="input input-bordered input-sm flex-1" placeholder="ค้นหาชื่อหรือ Provider ID" autocomplete="off" />
+            <select id="provider-role" class="select select-bordered select-sm w-28"><option value="">ทั้งหมด</option><option value="doctor">แพทย์</option><option value="nurse">พยาบาล</option></select>
+          </div>
+          <div id="provider-results" class="mt-1 max-h-28 overflow-auto text-sm"></div>
+          <div id="selected-providers" class="mt-1 flex flex-wrap gap-1"></div>
+        </div>
+        <div id="patient-invite-fields" class="hidden rounded-lg border border-accent/20 bg-accent/5 p-3">
+          <p class="text-sm font-semibold mb-2">เชิญผู้ป่วยพร้อมสร้างห้อง</p>
+          <label class="form-control w-full mb-2">
+            <div class="label py-0"><span class="label-text text-xs">ชื่อผู้ป่วย</span></div>
+            <input type="text" name="patientName" maxlength="160" class="input input-bordered input-sm w-full" placeholder="ระบุเพื่อส่งลิงก์ให้ถูกคน" />
+          </label>
+          <label class="form-control w-full">
+            <div class="label py-0"><span class="label-text text-xs">เลขบัตรประชาชน 13 หลัก <span class="text-error">*</span></span></div>
+            <input type="text" name="patientCid" inputmode="numeric" pattern="[0-9]{13}" maxlength="13" class="input input-bordered input-sm w-full" placeholder="กรอกเมื่อเชิญผู้ป่วย" />
+          </label>
+          <p class="text-xs text-base-content/55 mt-2">เว้นทั้งสองช่องได้ หากต้องการสร้างห้องก่อน แล้วเชิญผู้ป่วยภายหลัง</p>
+        </div>
+        <label class="form-control w-full">
           <div class="label"><span class="label-text">วันที่ <span class="text-error">*</span></span></div>
           <input type="date" name="date" required class="input input-bordered w-full" />
         </label>
@@ -204,12 +236,12 @@
           </div>
         </div>
         <div id="result-patient-link-wrap" class="hidden">
-          <p class="text-xs text-base-content/60 mb-1">🧑‍⚕️ ลิงก์คิวสำหรับผู้ป่วย (JWT, ไม่มีวันหมดอายุ)</p>
-          <div class="flex gap-2">
+          <p id="result-patient-link-help" class="text-xs text-base-content/60 mb-1">🧑‍⚕️ เพื่อความปลอดภัย ต้องสร้างลิงก์ผู้ป่วยพร้อมเลขบัตรประชาชน 13 หลักจากในห้องตรวจ</p>
+          <div id="result-patient-link-row" class="hidden flex gap-2 mb-2">
             <input type="text" id="result-patient-link" readonly class="input input-bordered input-sm flex-1 text-xs" />
             <button onclick="copyLink('result-patient-link')" class="btn btn-sm btn-outline">คัดลอก</button>
           </div>
-          <a id="result-doctor-link" href="#" class="btn btn-accent btn-sm w-full mt-2 text-white">👨‍⚕️ เข้าห้องตรวจ</a>
+          <a id="result-doctor-link" href="#" class="btn btn-accent btn-sm w-full text-white">👨‍⚕️ เข้าห้องตรวจและเชิญผู้ป่วย</a>
         </div>
       </div>
       <div class="modal-action">
@@ -247,6 +279,40 @@ function esc(s) {
 
 let _currentUser = null;
 let _meets = [];
+const _selectedProviderIds = new Map();
+
+function renderSelectedProviders() {
+  const el = document.getElementById('selected-providers');
+  el.innerHTML = [..._selectedProviderIds.values()].map(p =>
+    `<button type="button" class="badge badge-outline gap-1" data-provider-id="${esc(p.providerId)}">${esc(p.displayName)} <span aria-hidden="true">×</span></button>`
+  ).join('');
+  el.querySelectorAll('button[data-provider-id]').forEach(button => button.addEventListener('click', () => {
+    _selectedProviderIds.delete(button.dataset.providerId); renderSelectedProviders();
+  }));
+}
+
+async function searchProviders() {
+  const input = document.getElementById('provider-search');
+  const role = document.getElementById('provider-role').value;
+  const resultEl = document.getElementById('provider-results');
+  const q = input.value.trim();
+  if (!q) { resultEl.innerHTML = ''; return; }
+  try {
+    const params = new URLSearchParams({ q, limit: '10' });
+    if (role) params.set('role', role);
+    const r = await fetch('/api/providers?' + params, { credentials: 'include' });
+    const providers = r.ok ? await r.json() : [];
+    resultEl.innerHTML = providers.filter(p => !_selectedProviderIds.has(p.providerId)).map(p =>
+      `<button type="button" class="btn btn-ghost btn-xs w-full justify-start" data-provider-id="${esc(p.providerId)}">${esc(p.displayName)} <span class="opacity-60">(${esc(p.role)})</span></button>`
+    ).join('') || '<span class="text-xs text-base-content/50">ไม่พบรายชื่อ</span>';
+    resultEl.querySelectorAll('button[data-provider-id]').forEach(button => button.addEventListener('click', () => {
+      const provider = providers.find(p => p.providerId === button.dataset.providerId);
+      if (provider) { _selectedProviderIds.set(provider.providerId, provider); renderSelectedProviders(); searchProviders(); }
+    }));
+  } catch (_) { resultEl.innerHTML = '<span class="text-xs text-error">ค้นหารายชื่อไม่สำเร็จ</span>'; }
+}
+document.getElementById('provider-search').addEventListener('input', searchProviders);
+document.getElementById('provider-role').addEventListener('change', searchProviders);
 
 // ── Render user card ───────────────────────────────────────────────────────
 function renderUser(user) {
@@ -381,18 +447,28 @@ function openCreateModal(type) {
   document.getElementById('modal-form-panel').classList.remove('hidden');
   document.getElementById('modal-result-panel').classList.add('hidden');
   document.getElementById('room-type').value = type;
+  _selectedProviderIds.clear();
+  document.getElementById('provider-search').value = '';
+  document.getElementById('provider-results').innerHTML = '';
+  renderSelectedProviders();
   const errorEl = document.getElementById('modal-error');
   errorEl.classList.add('hidden');
   errorEl.textContent = '';
   const submitBtn = document.getElementById('modal-submit-btn');
+  document.querySelector('#create-room-form [name="patientName"]').value = '';
+  document.querySelector('#create-room-form [name="patientCid"]').value = '';
   if (type === 'exam') {
     document.getElementById('modal-title').textContent = '🦷 สร้างห้องตรวจ';
-    document.getElementById('modal-desc').textContent  = 'ชื่อห้องสร้างอัตโนมัติ ระบบจะบันทึกวิดีโออัตโนมัติ';
+    document.getElementById('modal-desc').textContent  = 'ตั้งชื่อห้อง เวลา และเชิญแพทย์/พยาบาลกับผู้ป่วยพร้อมกันได้';
+    document.getElementById('access-mode-field').classList.add('hidden');
+    document.getElementById('patient-invite-fields').classList.remove('hidden');
     submitBtn.className   = 'btn btn-accent text-white';
     submitBtn.textContent = 'สร้างห้องตรวจ';
   } else {
     document.getElementById('modal-title').textContent = '📡 สร้างห้องประชุม';
-    document.getElementById('modal-desc').textContent  = 'ชื่อห้องสร้างอัตโนมัติ ผู้เข้าร่วมต้องล็อกอินด้วย Provider ID';
+    document.getElementById('modal-desc').textContent  = 'กำหนดชื่อห้อง เวลา และประเภทการเข้าร่วมได้';
+    document.getElementById('access-mode-field').classList.remove('hidden');
+    document.getElementById('patient-invite-fields').classList.add('hidden');
     submitBtn.className   = 'btn btn-primary';
     submitBtn.textContent = 'สร้างห้องประชุม';
   }
@@ -411,6 +487,13 @@ function copyLink(inputId) {
   });
 }
 
+function validThaiCid(value) {
+  if (!/^\d{13}$/.test(value)) return false;
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(value[i]) * (13 - i);
+  return (11 - (sum % 11)) % 10 === Number(value[12]);
+}
+
 document.getElementById('create-room-form').addEventListener('submit', async function (e) {
   e.preventDefault();
   const btn     = document.getElementById('modal-submit-btn');
@@ -419,9 +502,19 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
   const type    = fd.get('type');
   const body    = {
     type,
+    name: String(fd.get('name') || '').trim(),
+    accessMode: type === 'meet' ? fd.get('accessMode') : 'restricted',
+    providerIds: [..._selectedProviderIds.keys()],
+    patientName: type === 'exam' ? String(fd.get('patientName') || '').trim() : '',
+    patientCid: type === 'exam' ? String(fd.get('patientCid') || '').trim() : '',
     starttime: fd.get('date') + 'T' + fd.get('starttime') + ':00',
     endtime:   fd.get('date') + 'T' + fd.get('endtime')   + ':00',
   };
+  if ((body.patientName || body.patientCid) && !validThaiCid(body.patientCid)) {
+    errorEl.textContent = 'กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้องก่อนเชิญผู้ป่วย';
+    errorEl.classList.remove('hidden');
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'กำลังสร้าง…';
   errorEl.classList.add('hidden');
@@ -436,8 +529,13 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
       document.getElementById('result-meet-link-wrap').classList.remove('hidden');
       document.getElementById('result-patient-link-wrap').classList.add('hidden');
     } else {
-      document.getElementById('result-patient-link').value = origin + data.patientJoinUrl;
       document.getElementById('result-doctor-link').href   = '/exam/' + data.room.id;
+      const patientLink = data.patientJoinUrl ? (data.patientJoinUrl.startsWith('http') ? data.patientJoinUrl : origin + data.patientJoinUrl) : '';
+      document.getElementById('result-patient-link').value = patientLink;
+      document.getElementById('result-patient-link-row').classList.toggle('hidden', !patientLink);
+      document.getElementById('result-patient-link-help').textContent = patientLink
+        ? '🧑‍⚕️ ส่งลิงก์นี้ให้ผู้ป่วยที่ได้รับเชิญเท่านั้น'
+        : '🧑‍⚕️ ยังไม่ได้เชิญผู้ป่วย — สามารถสร้างลิงก์พร้อม CID 13 หลักจากในห้องตรวจ';
       document.getElementById('result-patient-link-wrap').classList.remove('hidden');
       document.getElementById('result-meet-link-wrap').classList.add('hidden');
     }
@@ -458,6 +556,8 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
 
   // Load user
   try {
+    const consent = await fetch('/api/telemed-consent', { credentials: 'include' });
+    if (!consent.ok || !(await consent.json()).accepted) { location.href = '/consent.html'; return; }
     const r = await fetch('/api/auth/me', { credentials: 'include' });
     if (!r.ok) { location.href = '/login.html'; return; }
     const user = await r.json();
@@ -471,8 +571,21 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
     // Set calendar data and render
     window.CAL_DATES = meets.map(m => ({
       date: m.starttime ? m.starttime.slice(0, 10) : null,
-      hasPatient: m.type === 'exam'
+      type: m.type
     })).filter(m => m.date);
+
+    window._loadHolidayYear = async function (year) {
+      const hr = await fetch('/api/holidays?year=' + encodeURIComponent(year), { credentials: 'include' });
+      if (!hr.ok) throw new Error('holidaySyncUnavailable');
+      const data = await hr.json();
+      return data.holidays || [];
+    };
+    try {
+      const holidays = await window._loadHolidayYear(new Date().getFullYear());
+      window.CAL_HOLIDAYS = Object.fromEntries(holidays.map(item => [item.date, item.name]));
+    } catch (_) {
+      window.CAL_HOLIDAYS = {};
+    }
 
     if (typeof window._renderCalendar === 'function') window._renderCalendar();
   } catch (e) {

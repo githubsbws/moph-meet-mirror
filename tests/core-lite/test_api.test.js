@@ -11,6 +11,13 @@ let reservedRoom = {};     // { sessionID, meet, patientJoinUrl, doctorToken }
 let authHeaders = {};
 let examRoomId = '';
 
+function validThaiCid() {
+  const firstTwelve = '110170020345';
+  let sum = 0;
+  for (let i = 0; i < 12; i++) sum += Number(firstTwelve[i]) * (13 - i);
+  return firstTwelve + ((11 - (sum % 11)) % 10);
+}
+
 // ─── Setup ────────────────────────────────────────────────────────────────────
 beforeAll(async () => {
   // Wait for server
@@ -32,6 +39,7 @@ beforeAll(async () => {
   reservedRoom = r.data;
   authHeaders = { Authorization: `Bearer ${reservedRoom.doctorToken}` };
   examRoomId = reservedRoom.sessionID;
+  await api.post('/api/telemed-consent', { decision: 'accepted', confirmed: true }, { headers: authHeaders });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -102,7 +110,18 @@ describe('Rooms', () => {
     const r = await api.post('/api/rooms', { type: 'exam' }, { headers: authHeaders });
     expect(r.status).toBe(200);
     expect(r.data.room.type).toBe('exam');
+    expect(r.data.patientJoinUrl).toBeNull();
+  });
+
+  test('POST /api/rooms – create exam and invite patient together', async () => {
+    const r = await api.post('/api/rooms', {
+      type: 'exam', patientName: 'Initial Queue Patient', patientCid: validThaiCid()
+    }, { headers: authHeaders });
+    expect(r.status).toBe(200);
     expect(r.data.patientJoinUrl).toBeTruthy();
+    expect(r.data.room.patientInvitations).toHaveLength(1);
+    expect(r.data.room.patientInvitations[0].cidHash).toBeTruthy();
+    expect(JSON.stringify(r.data.room.patientInvitations[0])).not.toContain(validThaiCid());
   });
 
   test('POST /api/rooms – invalid type', async () => {
@@ -194,15 +213,15 @@ describe('Exam Queue', () => {
 
   test('POST /api/exam/:id/invite', async () => {
     const r = await api.post(`/api/exam/${examRoomId}/invite`, {
-      patientName: 'Jest Patient', cid: '1111111111111'
+      patientName: 'Jest Patient', cid: validThaiCid()
     }, { headers: authHeaders });
-    expect(r.status).toBe(200);
+    expect(r.status).toBe(201);
     expect(r.data.patientJoinUrl).toBeTruthy();
   });
 
   test('GET /api/exam/:id/queue – valid JWT', async () => {
     const inv = await api.post(`/api/exam/${examRoomId}/invite`, {
-      patientName: 'Queue Jest'
+      patientName: 'Queue Jest', cid: validThaiCid()
     }, { headers: authHeaders });
     const jwt = inv.data.patientJoinUrl.split('jwt=')[1];
     const r = await api.get(`/api/exam/${examRoomId}/queue?jwt=${jwt}`);
@@ -215,17 +234,20 @@ describe('Exam Queue', () => {
     expect(r.status).toBe(401);
   });
 
-  test('POST /api/exam/:id/next – admit patient', async () => {
+  test('doctor calls a selected patient, then patient enters', async () => {
     const inv = await api.post(`/api/exam/${examRoomId}/invite`, {
-      patientName: 'Next Jest'
+      patientName: 'Next Jest', cid: validThaiCid()
     }, { headers: authHeaders });
     const jwt = inv.data.patientJoinUrl.split('jwt=')[1];
-    // Register in queue
+    // Patient opens their queue page and becomes ready.
     await api.get(`/api/exam/${examRoomId}/queue?jwt=${jwt}`);
-    // Admit
-    const r = await api.post(`/api/exam/${examRoomId}/next`, {}, { headers: authHeaders });
-    expect(r.status).toBe(200);
-    expect(r.data).toHaveProperty('admitted');
+    const call = await api.post(`/api/exam/${examRoomId}/call/${inv.data.invitationId}`, {}, { headers: authHeaders });
+    expect(call.status).toBe(200);
+    expect(call.data.called).toBe('Next Jest');
+    expect((await api.get(`/api/exam/${examRoomId}/queue?jwt=${jwt}`)).data.status).toBe('called');
+    const enter = await api.post(`/api/exam/${examRoomId}/queue/enter`, { jwt });
+    expect(enter.status).toBe(200);
+    expect(enter.data.admitted).toBe(true);
   });
 });
 
@@ -289,7 +311,7 @@ describe('Guest Token', () => {
 describe('JWT Verify', () => {
   test('valid JWT', async () => {
     const inv = await api.post(`/api/exam/${examRoomId}/invite`, {
-      patientName: 'JWT Jest'
+      patientName: 'JWT Jest', cid: validThaiCid()
     }, { headers: authHeaders });
     const jwt = inv.data.patientJoinUrl.split('jwt=')[1];
     const r = await api.post('/api/jwt/verify', { token: jwt });

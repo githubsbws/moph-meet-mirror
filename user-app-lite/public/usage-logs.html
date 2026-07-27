@@ -39,6 +39,10 @@
         <span class="label-text text-xs mb-1">ตั้งแต่วันที่</span>
         <input type="date" id="f-from" class="input input-bordered input-sm" />
       </label>
+      <label id="f-hcode-wrap" class="form-control hidden">
+        <span class="label-text text-xs mb-1">H-Code</span>
+        <input type="text" id="f-hcode" inputmode="numeric" maxlength="9" placeholder="ทั้งหมด" class="input input-bordered input-sm w-32" />
+      </label>
       <label class="form-control">
         <span class="label-text text-xs mb-1">ถึงวันที่</span>
         <input type="date" id="f-to" class="input input-bordered input-sm" />
@@ -166,9 +170,11 @@ function qs() {
   const to   = document.getElementById('f-to').value;
   const hf   = document.getElementById('f-hour-from').value;
   const ht   = document.getElementById('f-hour-to').value;
+  const hcode = document.getElementById('f-hcode').value.trim();
   if (from) p.set('from', from);
   if (to)   p.set('to', to);
   if (hf !== '' && ht !== '') { p.set('hourFrom', hf); p.set('hourTo', ht); }
+  if (hcode) p.set('hcode', hcode);
   const s = p.toString();
   return s ? '?' + s : '';
 }
@@ -182,14 +188,16 @@ function applyFilters() {
   const to   = document.getElementById('f-to').value;
   const hf   = document.getElementById('f-hour-from').value;
   const ht   = document.getElementById('f-hour-to').value;
+  const hcode = document.getElementById('f-hcode').value.trim();
   let note = [];
   if (from || to) note.push((from || '…') + ' ถึง ' + (to || '…'));
   if (hf !== '' && ht !== '') note.push('เวลา ' + hf + ':00–' + ht + ':59');
+  if (hcode) note.push('H-Code ' + hcode);
   document.getElementById('filter-note').textContent = note.length ? note.join(' · ') : 'แสดงข้อมูลทั้งหมด';
   loadAll();
 }
 function resetFilters() {
-  ['f-from','f-to','f-hour-from','f-hour-to'].forEach(id => document.getElementById(id).value = '');
+  ['f-from','f-to','f-hour-from','f-hour-to','f-hcode'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('filter-note').textContent = 'แสดงข้อมูลทั้งหมด';
   loadAll();
 }
@@ -207,7 +215,7 @@ function switchTab(tab) {
 
 // ── loaders ──────────────────────────────────────────────────────────────────
 async function loadSummary() {
-  const d = await fetch(API + '/summary').then(r => r.json()).catch(() => ({}));
+  const d = await fetch(API + '/summary' + qs()).then(r => r.json()).catch(() => ({}));
   const set = (id, v) => document.getElementById(id).textContent = (v ?? '—').toLocaleString?.() ?? v ?? '—';
   set('stat-rooms', d.rooms); set('stat-patients', d.patients); set('stat-admitted', d.admitted);
   set('stat-doctors', d.doctors); set('stat-today', d.today); set('stat-month', d.thisMonth);
@@ -322,9 +330,20 @@ function fmtDur(sec) {
   return (h ? h + ' ชม. ' : '') + m + ' นาที';
 }
 
-switchTab('care');
-loadSummary();
-loadAll();
+async function initDashboard() {
+  try {
+    const response = await fetch('/api/auth/me', { credentials: 'include' });
+    const user = response.ok ? await response.json() : null;
+    if (user?.roles?.includes('admin')) {
+      document.getElementById('f-hcode-wrap').classList.remove('hidden');
+      document.getElementById('filter-note').textContent = 'Admin: แสดงข้อมูลรวมทุก H-Code';
+    }
+  } catch (_) {}
+  switchTab('care');
+  loadSummary();
+  loadAll();
+}
+initDashboard();
 </script>
 
 <script>

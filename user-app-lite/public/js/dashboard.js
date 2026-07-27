@@ -20,6 +20,8 @@
   // datesWithExam: dates that have at least one exam-type room (blue dot)
   // datesWithMeet: dates with any room (green dot, already exists)
   let datesWithExam = new Set((window.CAL_DATES || []).filter(d => d.type === 'exam').map(d => d.date));
+  let holidaysByDate = new Map(Object.entries(window.CAL_HOLIDAYS || {}));
+  const holidayYearsLoaded = new Set(Object.keys(window.CAL_HOLIDAYS || {}).length ? [new Date().getFullYear()] : []);
 
 
 
@@ -37,6 +39,15 @@
 
   function isoDate(y, m, d) {
     return `${y}-${pad(m + 1)}-${pad(d)}`;
+  }
+
+  function loadHolidayYear(year) {
+    if (!window._loadHolidayYear || holidayYearsLoaded.has(year)) return;
+    holidayYearsLoaded.add(year);
+    window._loadHolidayYear(year).then(rows => {
+      for (const holiday of rows || []) holidaysByDate.set(holiday.date, holiday.name);
+      renderCalendar();
+    }).catch(() => holidayYearsLoaded.delete(year));
   }
 
   function renderCalendar() {
@@ -63,15 +74,18 @@
           html += '<td></td>';
         } else {
           const iso = isoDate(currentYear, currentMonth, day);
+          const holidayName = holidaysByDate.get(iso);
           const classes = [
             today.getFullYear() === currentYear &&
             today.getMonth() === currentMonth &&
             today.getDate() === day ? 'today' : '',
             datesWithMeet.has(iso) ? 'has-meet' : '',
             datesWithExam.has(iso) ? 'has-exam' : '',
-            selectedDate === iso ? 'selected' : ''
+            selectedDate === iso ? 'selected' : '',
+            holidayName ? 'holiday' : ''
           ].filter(Boolean).join(' ');
-          html += `<td class="${classes}" data-date="${iso}" tabindex="0" role="gridcell">${day}</td>`;
+          const title = holidayName ? ` title="วันหยุดราชการ: ${String(holidayName).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : '';
+          html += `<td class="${classes}" data-date="${iso}" tabindex="0" role="gridcell"${title}>${day}</td>`;
           day++;
         }
       }
@@ -84,10 +98,12 @@
 
     document.getElementById('cal-prev').addEventListener('click', () => {
       currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+      loadHolidayYear(currentYear);
       renderCalendar();
     });
     document.getElementById('cal-next').addEventListener('click', () => {
       currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+      loadHolidayYear(currentYear);
       renderCalendar();
     });
 
@@ -104,6 +120,7 @@
   window._renderCalendar = function () {
     datesWithMeet = new Set((window.CAL_DATES || []).map(d => d.date));
     datesWithExam = new Set((window.CAL_DATES || []).filter(d => d.type === 'exam').map(d => d.date));
+    holidaysByDate = new Map(Object.entries(window.CAL_HOLIDAYS || {}));
     renderCalendar();
   };
 
