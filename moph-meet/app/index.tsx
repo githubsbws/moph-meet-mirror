@@ -24,7 +24,8 @@ export default function LoginScreen() {
   useEffect(() => {
     loadToken()
       .then(tok => {
-        if (tok) router.replace('/consent');
+        // Consent is temporarily disabled.
+        if (tok) router.replace('/dashboard');
         else setLoading(false);
       })
       .catch(() => setLoading(false)); // SecureStore can throw on some Android devices
@@ -59,7 +60,8 @@ export default function LoginScreen() {
     try {
       const user = userRaw ? JSON.parse(decodeURIComponent(userRaw)) : {};
       await saveAuth(decodeURIComponent(token), user);
-      router.replace('/consent');
+      // Consent is temporarily disabled.
+      router.replace('/dashboard');
     } catch {
       setAuthLoading(false);
       setHandledAuth(false);
@@ -108,7 +110,8 @@ export default function LoginScreen() {
     try {
       const { token, user } = await directLogin(reviewUser.trim(), reviewPass);
       await saveAuth(token, user);
-      router.replace('/consent');
+      // Consent is temporarily disabled.
+      router.replace('/dashboard');
     } catch {
        setAuthLoading(false);
        Alert.alert('เข้าสู่ระบบไม่สำเร็จ', 'Username หรือ Password ไม่ถูกต้อง');

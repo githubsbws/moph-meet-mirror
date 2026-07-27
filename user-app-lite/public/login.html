@@ -90,7 +90,8 @@
   if (token) {
     try {
       const r = await fetch('/api/auth/me', { credentials: 'include' });
-      if (r.ok) { location.href = '/consent.html'; return; }
+      // Consent is temporarily disabled; send active sessions straight to dashboard.
+      if (r.ok) { location.href = '/'; return; }
       // Token is stale — clear it so form shows clean
       document.cookie = 'token=; Max-Age=0; Path=/';
       document.cookie = 'user_json=; Max-Age=0; Path=/';

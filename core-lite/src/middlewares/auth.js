@@ -1,6 +1,8 @@
 const { tokenStorage, consentStore } = require('../store');
-const CONSENT_VERSION = process.env.TELEMED_CONSENT_VERSION || 'telemed-consent-v1';
-const CONSENT_EXEMPT_PATHS = new Set(['/api/telemed-consent']);
+// TEMPORARILY DISABLED: re-enable this block (and the guard below) when the
+// telemedicine consent rollout is ready.
+// const CONSENT_VERSION = process.env.TELEMED_CONSENT_VERSION || 'telemed-consent-v1';
+// const CONSENT_EXEMPT_PATHS = new Set(['/api/telemed-consent']);
 
 // Static API keys (same whitelist as core)
 const whitelist = [
@@ -34,15 +36,14 @@ function auth() {
     if (token && await tokenStorage.has(token)) {
       res.locals.user  = await tokenStorage.get(token);
       res.locals.token = token;
-      // A valid login is not yet permission to use telemedicine features. The
-      // consent endpoints are deliberately exempt so the user can review and
-      // record their decision immediately after login.
-      if (!CONSENT_EXEMPT_PATHS.has(req.path)) {
-        const consent = await consentStore.get(res.locals.user?.username);
-        if (consent.decision !== 'accepted' || consent.version !== CONSENT_VERSION) {
-          return res.status(428).json({ error: 428, message: 'telemedConsentRequired', consentVersion: CONSENT_VERSION });
-        }
-      }
+      // TEMPORARILY DISABLED: do not block authenticated API requests until
+      // the telemedicine consent feature is enabled again.
+      // if (!CONSENT_EXEMPT_PATHS.has(req.path)) {
+      //   const consent = await consentStore.get(res.locals.user?.username);
+      //   if (consent.decision !== 'accepted' || consent.version !== CONSENT_VERSION) {
+      //     return res.status(428).json({ error: 428, message: 'telemedConsentRequired', consentVersion: CONSENT_VERSION });
+      //   }
+      // }
       return next();
     }
     return res.status(401).json({ error: 401, message: 'tokenExpired' });

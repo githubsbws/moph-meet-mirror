@@ -124,7 +124,8 @@ app.post('/login/manual', async (req, res) => {
     if (!r.ok) return res.redirect('/login.html?error=invalid');
     const data = await r.json();
     setAuthCookies(res, data.token, data.user);
-    return res.redirect('/consent.html');
+    // Consent is temporarily disabled.
+    return res.redirect('/');
   } catch (err) {
     console.error('[manual-login]', err.message);
     return res.redirect('/login.html?error=server');
@@ -156,7 +157,8 @@ app.get('/auth/providerid/callback', async (req, res) => {
     }
     const user = { ...data.data.user, roles: ['admin', 'staff'] };
     setAuthCookies(res, data.data.token, user);
-    return res.redirect('/consent.html');
+    // Consent is temporarily disabled.
+    return res.redirect('/');
   } catch (err) {
     console.error('[ProviderID] error:', err.message);
     return res.redirect('/login.html?error=server');
@@ -191,7 +193,8 @@ app.get('/auth/thaid/callback', async (req, res) => {
       return res.redirect(`mophmeet://auth?token=${token}&user=${user}`);
     }
     setAuthCookies(res, data.token, data.user);
-    return res.redirect('/consent.html');
+    // Consent is temporarily disabled.
+    return res.redirect('/');
   } catch (err) {
     console.error('[ThaID] error:', err.message);
     return res.redirect('/login.html?error=server');

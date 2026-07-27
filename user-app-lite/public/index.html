@@ -556,8 +556,10 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
 
   // Load user
   try {
-    const consent = await fetch('/api/telemed-consent', { credentials: 'include' });
-    if (!consent.ok || !(await consent.json()).accepted) { location.href = '/consent.html'; return; }
+    // TEMPORARILY DISABLED: restore the consent status check before enabling
+    // the telemedicine consent form again.
+    // const consent = await fetch('/api/telemed-consent', { credentials: 'include' });
+    // if (!consent.ok || !(await consent.json()).accepted) { location.href = '/consent.html'; return; }
     const r = await fetch('/api/auth/me', { credentials: 'include' });
     if (!r.ok) { location.href = '/login.html'; return; }
     const user = await r.json();

@@ -17,7 +17,8 @@ async function handleUrl({ url }: { url: string }) {
   try {
     const user = userRaw ? JSON.parse(decodeURIComponent(userRaw)) : {};
     await saveAuth(decodeURIComponent(token), user);
-    router.replace('/consent');
+    // Consent is temporarily disabled.
+    router.replace('/dashboard');
   } catch (_) {}
 }
 
