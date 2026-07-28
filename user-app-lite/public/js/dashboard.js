@@ -1,6 +1,5 @@
-/* Calendar legend (TOR 4.11.4):
- * .has-meet  = green dot  (any room)
- * .has-exam  = blue dot   (exam/ตรวจ room)
+/* Calendar legend:
+ * .has-exam  = blue dot   (Telemedicine appointment in MOPH Meet)
  * .today     = bold ring
  * .selected  = filled background
  */
@@ -14,14 +13,7 @@
   if (!calWrap) return;
 
   // CAL_DATES may be set before this script (EJS) or after (static index.html via window.CAL_DATES)
-  let datesWithMeet = new Set((window.CAL_DATES || []).map(d => d.date));
-
-  // ── Calendar type coloring (TOR 4.11.4) ──────────────────────────────────
-  // datesWithExam: dates that have at least one exam-type room (blue dot)
-  // datesWithMeet: dates with any room (green dot, already exists)
   let datesWithExam = new Set((window.CAL_DATES || []).filter(d => d.type === 'exam').map(d => d.date));
-  let holidaysByDate = new Map(Object.entries(window.CAL_HOLIDAYS || {}));
-  const holidayYearsLoaded = new Set(Object.keys(window.CAL_HOLIDAYS || {}).length ? [new Date().getFullYear()] : []);
 
 
 
@@ -39,15 +31,6 @@
 
   function isoDate(y, m, d) {
     return `${y}-${pad(m + 1)}-${pad(d)}`;
-  }
-
-  function loadHolidayYear(year) {
-    if (!window._loadHolidayYear || holidayYearsLoaded.has(year)) return;
-    holidayYearsLoaded.add(year);
-    window._loadHolidayYear(year).then(rows => {
-      for (const holiday of rows || []) holidaysByDate.set(holiday.date, holiday.name);
-      renderCalendar();
-    }).catch(() => holidayYearsLoaded.delete(year));
   }
 
   function renderCalendar() {
@@ -74,18 +57,14 @@
           html += '<td></td>';
         } else {
           const iso = isoDate(currentYear, currentMonth, day);
-          const holidayName = holidaysByDate.get(iso);
           const classes = [
             today.getFullYear() === currentYear &&
             today.getMonth() === currentMonth &&
             today.getDate() === day ? 'today' : '',
-            datesWithMeet.has(iso) ? 'has-meet' : '',
             datesWithExam.has(iso) ? 'has-exam' : '',
-            selectedDate === iso ? 'selected' : '',
-            holidayName ? 'holiday' : ''
+            selectedDate === iso ? 'selected' : ''
           ].filter(Boolean).join(' ');
-          const title = holidayName ? ` title="วันหยุดราชการ: ${String(holidayName).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : '';
-          html += `<td class="${classes}" data-date="${iso}" tabindex="0" role="gridcell"${title}>${day}</td>`;
+          html += `<td class="${classes}" data-date="${iso}" tabindex="0" role="gridcell">${day}</td>`;
           day++;
         }
       }
@@ -98,12 +77,10 @@
 
     document.getElementById('cal-prev').addEventListener('click', () => {
       currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-      loadHolidayYear(currentYear);
       renderCalendar();
     });
     document.getElementById('cal-next').addEventListener('click', () => {
       currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-      loadHolidayYear(currentYear);
       renderCalendar();
     });
 
@@ -118,9 +95,7 @@
 
   // Expose for index.html to call after async data loads
   window._renderCalendar = function () {
-    datesWithMeet = new Set((window.CAL_DATES || []).map(d => d.date));
     datesWithExam = new Set((window.CAL_DATES || []).filter(d => d.type === 'exam').map(d => d.date));
-    holidaysByDate = new Map(Object.entries(window.CAL_HOLIDAYS || {}));
     renderCalendar();
   };
 
@@ -133,7 +108,7 @@
       const matchText = !q ||
         card.dataset.title.includes(q) ||
         card.dataset.desc.includes(q);
-      const matchDate = !selectedDate || card.dataset.date === selectedDate;
+      const matchDate = !selectedDate || (card.dataset.type === 'exam' && card.dataset.date === selectedDate);
       card.hidden = !(matchText && matchDate);
     });
   };

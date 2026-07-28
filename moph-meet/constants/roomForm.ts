@@ -111,6 +111,9 @@ export function validateCreateRoomInput(input: CreateRoomInput): ValidationResul
 
   const patientName = input.patientName?.trim() ?? '';
   const patientCid = input.patientCid?.trim() ?? '';
+  if ((patientName || patientCid) && !patientName) {
+    return { ok: false, message: 'กรุณากรอกชื่อผู้ป่วยก่อนเชิญผู้ป่วย' };
+  }
   if ((patientName || patientCid) && !isValidThaiCid(patientCid)) {
     return { ok: false, message: 'กรุณากรอกเลขบัตรประชาชนผู้ป่วย 13 หลักให้ถูกต้อง' };
   }
@@ -118,12 +121,9 @@ export function validateCreateRoomInput(input: CreateRoomInput): ValidationResul
   return { ok: true };
 }
 
-/** ตรวจ checksum เลขบัตรประชาชนไทย 13 หลัก (ใช้เมื่อออกคำเชิญผู้ป่วย). */
+/** ตรวจรูปแบบเลขบัตรประชาชน 13 หลัก (ใช้เมื่อออกคำเชิญผู้ป่วย). */
 export function isValidThaiCid(cid: string): boolean {
-  if (!/^\d{13}$/.test(cid)) return false;
-  let sum = 0;
-  for (let i = 0; i < 12; i += 1) sum += Number(cid[i]) * (13 - i);
-  return (11 - (sum % 11)) % 10 === Number(cid[12]);
+  return /^\d{13}$/.test(cid);
 }
 
 /** แปลง relative path เป็น URL เต็มด้วย API_BASE (absolute ผ่านตรง ๆ). */

@@ -92,10 +92,9 @@ async function syncProvider(user) {
 }
 
 function isValidThaiCid(cid) {
-    if (!/^\d{13}$/.test(cid)) return false;
-    let sum = 0;
-    for (let i = 0; i < 12; i += 1) sum += Number(cid[i]) * (13 - i);
-    return (11 - (sum % 11)) % 10 === Number(cid[12]);
+    // Requirement is a required 13-digit identifier. Do not add a checksum
+    // rule here: it would reject valid test/training identifiers used by units.
+    return /^\d{13}$/.test(cid);
 }
 
 function cidHash(cid) {
@@ -637,6 +636,9 @@ app.post('/api/rooms', auth(), async (req, res) => {
     const hasPatientInvitation = Boolean(requestedPatientName || requestedPatientCid);
     if (type !== 'exam' && hasPatientInvitation) {
         return res.status(400).json({ error: 400, message: 'patient invitation requires an exam room' });
+    }
+    if (hasPatientInvitation && !requestedPatientName) {
+        return res.status(400).json({ error: 400, message: 'patient name required when inviting' });
     }
     if (hasPatientInvitation && !isValidThaiCid(requestedPatientCid)) {
         return res.status(400).json({ error: 400, message: 'valid 13-digit cid required' });

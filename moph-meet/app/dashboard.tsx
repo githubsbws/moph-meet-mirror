@@ -314,11 +314,13 @@ export default function DashboardScreen() {
 
   const upcoming = meets.filter(m => m.status !== 'ended');
   const past     = meets.filter(m => m.status === 'ended');
-  const markedDates = new Set(meets.map(m => (m.starttime ? m.starttime.slice(0, 10) : '')).filter(Boolean));
+  // Calendar is for MOPH Meet telemedicine appointments only, not meetings or
+  // any external calendar/holiday source.
+  const markedDates = new Set(meets.filter(m => m.type === 'exam').map(m => (m.starttime ? m.starttime.slice(0, 10) : '')).filter(Boolean));
   const q = search.trim().toLowerCase();
   const filteredUpcoming = upcoming.filter(m => {
     if (q && !(m.name || m.title || m.id || '').toLowerCase().includes(q)) return false;
-    if (selectedDate && (m.starttime || '').slice(0, 10) !== selectedDate) return false;
+    if (selectedDate && (m.type !== 'exam' || (m.starttime || '').slice(0, 10) !== selectedDate)) return false;
     return true;
   });
 
@@ -619,20 +621,22 @@ export default function DashboardScreen() {
             {formType === 'exam' && (
               <View style={styles.patientInviteBox}>
                 <Text style={styles.patientInviteTitle}>เชิญผู้ป่วยพร้อมสร้างห้อง</Text>
+                <Text style={styles.fieldLabel}>ชื่อผู้ป่วย <Text style={styles.requiredMark}>*</Text></Text>
                 <TextInput
                   style={styles.textFormInput}
                   value={formInput.patientName || ''}
                   onChangeText={(patientName) => setFormInput(prev => ({ ...prev, patientName }))}
-                  placeholder="ชื่อผู้ป่วย"
+                  placeholder="กรอกเมื่อต้องการเชิญพร้อมสร้างห้อง"
                   placeholderTextColor="#94a3b8"
                   maxLength={160}
                   editable={!submitting}
                 />
+                <Text style={styles.fieldLabel}>เลขบัตรประชาชน 13 หลัก <Text style={styles.requiredMark}>*</Text></Text>
                 <TextInput
                   style={styles.textFormInput}
                   value={formInput.patientCid || ''}
                   onChangeText={(patientCid) => setFormInput(prev => ({ ...prev, patientCid: patientCid.replace(/\D/g, '') }))}
-                  placeholder="เลขบัตรประชาชน 13 หลัก (กรอกเมื่อเชิญ)"
+                  placeholder="กรอก 13 หลักเมื่อต้องการเชิญ"
                   placeholderTextColor="#94a3b8"
                   keyboardType="number-pad"
                   maxLength={13}

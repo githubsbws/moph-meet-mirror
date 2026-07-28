@@ -194,12 +194,12 @@
         <div id="patient-invite-fields" class="hidden rounded-lg border border-accent/20 bg-accent/5 p-3">
           <p class="text-sm font-semibold mb-2">เชิญผู้ป่วยพร้อมสร้างห้อง</p>
           <label class="form-control w-full mb-2">
-            <div class="label py-0"><span class="label-text text-xs">ชื่อผู้ป่วย</span></div>
-            <input type="text" name="patientName" maxlength="160" class="input input-bordered input-sm w-full" placeholder="ระบุเพื่อส่งลิงก์ให้ถูกคน" />
+            <div class="label py-0"><span class="label-text text-xs">ชื่อผู้ป่วย <span class="text-error">*</span></span></div>
+            <input type="text" name="patientName" maxlength="160" class="input input-bordered input-sm w-full" placeholder="กรอกเมื่อต้องการเชิญพร้อมสร้างห้อง" />
           </label>
           <label class="form-control w-full">
             <div class="label py-0"><span class="label-text text-xs">เลขบัตรประชาชน 13 หลัก <span class="text-error">*</span></span></div>
-            <input type="text" name="patientCid" inputmode="numeric" pattern="[0-9]{13}" maxlength="13" class="input input-bordered input-sm w-full" placeholder="กรอกเมื่อเชิญผู้ป่วย" />
+            <input type="text" name="patientCid" inputmode="numeric" pattern="[0-9]{13}" maxlength="13" class="input input-bordered input-sm w-full" placeholder="กรอก 13 หลักเมื่อต้องการเชิญ" />
           </label>
           <p class="text-xs text-base-content/55 mt-2">เว้นทั้งสองช่องได้ หากต้องการสร้างห้องก่อน แล้วเชิญผู้ป่วยภายหลัง</p>
         </div>
@@ -398,6 +398,7 @@ function renderMeets(meets, currentUsername) {
          href="${href}"
          data-title="${esc((m.name||m.title||'').toLowerCase())}"
          data-desc="${esc((m.description||'').toLowerCase())}"
+         data-type="${esc(m.type || '')}"
          data-date="${esc(m.starttime ? m.starttime.slice(0,10) : '')}">
         <div class="card-body py-3 px-4">
           <div class="flex items-center gap-2">
@@ -488,10 +489,7 @@ function copyLink(inputId) {
 }
 
 function validThaiCid(value) {
-  if (!/^\d{13}$/.test(value)) return false;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(value[i]) * (13 - i);
-  return (11 - (sum % 11)) % 10 === Number(value[12]);
+  return /^\d{13}$/.test(value);
 }
 
 document.getElementById('create-room-form').addEventListener('submit', async function (e) {
@@ -510,6 +508,11 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
     starttime: fd.get('date') + 'T' + fd.get('starttime') + ':00',
     endtime:   fd.get('date') + 'T' + fd.get('endtime')   + ':00',
   };
+  if ((body.patientName || body.patientCid) && !body.patientName) {
+    errorEl.textContent = 'กรุณากรอกชื่อผู้ป่วยก่อนเชิญผู้ป่วย';
+    errorEl.classList.remove('hidden');
+    return;
+  }
   if ((body.patientName || body.patientCid) && !validThaiCid(body.patientCid)) {
     errorEl.textContent = 'กรุณากรอกเลขบัตรประชาชน 13 หลักให้ถูกต้องก่อนเชิญผู้ป่วย';
     errorEl.classList.remove('hidden');
@@ -571,23 +574,11 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
     renderMeets(meets, user.username);
 
     // Set calendar data and render
-    window.CAL_DATES = meets.map(m => ({
+    // Calendar is limited to Telemedicine appointments created in MOPH Meet.
+    window.CAL_DATES = meets.filter(m => m.type === 'exam').map(m => ({
       date: m.starttime ? m.starttime.slice(0, 10) : null,
-      type: m.type
+      type: 'exam'
     })).filter(m => m.date);
-
-    window._loadHolidayYear = async function (year) {
-      const hr = await fetch('/api/holidays?year=' + encodeURIComponent(year), { credentials: 'include' });
-      if (!hr.ok) throw new Error('holidaySyncUnavailable');
-      const data = await hr.json();
-      return data.holidays || [];
-    };
-    try {
-      const holidays = await window._loadHolidayYear(new Date().getFullYear());
-      window.CAL_HOLIDAYS = Object.fromEntries(holidays.map(item => [item.date, item.name]));
-    } catch (_) {
-      window.CAL_HOLIDAYS = {};
-    }
 
     if (typeof window._renderCalendar === 'function') window._renderCalendar();
   } catch (e) {
