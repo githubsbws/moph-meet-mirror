@@ -49,6 +49,7 @@ const roomTypeArb: fc.Arbitrary<RoomType> = fc.constantFrom('exam', 'meet');
 /** CreateRoomInput ที่ครบถ้วน (รูปแบบถูกต้อง). */
 const createRoomInputArb = fc.record({
   type: roomTypeArb,
+  name: fc.constant('ห้องทดสอบ'),
   date: dateArb,
   startTime: timeArb,
   endTime: timeArb,
@@ -137,7 +138,7 @@ describe('validateCreateRoomInput', () => {
   it('Property 4: End <= Start → ok:false; End > Start → ok:true', () => {
     fc.assert(
       fc.property(dateArb, timeArb, timeArb, (date, t1, t2) => {
-        const input = { type: 'exam' as RoomType, date, startTime: t1, endTime: t2 };
+        const input = { type: 'exam' as RoomType, name: 'ห้องตรวจทดสอบ', date, startTime: t1, endTime: t2 };
         const result = validateCreateRoomInput(input);
         // date เดียวกัน → เทียบ datetime ที่ประกอบแล้วลดรูปเป็นเทียบเวลา
         const start = toDatetimeString(date, t1);
@@ -161,6 +162,11 @@ describe('validateCreateRoomInput', () => {
       endTime: '10:30',
     });
     expect(result.ok).toBe(true);
+  });
+
+  it('exam: ชื่อห้องตรวจว่าง → ok:false', () => {
+    expect(validateCreateRoomInput({ type: 'exam', name: '  ', date: '2025-02-01', startTime: '09:00', endTime: '10:30' }))
+      .toEqual({ ok: false, message: 'กรุณากรอกชื่อห้องตรวจ' });
   });
 });
 
@@ -291,12 +297,12 @@ const roomArb = fc.oneof(
 
 /**
  * CreateRoomResponse ที่ครอบกรณี field ขาด/null และ "แนบ field ตรงข้าม" มาด้วย
- * (ทั้ง patientJoinUrl และ meetJoinUrl พร้อมกัน) เพื่อทดสอบ no cross-type leakage.
+ * (ทั้ง patientNotification และ meetJoinUrl พร้อมกัน) เพื่อทดสอบ no cross-type leakage.
  */
 const responseArb: fc.Arbitrary<CreateRoomResponse> = fc.record(
   {
     room: roomArb as fc.Arbitrary<CreateRoomResponse['room']>,
-    patientJoinUrl: urlFieldArb,
+    patientNotification: fc.constantFrom(null, { channel: 'mophAlert', status: 'sent' as const }, { channel: 'mophAlert', status: 'failed' as const }),
     meetJoinUrl: urlFieldArb,
   },
   { requiredKeys: [] },
@@ -332,8 +338,9 @@ describe('selectResultLinks', () => {
           // exam → meet* ต้องเป็น null (ไม่ข้ามชนิด)
           expect(links.meetLink).toBeNull();
           expect(links.meetRoute).toBeNull();
-          // patientLink = full URL ของ patientJoinUrl (null เมื่อ field ขาด/ว่าง)
-          expect(links.patientLink).toBe(toFullUrl(resp.patientJoinUrl, apiBase));
+          // ลิงก์ผู้ป่วยส่งผ่าน MOPH Alert จึงไม่แสดงในแอป
+          expect(links.patientLink).toBeNull();
+          expect(links.patientNotification).toEqual(resp.patientNotification ?? null);
           // doctorRoute = '/doctor/{id}' เมื่อมี roomId, ไม่งั้น null
           expect(links.doctorRoute).toBe(expectedId ? `/doctor/${expectedId}` : null);
         } else {
@@ -357,6 +364,7 @@ describe('selectResultLinks', () => {
       expect(links.roomName).toBe('');
       expect(links.roomId).toBeNull();
       expect(links.patientLink).toBeNull();
+      expect(links.patientNotification).toBeNull();
       expect(links.meetLink).toBeNull();
       expect(links.doctorRoute).toBeNull();
       expect(links.meetRoute).toBeNull();
@@ -371,11 +379,12 @@ describe('selectResultLinks', () => {
   it('edge: opposite-type field แนบมา → ไม่แสดงข้ามชนิด', () => {
     const resp: CreateRoomResponse = {
       room: { id: 'r1', name: 'ห้องตรวจ' },
-      patientJoinUrl: '/queue/abc',
+      patientNotification: { channel: 'mophAlert', status: 'sent' },
       meetJoinUrl: '/meet/abc', // opposite-type field สำหรับ exam
     };
     const exam = selectResultLinks('exam', resp, 'https://api.example.com');
-    expect(exam.patientLink).toBe('https://api.example.com/queue/abc');
+    expect(exam.patientLink).toBeNull();
+    expect(exam.patientNotification).toEqual({ channel: 'mophAlert', status: 'sent' });
     expect(exam.doctorRoute).toBe('/doctor/r1');
     expect(exam.meetLink).toBeNull();
     expect(exam.meetRoute).toBeNull();
@@ -384,6 +393,7 @@ describe('selectResultLinks', () => {
     expect(meet.meetLink).toBe('https://api.example.com/meet/abc');
     expect(meet.meetRoute).toBe('/meet/r1');
     expect(meet.patientLink).toBeNull();
+    expect(meet.patientNotification).toBeNull();
     expect(meet.doctorRoute).toBeNull();
   });
 

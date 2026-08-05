@@ -43,7 +43,7 @@ export type ValidationResult =
 /** รูปแบบการตอบกลับจาก Core_API (เท่ากับที่เว็บตีความ). */
 export type CreateRoomResponse = {
   room?: { id?: string; name?: string } | null;
-  patientJoinUrl?: string | null;
+  patientNotification?: { channel?: string; status?: 'sent' | 'failed'; reason?: string } | null;
   meetJoinUrl?: string | null;
 };
 
@@ -51,7 +51,8 @@ export type CreateRoomResponse = {
 export type ResultLinks = {
   roomName: string;              // '' ถ้าไม่มี
   roomId: string | null;
-  patientLink: string | null;    // full URL (exam เท่านั้น)
+  patientLink: string | null;    // ไม่มีการแสดงลิงก์ผู้ป่วย (ส่งผ่าน MOPH Alert)
+  patientNotification: { channel?: string; status?: 'sent' | 'failed'; reason?: string } | null;
   meetLink: string | null;       // full URL (meet เท่านั้น)
   doctorRoute: string | null;    // '/doctor/{id}' (exam เท่านั้น)
   meetRoute: string | null;      // '/meet/{id}'   (meet เท่านั้น)
@@ -99,6 +100,10 @@ export function validateCreateRoomInput(input: CreateRoomInput): ValidationResul
     return { ok: false, message: 'กรุณากรอกวันที่ เวลาเริ่ม และเวลาสิ้นสุดให้ครบถ้วน' };
   }
 
+  if (input.type === 'exam' && !(input.name?.trim())) {
+    return { ok: false, message: 'กรุณากรอกชื่อห้องตรวจ' };
+  }
+
   // 2) End ต้องหลัง Start (Req 4.2). เทียบ datetime ที่ประกอบแล้วในรูปแบบคงที่
   // 'YYYY-MM-DDTHH:mm:00' — string comparison ใช้ได้เพราะรูปแบบเรียงจากหน่วยใหญ่
   // ไปเล็กและมีความกว้างคงที่.
@@ -132,8 +137,7 @@ export function toFullUrl(pathOrUrl: string | null | undefined, apiBase: string)
   if (pathOrUrl === null || pathOrUrl === undefined || pathOrUrl === '') {
     return null;
   }
-  // ขึ้นต้นด้วย 'http' → absolute อยู่แล้ว คืนค่าเดิมไม่เปลี่ยนแปลง (mirror ของเว็บ:
-  // d.patientJoinUrl.startsWith('http') ? d.patientJoinUrl : API_BASE + d.patientJoinUrl)
+  // ขึ้นต้นด้วย 'http' → absolute อยู่แล้ว คืนค่าเดิมไม่เปลี่ยนแปลง (ใช้กับลิงก์ Provider)
   if (pathOrUrl.startsWith('http')) {
     return pathOrUrl;
   }
@@ -157,11 +161,12 @@ export function selectResultLinks(
   const roomId = room?.id ?? null;
 
   if (type === 'exam') {
-    // exam → เซ็ตเฉพาะ patientLink + doctorRoute; meet* = null (mutual exclusivity)
+    // exam → ลิงก์ผู้ป่วยส่งผ่าน MOPH Alert เท่านั้น จึงไม่แสดง URL ในแอป
     return {
       roomName,
       roomId,
-      patientLink: toFullUrl(resp?.patientJoinUrl, apiBase),
+      patientLink: null,
+      patientNotification: resp?.patientNotification ?? null,
       meetLink: null,
       // route ต้องเป็น null เมื่อไม่มี roomId
       doctorRoute: roomId ? `/doctor/${roomId}` : null,
@@ -174,6 +179,7 @@ export function selectResultLinks(
     roomName,
     roomId,
     patientLink: null,
+    patientNotification: null,
     meetLink: toFullUrl(resp?.meetJoinUrl, apiBase),
     doctorRoute: null,
     meetRoute: roomId ? `/meet/${roomId}` : null,

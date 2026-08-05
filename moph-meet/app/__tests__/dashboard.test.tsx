@@ -1,11 +1,11 @@
 import TestRenderer, { act } from 'react-test-renderer';
-import { Text, TextInput, Modal, Alert, Share } from 'react-native';
+import { Text, TextInput, Modal, Alert } from 'react-native';
 
 // ── Feature: mobile-room-creation-parity ─────────────────────────────────────
 // Unit / interaction tests สำหรับ room-creation flow ใน app/dashboard.tsx
 // (Create_Room_Form + Room_Result_Panel). ใช้ jest + jest-expo + react-test-renderer
 // (โปรเจกต์ยังไม่ได้ติดตั้ง @testing-library/react-native). mock ขอบเขตทั้งหมด:
-// expo-router, expo-clipboard, react-native Share/Alert, constants/api,
+// expo-router, expo-clipboard, react-native Alert, constants/api,
 // constants/storage, และ presentational components (Icon/MiniCalendar).
 //
 // ครอบคลุม (task 5.5):
@@ -13,7 +13,7 @@ import { Text, TextInput, Modal, Alert, Share } from 'react-native';
 //  - ข้อความกำกับ exam/meet + Provider ID (Req 2.5, 3.1, 3.2); required visual hint (Req 3.3)
 //  - ยกเลิก → ไม่ยิง API (Req 3.4)
 //  - ปุ่มยืนยัน disabled ระหว่าง submitting (mock fetch ช้า) (Req 4.3)
-//  - result panel มีปุ่มคัดลอก/แชร์; กดคัดลอก → Clipboard.setStringAsync(full URL) (Req 5.1, 5.2)
+//  - result panel ห้องประชุมมีปุ่มคัดลอกลิงก์ Provider → Clipboard.setStringAsync(full URL) (Req 5.1, 5.2)
 //  - error paths: 401 → clearAuth + login (Req 6.2); 500 → Alert (Req 6.3);
 //    200 ไม่มี room.id → Alert (Req 6.4)
 
@@ -147,6 +147,10 @@ async function openForm(root: any, type: 'exam' | 'meet') {
   await act(async () => {
     btn.props.onPress();
   });
+  if (type === 'exam') {
+    const roomName = nodeByTestId(root, 'field-room-name');
+    await act(async () => { roomName.props.onChangeText('ห้องตรวจทดสอบ'); });
+  }
 }
 
 /** เลือกเวลาเริ่ม/สิ้นสุดผ่าน native picker (date auto-fill = วันนี้ จาก openForm). */
@@ -175,7 +179,6 @@ beforeEach(() => {
     return meetsOk();
   });
   jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-  jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as any);
 });
 
 afterEach(() => {
@@ -309,9 +312,9 @@ describe('ปุ่มยืนยัน disabled ระหว่างส่ง
   });
 });
 
-// ── Req 5.1 / 5.2: Room_Result_Panel — คัดลอก/แชร์ (full URL) ─────────────────
-describe('Room_Result_Panel คัดลอก/แชร์ (Req 5.1, 5.2)', () => {
-  it('meet สำเร็จ → มีปุ่มคัดลอก/แชร์; กดคัดลอก → Clipboard.setStringAsync ด้วย full URL', async () => {
+// ── Req 5.1 / 5.2: Room_Result_Panel — คัดลอกลิงก์ Provider (full URL) ───────
+describe('Room_Result_Panel คัดลอกลิงก์ Provider (Req 5.1, 5.2)', () => {
+  it('meet สำเร็จ → มีปุ่มคัดลอก; กดคัดลอก → Clipboard.setStringAsync ด้วย full URL', async () => {
     const tree = await mountDashboard();
     await openForm(tree.root, 'meet');
     await fillValidTimes(tree.root);

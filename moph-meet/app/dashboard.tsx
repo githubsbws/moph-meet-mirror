@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   SafeAreaView, ActivityIndicator, Alert, RefreshControl,
-  StatusBar, TextInput, Modal, Share,
+  StatusBar, TextInput, Modal,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
@@ -252,7 +252,7 @@ export default function DashboardScreen() {
 
   /**
    * คัดลอก full URL ไป clipboard ด้วย expo-clipboard (Req 5.1, 5.2).
-   * จับ error เงียบ ๆ ไม่ให้กระทบสถานะ result panel (design: Clipboard/Share fail
+   * จับ error เงียบ ๆ ไม่ให้กระทบสถานะ result panel (design: Clipboard fail
    * → swallow). แสดงข้อความยืนยันสั้น ๆ ผ่าน state `copiedLink`.
    */
   async function copyLink(fullUrl: string | null) {
@@ -263,19 +263,6 @@ export default function DashboardScreen() {
       setTimeout(() => setCopiedLink(null), 1500);
     } catch (_) {
       // swallow clipboard error เงียบ ๆ (design: ไม่กระทบสถานะ result panel)
-    }
-  }
-
-  /**
-   * แชร์ full URL ผ่าน React Native Share API (Req 5.1). จับ error เงียบ ๆ
-   * (รวมกรณีผู้ใช้ยกเลิก share sheet) — ไม่กระทบสถานะ result panel.
-   */
-  async function shareLink(fullUrl: string | null) {
-    if (!fullUrl) return;
-    try {
-      await Share.share({ message: fullUrl });
-    } catch (_) {
-      // swallow share error เงียบ ๆ
     }
   }
 
@@ -532,33 +519,17 @@ export default function DashboardScreen() {
                 </View>
               )}
 
-              {/* exam → ไม่มีลิงก์ผู้ป่วยแบบทั่วไป: ผู้สร้างต้องกรอก CID 13 หลัก
-                  ตอนเชิญจากหน้าห้องตรวจ จึงแสดงทางลัดไปหน้าจัดการห้องแทน. */}
-              {(result.patientLink || result.doctorRoute) && (
+              {/* exam → ลิงก์ผู้ป่วยถูกส่งผ่าน MOPH Alert เท่านั้น */}
+              {(result.patientNotification || result.doctorRoute) && (
                 <View style={styles.resultLinkWrap}>
-                  {result.patientLink && (
-                    <>
-                      <Text style={styles.resultLinkLabel}>
-                        👤 ลิงก์คิวสำหรับผู้ป่วยที่ได้รับเชิญ
-                      </Text>
-                      <View style={styles.resultLinkRow}>
-                        <Text style={styles.resultLinkInput} numberOfLines={1} ellipsizeMode="tail" selectable>
-                          {result.patientLink}
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.resultCopyBtn}
-                          onPress={() => copyLink(result.patientLink)}
-                        >
-                          <Text style={styles.resultCopyBtnText}>
-                            {copiedLink === result.patientLink ? 'คัดลอกแล้ว!' : 'คัดลอก'}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  )}
+                  {result.patientNotification && <Text style={styles.resultLinkLabel}>
+                    {result.patientNotification.status === 'sent'
+                      ? '✅ ส่งลิงก์เข้าคิวให้ผู้ป่วยผ่าน MOPH Alert แล้ว'
+                      : '⚠️ สร้างห้องแล้ว แต่ส่ง MOPH Alert ไม่สำเร็จ กรุณาเข้าห้องตรวจเพื่อส่งซ้ำ'}
+                  </Text>}
                   {result.doctorRoute && (
                     <>
-                      {!result.patientLink && (
+                      {!result.patientNotification && (
                         <Text style={styles.resultLinkLabel}>
                           เพื่อความปลอดภัย ให้เชิญผู้ป่วยจากในห้องตรวจพร้อมเลขบัตรประชาชน 13 หลัก
                         </Text>
@@ -593,12 +564,15 @@ export default function DashboardScreen() {
                 : 'ตั้งชื่อ เวลา และสิทธิ์เข้าร่วมห้องได้'}
             </Text>
 
-            <Text style={styles.fieldLabel}>ชื่อห้อง</Text>
+            <Text style={styles.fieldLabel}>
+              {formType === 'exam' ? <>ชื่อห้องตรวจ <Text style={styles.requiredMark}>*</Text></> : 'ชื่อห้องประชุม'}
+            </Text>
             <TextInput
+              testID="field-room-name"
               style={styles.textFormInput}
               value={formInput.name || ''}
               onChangeText={(name) => setFormInput(prev => ({ ...prev, name }))}
-              placeholder="เว้นว่างเพื่อให้ระบบตั้งชื่ออัตโนมัติ"
+              placeholder={formType === 'exam' ? 'เช่น ห้องตรวจทันตกรรม 1' : 'เว้นว่างเพื่อให้ระบบตั้งชื่ออัตโนมัติ'}
               placeholderTextColor="#94a3b8"
               maxLength={160}
               editable={!submitting}

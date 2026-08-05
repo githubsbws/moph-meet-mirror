@@ -172,8 +172,8 @@
       <form id="create-room-form" class="flex flex-col gap-3">
         <input type="hidden" id="room-type" name="type" value="meet" />
         <label class="form-control w-full">
-          <div class="label"><span class="label-text">ชื่อห้องตรวจ/ห้องประชุม</span></div>
-          <input type="text" name="name" maxlength="160" class="input input-bordered w-full" placeholder="เว้นว่างเพื่อให้ระบบตั้งชื่ออัตโนมัติ" />
+          <div class="label"><span id="room-name-label" class="label-text">ชื่อห้องตรวจ/ห้องประชุม</span></div>
+          <input id="room-name" type="text" name="name" maxlength="160" class="input input-bordered w-full" placeholder="เว้นว่างเพื่อให้ระบบตั้งชื่ออัตโนมัติ" />
         </label>
         <label id="access-mode-field" class="form-control w-full">
           <div class="label"><span class="label-text">สิทธิ์การเข้าร่วม</span></div>
@@ -236,11 +236,7 @@
           </div>
         </div>
         <div id="result-patient-link-wrap" class="hidden">
-          <p id="result-patient-link-help" class="text-xs text-base-content/60 mb-1">🧑‍⚕️ เพื่อความปลอดภัย ต้องสร้างลิงก์ผู้ป่วยพร้อมเลขบัตรประชาชน 13 หลักจากในห้องตรวจ</p>
-          <div id="result-patient-link-row" class="hidden flex gap-2 mb-2">
-            <input type="text" id="result-patient-link" readonly class="input input-bordered input-sm flex-1 text-xs" />
-            <button onclick="copyLink('result-patient-link')" class="btn btn-sm btn-outline">คัดลอก</button>
-          </div>
+          <p id="result-patient-link-help" class="text-xs text-base-content/60 mb-1">🧑‍⚕️ เพื่อความปลอดภัย ระบบจะส่งลิงก์ผู้ป่วยผ่าน MOPH Alert เท่านั้น</p>
           <a id="result-doctor-link" href="#" class="btn btn-accent btn-sm w-full text-white">👨‍⚕️ เข้าห้องตรวจและเชิญผู้ป่วย</a>
         </div>
       </div>
@@ -456,6 +452,11 @@ function openCreateModal(type) {
   errorEl.classList.add('hidden');
   errorEl.textContent = '';
   const submitBtn = document.getElementById('modal-submit-btn');
+  const roomNameInput = document.getElementById('room-name');
+  document.getElementById('room-name-label').textContent = type === 'exam' ? 'ชื่อห้องตรวจ *' : 'ชื่อห้องประชุม';
+  roomNameInput.required = type === 'exam';
+  roomNameInput.placeholder = type === 'exam' ? 'เช่น ห้องตรวจทันตกรรม 1' : 'เว้นว่างเพื่อให้ระบบตั้งชื่ออัตโนมัติ';
+  roomNameInput.value = '';
   document.querySelector('#create-room-form [name="patientName"]').value = '';
   document.querySelector('#create-room-form [name="patientCid"]').value = '';
   if (type === 'exam') {
@@ -508,6 +509,11 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
     starttime: fd.get('date') + 'T' + fd.get('starttime') + ':00',
     endtime:   fd.get('date') + 'T' + fd.get('endtime')   + ':00',
   };
+  if (type === 'exam' && !body.name) {
+    errorEl.textContent = 'กรุณากรอกชื่อห้องตรวจ';
+    errorEl.classList.remove('hidden');
+    return;
+  }
   if ((body.patientName || body.patientCid) && !body.patientName) {
     errorEl.textContent = 'กรุณากรอกชื่อผู้ป่วยก่อนเชิญผู้ป่วย';
     errorEl.classList.remove('hidden');
@@ -533,12 +539,11 @@ document.getElementById('create-room-form').addEventListener('submit', async fun
       document.getElementById('result-patient-link-wrap').classList.add('hidden');
     } else {
       document.getElementById('result-doctor-link').href   = '/exam/' + data.room.id;
-      const patientLink = data.patientJoinUrl ? (data.patientJoinUrl.startsWith('http') ? data.patientJoinUrl : origin + data.patientJoinUrl) : '';
-      document.getElementById('result-patient-link').value = patientLink;
-      document.getElementById('result-patient-link-row').classList.toggle('hidden', !patientLink);
-      document.getElementById('result-patient-link-help').textContent = patientLink
-        ? '🧑‍⚕️ ส่งลิงก์นี้ให้ผู้ป่วยที่ได้รับเชิญเท่านั้น'
-        : '🧑‍⚕️ ยังไม่ได้เชิญผู้ป่วย — สามารถสร้างลิงก์พร้อม CID 13 หลักจากในห้องตรวจ';
+      document.getElementById('result-patient-link-help').textContent = data.patientNotification
+        ? (data.patientNotification.status === 'sent'
+          ? '✅ ส่งลิงก์เข้าคิวให้ผู้ป่วยผ่าน MOPH Alert แล้ว'
+          : '⚠️ สร้างห้องแล้ว แต่ส่ง MOPH Alert ไม่สำเร็จ กรุณาเข้าห้องตรวจเพื่อส่งซ้ำ')
+        : '🧑‍⚕️ ยังไม่ได้เชิญผู้ป่วย — สามารถเชิญพร้อม CID 13 หลักจากในห้องตรวจ';
       document.getElementById('result-patient-link-wrap').classList.remove('hidden');
       document.getElementById('result-meet-link-wrap').classList.add('hidden');
     }

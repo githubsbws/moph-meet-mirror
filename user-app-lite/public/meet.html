@@ -219,24 +219,14 @@
       onkeydown="if(event.key==='Enter')doAddPatient()"
     />
     <div id="invite-result" style="display:none;margin-top:1rem">
-      <p style="font-size:.8rem;color:#6b7280;margin:0 0 .35rem">ลิงก์คิวสำหรับผู้ป่วย:</p>
-      <div style="display:flex;gap:.5rem;align-items:center">
-        <input id="invite-link" readonly style="
-          flex:1;padding:.5rem .6rem;border:1px solid #d1d5db;border-radius:.5rem;
-          font-size:.75rem;background:#f9fafb;font-family:monospace;
-        "/>
-        <button onclick="copyInviteLink()" style="
-          padding:.5rem .75rem;background:#056839;color:#fff;border:none;
-          border-radius:.5rem;cursor:pointer;font-size:.8rem;white-space:nowrap
-        ">คัดลอก</button>
-      </div>
-      <p id="invite-copy-note" style="font-size:.75rem;color:#056839;margin:.35rem 0 0;min-height:1rem"></p>
+      <p id="invite-alert-status" style="font-size:.85rem;color:#056839;margin:0"></p>
+      <button id="invite-alert-retry" onclick="retryPatientAlert()" style="display:none;margin-top:.65rem;padding:.5rem .75rem;background:#056839;color:#fff;border:none;border-radius:.5rem;cursor:pointer;font-size:.85rem">ส่ง MOPH Alert ซ้ำ</button>
     </div>
     <div style="display:flex;gap:.75rem;margin-top:1.25rem">
       <button onclick="doAddPatient()" id="btn-do-invite"
         style="flex:1;padding:.7rem;background:#056839;color:#fff;border:none;
                border-radius:.5rem;font-size:1rem;cursor:pointer;font-family:'Sarabun',sans-serif">
-        สร้างลิงก์
+        ส่ง MOPH Alert
       </button>
       <button onclick="closeAddPatient()"
         style="padding:.7rem 1rem;background:#f3f4f6;color:#374151;border:none;
@@ -659,12 +649,16 @@ async function callNextPatient() {
 }
 
 // ── Add Patient modal ──────────────────────────────────────────────────────────
+let patientInvitationId = '';
+
 function openAddPatient() {
   document.getElementById('invite-name').value = '';
   document.getElementById('invite-cid').value  = '';
   document.getElementById('invite-result').style.display = 'none';
-  document.getElementById('invite-copy-note').textContent = '';
-  document.getElementById('btn-do-invite').textContent = 'สร้างลิงก์';
+  document.getElementById('invite-alert-status').textContent = '';
+  document.getElementById('invite-alert-retry').style.display = 'none';
+  document.getElementById('btn-do-invite').textContent = 'ส่ง MOPH Alert';
+  patientInvitationId = '';
   const modal = document.getElementById('add-patient-modal');
   modal.style.display = 'flex';
   setTimeout(() => document.getElementById('invite-name').focus(), 50);
@@ -680,7 +674,7 @@ async function doAddPatient() {
   const cid  = document.getElementById('invite-cid').value.trim();
   if (!/^\d{13}$/.test(cid)) { alert('กรุณากรอกเลขบัตรประชาชน 13 หลัก'); return; }
   btn.disabled = true;
-  btn.textContent = 'กำลังสร้าง…';
+  btn.textContent = 'กำลังส่ง…';
   try {
     const r = await fetch('/api/exam/' + roomId + '/invite', {
       method: 'POST', credentials: 'include',
@@ -689,23 +683,44 @@ async function doAddPatient() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.message || 'error');
-    document.getElementById('invite-link').value = location.origin + d.patientJoinUrl;
+    patientInvitationId = d.invitationId;
     document.getElementById('invite-result').style.display = 'block';
-    copyInviteLink();
+    setInviteAlertStatus(d.patientNotification);
   } catch (e) {
     alert('เกิดข้อผิดพลาด: ' + e.message);
   }
   btn.disabled = false;
-  btn.textContent = 'สร้างลิงก์ใหม่';
+  btn.textContent = 'ส่ง MOPH Alert ใหม่';
 }
 
-function copyInviteLink() {
-  const el = document.getElementById('invite-link');
-  const note = document.getElementById('invite-copy-note');
-  navigator.clipboard.writeText(el.value).then(() => {
-    note.textContent = '✅ คัดลอกแล้ว!';
-    setTimeout(() => note.textContent = '', 2500);
-  }).catch(() => { el.select(); document.execCommand('copy'); });
+function setInviteAlertStatus(notification) {
+  const sent = notification && notification.status === 'sent';
+  document.getElementById('invite-alert-status').textContent = sent
+    ? '✅ ส่งลิงก์เข้าคิวให้ผู้ป่วยผ่าน MOPH Alert แล้ว'
+    : '⚠️ สร้างคำเชิญแล้ว แต่ส่ง MOPH Alert ไม่สำเร็จ';
+  document.getElementById('invite-alert-status').style.color = sent ? '#056839' : '#b45309';
+  document.getElementById('invite-alert-retry').style.display = sent ? 'none' : 'inline-block';
+}
+
+async function retryPatientAlert() {
+  const cid = document.getElementById('invite-cid').value.trim();
+  if (!patientInvitationId || !/^\d{13}$/.test(cid)) { alert('กรุณากรอกเลขบัตรประชาชน 13 หลักเดิมเพื่อส่งซ้ำ'); return; }
+  const btn = document.getElementById('invite-alert-retry');
+  btn.disabled = true;
+  btn.textContent = 'กำลังส่ง…';
+  try {
+    const r = await fetch('/api/exam/' + roomId + '/invitations/' + encodeURIComponent(patientInvitationId) + '/notify', {
+      method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cid })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || 'error');
+    setInviteAlertStatus(d.patientNotification);
+  } catch (e) {
+    alert('ส่ง MOPH Alert ซ้ำไม่สำเร็จ: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'ส่ง MOPH Alert ซ้ำ';
+  }
 }
 
 document.getElementById('add-patient-modal').addEventListener('click', function (e) {

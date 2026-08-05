@@ -189,12 +189,26 @@ async function notifyMophAlert(hcode, cids, text, event) {
     }
 }
 
-function meetingMophAlertText(room) {
-    return `📅 สร้างห้องประชุม: ${room.name}\nวันเวลา: ${room.starttime} – ${room.endtime}\nลิงก์: ${appUrl(`/room/${room.id}`)}`;
-}
-
 function patientMophAlertText(room, patientJoinUrl) {
     return `📅 คุณมีนัดหมายห้องตรวจ: ${room.name}\nวันเวลา: ${room.starttime} – ${room.endtime}\nเข้าห้องรอคิว: ${appUrl(patientJoinUrl)}`;
+}
+
+function patientAlertStatus(result) {
+    return result?.sent
+        ? { channel: 'mophAlert', status: 'sent' }
+        : { channel: 'mophAlert', status: 'failed', reason: result?.reason || 'sendFailed' };
+}
+
+// CID is used only for this outbound request. The invite stores its existing
+// internal CID hash, while the patient URL is delivered only in MOPH Alert.
+async function sendPatientMophAlert(room, cid, invitation, event) {
+    const result = await notifyMophAlert(
+        room.ownerHcode,
+        [cid],
+        patientMophAlertText(room, invitation.patientJoinUrl),
+        event,
+    );
+    return patientAlertStatus(result);
 }
 
 async function notifyLine(message) {
@@ -628,6 +642,9 @@ app.post('/api/rooms', auth(), async (req, res) => {
     const user = res.locals.user;
     const id   = makeRoomId();
     const requestedName = String(req.body.name || '').trim();
+    if (type === 'exam' && !requestedName) {
+        return res.status(400).json({ error: 400, message: 'exam room name required' });
+    }
     if (requestedName.length > 160) return res.status(400).json({ error: 400, message: 'room name is too long' });
     const name = requestedName || autoRoomName(type, user.display);
     const ownerHcode = hcodeOf(user);
@@ -691,14 +708,11 @@ app.post('/api/rooms', auth(), async (req, res) => {
 
     await roomStore.set(id, room);
     console.log(`[rooms] created ${type} room ${id} for ${user.display}`);
-    if (type === 'meet') {
-        const link = `${APP_BASE_URL}/room/${id}`;
-        notifyLine(`📅 สร้างห้องประชุม: ${name}\nวันเวลา: ${room.starttime} – ${room.endtime}\nประเภท: ${accessMode === 'public' ? 'Public (เชิญผ่านลิงก์)' : 'Restricted (Provider ID)'}\nลิงก์: ${link}`).catch(() => {});
-        notifyMophAlert(ownerHcode, [], meetingMophAlertText(room), 'meetingCreated').catch(() => {});
-    }
-    if (patientInvitation) {
-        notifyMophAlert(ownerHcode, [requestedPatientCid], patientMophAlertText(room, patientInvitation.patientJoinUrl), 'patientInvitation').catch(() => {});
-    }
+    // Provider meeting links are copied by the coordinator. Patient links are
+    // sent only to the supplied CID through MOPH Alert and are not returned.
+    const patientNotification = patientInvitation
+        ? await sendPatientMophAlert(room, requestedPatientCid, patientInvitation, 'patientInvitation')
+        : null;
     // Service unit (hcode) from the provider's ProviderID org, when present.
     const unitHcode = ownerHcode || null;
     const durationSec = Math.max(0, Math.round((new Date(room.endtime) - new Date(room.starttime)) / 1000)) || null;
@@ -707,14 +721,11 @@ app.post('/api/rooms', auth(), async (req, res) => {
         await logStore.insert('invite_generated', { roomId: id, roomType: type, roomName: name, doctorId: user.username, doctorName: user.display, patientName: requestedPatientName || 'ผู้ป่วย', unitHcode });
     }
 
-    // Exam invitations must be created with a verified 13-digit CID.  A generic
-    // patient link is intentionally no longer emitted at room creation.
-    const patientJoinUrl = patientInvitation?.patientJoinUrl || null;
     // Meet rooms: the provider URL remains authenticated. Public/restricted
     // guest invitations are created explicitly and are never guessable room IDs.
     const meetJoinUrl = type === 'meet' ? `/room/${id}` : null;
 
-    res.json({ room, patientJoinUrl, patientInvitationId: patientInvitation?.invitationId || null, meetJoinUrl });
+    res.json({ room, patientInvitationId: patientInvitation?.invitationId || null, patientNotification, meetJoinUrl });
 });
 
 // ── PATCH /api/rooms/:id – edit room details ─────────────────────────────────
@@ -1077,7 +1088,7 @@ app.get('/api/exam/:id/doctor', auth(), async (req, res) => {
 
 // ── POST /api/exam/:id/invite – doctor generates a patient invite ─────────────
 // Body: { patientName?, cid?, displayName? }
-// Returns: queue link (for queue.ejs flow) + direct Jitsi JWT link (compat)
+// The patient link is delivered through MOPH Alert and is never returned here.
 app.post('/api/exam/:id/invite', auth(), async (req, res) => {
     const room = await roomStore.get(req.params.id);
     if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
@@ -1090,11 +1101,34 @@ app.post('/api/exam/:id/invite', auth(), async (req, res) => {
     const invitation = addPatientInvitation(room, { patientName, cid, createdBy: res.locals.user.username });
     await roomStore.set(room.id, room);
 
-    notifyMophAlert(room.ownerHcode, [cid], patientMophAlertText(room, invitation.patientJoinUrl), 'patientInvitation').catch(() => {});
+    const patientNotification = await sendPatientMophAlert(room, cid, invitation, 'patientInvitation');
 
     console.log(`[exam] invite generated for "${patientName}" in room ${req.params.id}`);
     await logStore.insert('invite_generated', { roomId: req.params.id, roomType: room.type, roomName: room.name, doctorId: res.locals.user?.username, doctorName: res.locals.user?.display, patientName, unitHcode: room.ownerHcode || null });
-    res.status(201).json({ patientJoinUrl: invitation.patientJoinUrl, patientName, invitationId: invitation.invitationId, expiresAt: invitation.expiresAt });
+    res.status(201).json({ patientName, invitationId: invitation.invitationId, expiresAt: invitation.expiresAt, patientNotification });
+});
+
+// A failed delivery can be retried only after the staff re-enters the same CID.
+// The raw CID is not stored with the invitation.
+app.post('/api/exam/:id/invitations/:invitationId/notify', auth(), async (req, res) => {
+    const room = await roomStore.get(req.params.id);
+    if (!room) return res.status(404).json({ error: 404, message: 'notFound' });
+    if (room.type !== 'exam') return res.status(400).json({ error: 400, message: 'patient invitations require an exam room' });
+    if (!canManageRoom(room, res.locals.user)) return res.status(403).json({ error: 403, message: 'roomAccessDenied' });
+
+    const cid = String(req.body?.cid || '').trim();
+    if (!isValidThaiCid(cid)) return res.status(400).json({ error: 400, message: 'valid 13-digit cid required' });
+    const invitation = (room.patientInvitations || []).find(item => item.id === req.params.invitationId);
+    if (!invitation || invitation.status === 'revoked') return res.status(404).json({ error: 404, message: 'invitationNotFound' });
+    if (cidHash(cid) !== invitation.cidHash) return res.status(403).json({ error: 403, message: 'patientCidMismatch' });
+
+    const invitationExpiresAt = new Date(invitation.expiresAt).getTime();
+    if (!Number.isFinite(invitationExpiresAt) || invitationExpiresAt <= Date.now()) {
+        return res.status(410).json({ error: 410, message: 'invitationExpired' });
+    }
+    const patientJoinUrl = `/queue/${room.id}?jwt=${jwt.sign({ roomId: room.id, role: 'patient', invitationId: invitation.id, exp: Math.floor(invitationExpiresAt / 1000) }, JWT_SECRET)}`;
+    const patientNotification = await sendPatientMophAlert(room, cid, { patientJoinUrl }, 'patientInvitationResent');
+    res.json({ invitationId: invitation.id, patientNotification });
 });
 
 // ── PATCH queue status – cancellation / no-show ──────────────────────────────

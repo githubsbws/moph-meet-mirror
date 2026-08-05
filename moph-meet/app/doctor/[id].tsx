@@ -1,16 +1,16 @@
 /**
  * Doctor exam control — parity with user-app-lite meet.html (doctor side).
- * Features: live queue, invite patient (get link), call a selected patient, enter video.
+ * Features: live queue, invite patient through MOPH Alert, call a selected patient, enter video.
  * APIs: GET /api/exam/:id/doctor · POST /api/exam/:id/invite · POST /api/exam/:id/call/:entryId
  */
 import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
-  SafeAreaView, StatusBar, Alert, ActivityIndicator, Modal, Share,
+  SafeAreaView, StatusBar, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { loadToken } from '../../constants/storage';
-import { apiFetch, API_BASE } from '../../constants/api';
+import { apiFetch } from '../../constants/api';
 import { Icon } from '../../components/Icon';
 
 const GREEN = '#1b7a43';
@@ -30,7 +30,7 @@ export default function DoctorScreen() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [invName, setInvName] = useState('');
   const [invCid, setInvCid]   = useState('');
-  const [invLink, setInvLink] = useState('');
+  const [inviteResult, setInviteResult] = useState<{ invitationId: string; status?: 'sent' | 'failed' } | null>(null);
   const [inviting, setInviting] = useState(false);
   const [patientCallOpen, setPatientCallOpen] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -114,10 +114,9 @@ export default function DoctorScreen() {
         method: 'POST',
         body: JSON.stringify({ displayName: invName.trim(), cid: invCid.trim() }),
       });
-      if (!r.ok) { Alert.alert('สร้างลิงก์ไม่สำเร็จ', `รหัส ${r.status}`); return; }
+      if (!r.ok) { Alert.alert('เชิญผู้ป่วยไม่สำเร็จ', `รหัส ${r.status}`); return; }
       const d = await r.json();
-      const link = d.patientJoinUrl?.startsWith('http') ? d.patientJoinUrl : `${API_BASE}${d.patientJoinUrl}`;
-      setInvLink(link);
+      setInviteResult({ invitationId: d.invitationId, status: d.patientNotification?.status || 'failed' });
       await fetchRoom(token);
     } catch (e: any) {
       Alert.alert('ผิดพลาด', e.message || 'network');
@@ -126,12 +125,29 @@ export default function DoctorScreen() {
     }
   }
 
-  function shareLink() {
-    if (invLink) Share.share({ message: `ลิงก์เข้าคิวตรวจ MOPH Meet:\n${invLink}` }).catch(() => {});
+  async function retryMophAlert() {
+    if (!token || !inviteResult) return;
+    if (!/^\d{13}$/.test(invCid.trim())) {
+      Alert.alert('ข้อมูลไม่ครบ', 'กรุณากรอกเลขบัตรประชาชน 13 หลักเดิมเพื่อส่งซ้ำ');
+      return;
+    }
+    setInviting(true);
+    try {
+      const r = await apiFetch(`/api/exam/${id}/invitations/${encodeURIComponent(inviteResult.invitationId)}/notify`, token, {
+        method: 'POST', body: JSON.stringify({ cid: invCid.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) { Alert.alert('ส่ง MOPH Alert ซ้ำไม่สำเร็จ', d.message || `รหัส ${r.status}`); return; }
+      setInviteResult({ invitationId: d.invitationId, status: d.patientNotification?.status || 'failed' });
+    } catch (e: any) {
+      Alert.alert('ผิดพลาด', e.message || 'network');
+    } finally {
+      setInviting(false);
+    }
   }
 
   function resetInvite() {
-    setInviteOpen(false); setInvName(''); setInvCid(''); setInvLink('');
+    setInviteOpen(false); setInvName(''); setInvCid(''); setInviteResult(null);
   }
 
   if (loading) {
@@ -215,24 +231,25 @@ export default function DoctorScreen() {
         <View style={s.modalBg}>
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>เชิญผู้ป่วย</Text>
-            {!invLink ? (
+            {!inviteResult ? (
               <>
                 <TextInput style={s.input} value={invName} onChangeText={setInvName} placeholder="ชื่อผู้ป่วย (ถ้ามี)" placeholderTextColor="#9ca3af" />
                 <TextInput style={s.input} value={invCid} onChangeText={setInvCid} placeholder="เลขบัตรประชาชน 13 หลัก *" placeholderTextColor="#9ca3af" keyboardType="number-pad" maxLength={13} />
                 <View style={s.modalActions}>
                   <TouchableOpacity style={s.modalCancel} onPress={resetInvite}><Text style={s.modalCancelText}>ยกเลิก</Text></TouchableOpacity>
                   <TouchableOpacity style={[s.modalOk, inviting && s.btnDis]} onPress={doInvite} disabled={inviting}>
-                    {inviting ? <ActivityIndicator color="#fff" /> : <Text style={s.modalOkText}>สร้างลิงก์</Text>}
+                    {inviting ? <ActivityIndicator color="#fff" /> : <Text style={s.modalOkText}>ส่ง MOPH Alert</Text>}
                   </TouchableOpacity>
                 </View>
               </>
             ) : (
               <>
-                <Text style={s.linkLabel}>ลิงก์สำหรับผู้ป่วย:</Text>
-                <Text style={s.linkText} selectable>{invLink}</Text>
+                <Text style={s.linkLabel}>{inviteResult.status === 'sent' ? '✅ ส่งลิงก์เข้าคิวให้ผู้ป่วยผ่าน MOPH Alert แล้ว' : '⚠️ ส่ง MOPH Alert ไม่สำเร็จ'}</Text>
                 <View style={s.modalActions}>
                   <TouchableOpacity style={s.modalCancel} onPress={resetInvite}><Text style={s.modalCancelText}>ปิด</Text></TouchableOpacity>
-                  <TouchableOpacity style={s.modalOk} onPress={shareLink}><Text style={s.modalOkText}>📤 แชร์ลิงก์</Text></TouchableOpacity>
+                  {inviteResult.status !== 'sent' && <TouchableOpacity style={[s.modalOk, inviting && s.btnDis]} onPress={retryMophAlert} disabled={inviting}>
+                    {inviting ? <ActivityIndicator color="#fff" /> : <Text style={s.modalOkText}>ส่งซ้ำ</Text>}
+                  </TouchableOpacity>}
                 </View>
               </>
             )}
